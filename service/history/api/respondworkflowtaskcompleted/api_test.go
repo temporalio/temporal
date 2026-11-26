@@ -9,7 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -25,17 +27,23 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/api"
@@ -118,7 +126,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = s.mockShard.GetLogger()
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	s.workflowTaskCompletedHandler = NewWorkflowTaskCompletedHandler(
 		s.mockShard,
 		tasktoken.NewSerializer(),
@@ -140,52 +148,11 @@ func (s *WorkflowTaskCompletedHandlerSuite) TearDownTest() {
 func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Accept Complete", func() {
-		tv := testvars.New(s.T())
-		tv = tv.WithRunID(tv.Any().RunID())
-		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
-		wfContext := s.createStartedWorkflow(tv)
-		writtenHistoryCh := s.captureWrittenHistory(1)
+		s.testAcceptCompleteWithWorkerDeploymentMetrics(true)
+	})
 
-		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
-		s.NoError(err)
-
-		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
-		s.NotNil(upd)
-
-		// Use context with metadata to verify it's set via transaction close
-		ctx := contextutil.WithMetadataContext(context.Background())
-
-		_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
-			NamespaceId: tv.NamespaceID().String(),
-			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
-				TaskToken: serializedTaskToken,
-				Commands:  s.UpdateAcceptCompleteCommands(tv),
-				Messages:  s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
-				Identity:  tv.Any().String(),
-			},
-		})
-		s.NoError(err)
-
-		updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
-		s.NoError(err)
-		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
-		s.ProtoEqual(payloads.EncodeString("success-result-of-"+tv.UpdateID()), updStatus.Outcome.GetSuccess())
-
-		s.EqualHistoryEvents(`
-  2 WorkflowTaskScheduled // Speculative WFT events are persisted on WFT completion.
-  3 WorkflowTaskStarted // Speculative WFT events are persisted on WFT completion.
-  4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
-
-		// VERIFY: Context metadata set via transaction close (normal case WITH commands)
-		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
-		s.True(ok, "context workflow type MUST be set in normal case with commands")
-		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
-
-		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
-		s.True(ok, "context task queue MUST be set in normal case with commands")
-		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
+	s.Run("Accept Complete without build ID breakdown", func() {
+		s.testAcceptCompleteWithWorkerDeploymentMetrics(false)
 	})
 
 	s.Run("Reject", func() {
@@ -570,6 +537,122 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPaus
 	})
 }
 
+func (s *WorkflowTaskCompletedHandlerSuite) TestVersioningBehaviorNormalization() {
+	for _, tc := range []struct {
+		name              string
+		behavior          enumspb.VersioningBehavior
+		deployment        *deploymentpb.Deployment
+		deploymentOptions *deploymentpb.WorkerDeploymentOptions
+		expectedBehavior  enumspb.VersioningBehavior
+	}{
+		{
+			name:              "unversioned pinned",
+			behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED},
+			expectedBehavior:  enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:              "unversioned auto-upgrade",
+			behavior:          enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED},
+			expectedBehavior:  enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:     "versioned pinned",
+			behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "deployment",
+				BuildId:              "build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		},
+		{
+			name:             "missing deployment metadata",
+			behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:             "invalid legacy deployment",
+			behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deployment:       &deploymentpb.Deployment{BuildId: "build-id"},
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:             "valid legacy deployment",
+			behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deployment:       &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "build-id"},
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		},
+		{
+			name:              "unversioned takes precedence over legacy deployment",
+			behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deployment:        &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "build-id"},
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED},
+			expectedBehavior:  enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+
+			_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+			writtenHistoryCh := s.captureWrittenHistory(1)
+
+			_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:          serializedTaskToken,
+					Identity:           tv.Any().String(),
+					VersioningBehavior: tc.behavior,
+					Deployment:         tc.deployment, //nolint:staticcheck // SA1019: worker versioning v0.30
+					DeploymentOptions:  tc.deploymentOptions,
+				},
+			})
+			s.Require().NoError(err)
+
+			historyEvents := await.Rcv(s.T(), writtenHistoryCh)
+			s.Require().Len(historyEvents, 1)
+			s.Require().Equal(
+				tc.expectedBehavior,
+				historyEvents[0].GetWorkflowTaskCompletedEventAttributes().GetVersioningBehavior(),
+			)
+		})
+	}
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestVersioningBehaviorWithoutWorkerVersioningModeIsRejected() {
+	for _, tc := range []struct {
+		name           string
+		versioningMode enumspb.WorkerVersioningMode
+	}{
+		{name: "unspecified versioning mode"},
+		{name: "unknown versioning mode", versioningMode: enumspb.WorkerVersioningMode(99)},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+
+			_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+			_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:          serializedTaskToken,
+					Identity:           tv.Any().String(),
+					VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+					DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+						WorkerVersioningMode: tc.versioningMode,
+					},
+				},
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+		})
+	}
+}
+
 func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 	constructQueryResults := func(ids []string, resultSize int) map[string]*querypb.WorkflowQueryResult {
 		results := make(map[string]*querypb.WorkflowQueryResult)
@@ -638,6 +721,62 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 	})
 }
 
+func (s *WorkflowTaskCompletedHandlerSuite) testAcceptCompleteWithWorkerDeploymentMetrics(
+	breakdownMetricsByBuildID bool,
+) {
+	s.workflowTaskCompletedHandler.config.BreakdownMetricsByBuildID =
+		dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(breakdownMetricsByBuildID)
+
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+	wfContext := s.createStartedWorkflow(tv)
+	writtenHistoryCh := s.captureWrittenHistory(1)
+
+	_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+	s.NoError(err)
+
+	updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+	s.NotNil(upd)
+
+	// Use context with metadata to verify it's set via transaction close
+	ctx := contextutil.WithMetadataContext(context.Background())
+
+	_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tv.NamespaceID().String(),
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken:         serializedTaskToken,
+			Commands:          s.UpdateAcceptCompleteCommands(tv),
+			Messages:          s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+			Identity:          tv.Any().String(),
+			DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		},
+	})
+	s.NoError(err)
+
+	updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+	s.NoError(err)
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
+	s.ProtoEqual(payloads.EncodeString("success-result-of-"+tv.UpdateID()), updStatus.Outcome.GetSuccess())
+
+	s.EqualHistoryEvents(`
+  2 WorkflowTaskScheduled // Speculative WFT events are persisted on WFT completion.
+  3 WorkflowTaskStarted // Speculative WFT events are persisted on WFT completion.
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
+	s.requireCounterHasWorkerDeploymentTags(metrics.WorkflowTasksCompleted.Name(), tv, breakdownMetricsByBuildID)
+
+	// VERIFY: Context metadata set via transaction close (normal case WITH commands)
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type MUST be set in normal case with commands")
+	s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue MUST be set in normal case with commands")
+	s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
+}
+
 func (s *WorkflowTaskCompletedHandlerSuite) captureWrittenHistory(n int) <-chan []*historypb.HistoryEvent {
 	writtenHistoryCh := make(chan []*historypb.HistoryEvent, n)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
@@ -657,6 +796,32 @@ func (s *WorkflowTaskCompletedHandlerSuite) captureWrittenHistory(n int) <-chan 
 	}).Times(n)
 
 	return writtenHistoryCh
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) requireCounterHasWorkerDeploymentTags(
+	metricName string,
+	tv *testvars.TestVars,
+	breakdownMetricsByBuildID bool,
+) {
+	expectedDeploymentName := ""
+	expectedBuildID := ""
+	if breakdownMetricsByBuildID {
+		expectedDeploymentName = tv.DeploymentSeries()
+		expectedBuildID = tv.BuildID()
+	}
+
+	counters := s.mockShard.Resource.MetricsScope.(tally.TestScope).Snapshot().Counters()
+	for _, counter := range counters {
+		if counter.Name() != "test."+metricName {
+			continue
+		}
+		tags := counter.Tags()
+		if tags["worker_deployment_name"] == expectedDeploymentName &&
+			tags["worker_build_id"] == expectedBuildID {
+			return
+		}
+	}
+	s.Failf("metric not found", "%s does not have the expected Worker Deployment tags", metricName)
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) historyi.WorkflowContext {
@@ -727,6 +892,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		false,
 		nil,
 		0,
+		"",
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -807,6 +973,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		"",
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -825,6 +992,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		false,
 		nil,
 		0,
+		"",
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -956,6 +1124,67 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
   6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
 	})
 
+	s.Run("Merged pages stay reserved until the transaction is persisted", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		// The workflow context takes the shard's metrics handler when it is created.
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.mockShard.SetMetricsHandler(metricsHandler)
+		inflightBytes := func() float64 {
+			recordings := capture.SnapshotMetric(metrics.WorkflowTaskCompletionBufferInflightBytes.Name())
+			s.Require().NotEmpty(recordings)
+			return recordings[len(recordings)-1].Value.(float64)
+		}
+
+		wfContext := s.createStartedWorkflow(tv)
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+		s.NotNil(upd)
+
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         s.UpdateAcceptCommands(tv),
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		reserved := inflightBytes()
+		s.Positive(reserved)
+
+		var inflightAtPersist float64
+		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+				inflightAtPersist = inflightBytes()
+				return tests.UpdateWorkflowExecutionResponse, nil
+			}).Times(1)
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:  serializedTaskToken,
+				Commands:   s.UpdateCompleteCommands(tv),
+				Messages:   s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				PageNumber: 1,
+				Identity:   tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.InDelta(reserved, inflightAtPersist, 0, "merged pages must stay reserved while the transaction is persisted")
+		s.Zero(inflightBytes(), "merged pages must be released once the transaction is persisted")
+	})
+
 	s.Run("Buffer lost on eviction between pages", func() {
 		tv := testvars.New(s.T())
 		tv = tv.WithRunID(tv.Any().RunID())
@@ -1030,7 +1259,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 
 		// A late final page referencing the timed-out workflow task must be reported as
 		// buffer-lost, not silently merged against a stale buffer.
-		_, err = wfContext.GetMergedTaskCompletionPages(
+		_, _, err = wfContext.GetMergedTaskCompletionPages(
 			taskToken.GetScheduledEventId(),
 			taskToken.Attempt,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
@@ -1075,7 +1304,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 
 		// A late final page referencing the closed WFT must be reported as
 		// buffer lost, not silently merged against a stale buffer.
-		_, err = wfContext.GetMergedTaskCompletionPages(
+		_, _, err = wfContext.GetMergedTaskCompletionPages(
 			taskToken.GetScheduledEventId(),
 			taskToken.Attempt,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
@@ -1204,11 +1433,12 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
-				TaskToken:        serializedTaskToken,
-				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
-				IntermediatePage: true,
-				PageNumber:       0,
-				Identity:         tv.Any().String(),
+				TaskToken:         serializedTaskToken,
+				Commands:          []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage:  true,
+				PageNumber:        0,
+				Identity:          tv.Any().String(),
+				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 			},
 		})
 		s.Error(err)
@@ -1218,6 +1448,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination
 		s.EqualHistoryEvents(`
   4 WorkflowTaskFailed
   5 WorkflowExecutionTerminated`, <-writtenHistoryCh)
+		s.requireCounterHasWorkerDeploymentTags(metrics.FailedWorkflowTasksCounter.Name(), tv, true)
 	})
 
 	s.Run("Pagination request rejected when pagination is disabled", func() {
@@ -1281,6 +1512,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 		false,
 		nil,
 		0,
+		"",
 	)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1314,4 +1546,82 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(
 	s.NoError(err)
 
 	return wfContext, serializedTaskToken
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) expectNewWorkflowTaskResponse(tv *testvars.TestVars) {
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tv.NamespaceID()).Return(tv.NamespaceName(), nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{}, nil).AnyTimes()
+	visibilityMgr := manager.NewMockVisibilityManager(s.controller)
+	visibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.workflowTaskCompletedHandler.persistenceVisibilityMgr = visibilityMgr
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestInlineWorkflowTaskKeepsWorkerControlQueue() {
+	for _, workerControlQueue := range []string{"worker-control", ""} {
+		s.Run("normal workflow task/"+workerControlQueue, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.expectNewWorkflowTaskResponse(tv)
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+			wfContext := s.createStartedWorkflow(tv)
+			updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+			wfContext.(*workflow.ContextImpl).MutableState.GetExecutionInfo().WorkflowTaskWorkerControlQueue = workerControlQueue
+
+			resp, err := s.workflowTaskCompletedHandler.Invoke(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:                  serializedTaskToken,
+					Commands:                   s.UpdateAcceptCompleteCommands(tv),
+					Messages:                   s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+					Identity:                   tv.Any().String(),
+					ReturnNewWorkflowTask:      true,
+					ForceCreateNewWorkflowTask: true,
+				},
+			})
+			s.NoError(err)
+			s.NotNil(resp.GetNewWorkflowTask())
+
+			newWorkflowTask := wfContext.(*workflow.ContextImpl).MutableState.GetStartedWorkflowTask()
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, newWorkflowTask.Type)
+			s.Equal(workerControlQueue, newWorkflowTask.WorkerControlQueue)
+		})
+
+		s.Run("speculative workflow task/"+workerControlQueue, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.expectNewWorkflowTaskResponse(tv)
+			wfContext := s.createStartedWorkflow(tv)
+			updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+			ms := wfContext.(*workflow.ContextImpl).MutableState
+			ms.GetExecutionInfo().WorkflowTaskWorkerControlQueue = workerControlQueue
+
+			// An update admitted while the workflow task is running makes the completion start a speculative task.
+			ctx := metrics.AddMetricsContext(context.Background())
+			nextUpd, _, err := wfContext.UpdateRegistry(ctx).FindOrCreate(ctx, "next-"+tv.UpdateID())
+			s.NoError(err)
+			s.NoError(nextUpd.Admit(
+				&updatepb.Request{Meta: &updatepb.Meta{UpdateId: "next-" + tv.UpdateID()}, Input: &updatepb.Input{Name: tv.HandlerName()}},
+				workflow.WithEffects(effect.Immediate(ctx), ms),
+			))
+
+			resp, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:             serializedTaskToken,
+					Messages:              s.UpdateRejectMessages(tv, updRequestMsg),
+					Identity:              tv.Any().String(),
+					ReturnNewWorkflowTask: true,
+				},
+			})
+			s.NoError(err)
+			s.NotNil(resp.GetNewWorkflowTask())
+
+			newWorkflowTask := wfContext.(*workflow.ContextImpl).MutableState.GetStartedWorkflowTask()
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE, newWorkflowTask.Type)
+			s.Equal(workerControlQueue, newWorkflowTask.WorkerControlQueue)
+		})
+	}
 }

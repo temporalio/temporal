@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/temporalproto"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
@@ -52,11 +51,11 @@ func (s *convertSuite) TestConvertPredicate_And() {
 				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			),
 			predicates.Or[tasks.Task](
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
 				}),
 			),
 		),
@@ -71,8 +70,8 @@ func (s *convertSuite) TestConvertPredicate_And() {
 			predicates.Not(predicates.Empty[tasks.Task]()),
 			predicates.And[tasks.Task](
 				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
 			),
 		),
@@ -95,11 +94,11 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			),
 			predicates.And[tasks.Task](
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
 				}),
 			),
 		),
@@ -114,8 +113,8 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 			predicates.Not(predicates.Empty[tasks.Task]()),
 			predicates.And[tasks.Task](
 				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
 			),
 		),
@@ -132,16 +131,16 @@ func (s *convertSuite) TestConvertPredicate_Not() {
 		predicates.Not(predicates.Empty[tasks.Task]()),
 		predicates.Not(predicates.And[tasks.Task](
 			tasks.NewNamespacePredicate([]string{uuid.NewString()}),
-			tasks.NewTypePredicate([]enumsspb.TaskType{}),
+			tasks.NewOutboundTaskPredicate(nil),
 		)),
 		predicates.Not(predicates.Or[tasks.Task](
 			tasks.NewNamespacePredicate([]string{uuid.NewString()}),
-			tasks.NewTypePredicate([]enumsspb.TaskType{}),
+			tasks.NewOutboundTaskPredicate(nil),
 		)),
 		predicates.Not(predicates.Not(predicates.Empty[tasks.Task]())),
 		predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{uuid.NewString()})),
-		predicates.Not[tasks.Task](tasks.NewTypePredicate([]enumsspb.TaskType{
-			enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+		predicates.Not[tasks.Task](tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+			{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 		})),
 	}
 
@@ -198,9 +197,9 @@ func (s *convertSuite) TestConvertScope() {
 		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 	)
 
-	s.True(temporalproto.DeepEqual(scope, FromPersistenceScope(
+	s.Equal(scope, FromPersistenceScope(
 		ToPersistenceScope(scope),
-	)))
+	))
 }
 
 func (s *convertSuite) TestConvertQueueState() {
@@ -219,9 +218,9 @@ func (s *convertSuite) TestConvertQueueState() {
 			),
 			NewScope(
 				NewRandomRange(),
-				tasks.NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-					enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+					{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
 				}),
 			),
 		},
@@ -232,7 +231,7 @@ func (s *convertSuite) TestConvertQueueState() {
 		exclusiveReaderHighWatermark: tasks.NewKey(time.Unix(0, rand.Int63()).UTC(), 0),
 	}
 
-	s.True(temporalproto.DeepEqual(queueState, FromPersistenceQueueState(
+	s.Equal(queueState, FromPersistenceQueueState(
 		ToPersistenceQueueState(queueState),
-	)))
+	))
 }

@@ -28,6 +28,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const (
+	errTypeMigrationDeferredBackfill         = "migration_deferred_backfill"
+	errTypeMigrationDeferredRunningWorkflows = "migration_deferred_running_workflows"
+)
+
 type (
 	activities struct {
 		activityDeps
@@ -38,6 +43,11 @@ type (
 		startWorkflowRateLimiter quotas.RateLimiter
 		maxBlobSize              dynamicconfig.IntPropertyFn
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFn
+		migrationEnabled         dynamicconfig.BoolPropertyFn
+		// autoMigrationSelected reports whether the CHASM auto-migration rollout currently
+		// selects the given schedule ID.
+		autoMigrationSelected       func(scheduleID string) bool
+		migrateWithRunningWorkflows dynamicconfig.BoolPropertyFn
 	}
 
 	errFollow string
@@ -386,6 +396,17 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 	return res
 }
 
+// hasRunningWorkflows reports whether the migration request carries V1 RunningWorkflows, which
+// the request builder converts to started but not completed buffered starts.
+func hasRunningWorkflows(state *schedulerpb.SchedulerMigrationState) bool {
+	for _, start := range state.GetInvokerState().GetBufferedStarts() {
+		if start.GetRunId() != "" && start.GetCompleted() == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
 	if req.GetNamespaceId() != a.namespaceID.String() {
 		return temporal.NewNonRetryableApplicationError(
@@ -394,16 +415,47 @@ func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerp
 			nil,
 		)
 	}
+	if a.migrationEnabled != nil && !a.migrationEnabled() {
+		// A live (uncached) check, deliberately re-read here rather than
+		// trusting the caller's possibly-stale view: this is what stops a
+		// pending migration from completing after EnableCHASMSchedulerMigration
+		// has been rolled back, even if the workflow retrying it has been
+		// asleep since well before the rollback. The caller just logs this
+		// like any other failure and keeps retrying at its normal cadence.
+		return errors.New("MigrateScheduleToChasm: migration is currently disabled")
+	}
+	// Converting an in-flight backfill can duplicate or drop slots (V1's backfill start is an
+	// exclusive cursor), so every migration, auto or operator-requested, waits for backfills to
+	// drain. Not scoped to rollout selection: lowering the rollout must not strip this guard
+	// from a migration that is already pending.
+	if len(req.GetState().GetBackfillers()) > 0 {
+		return temporal.NewNonRetryableApplicationError(
+			"MigrateScheduleToChasm: deferred while a backfill is in progress",
+			errTypeMigrationDeferredBackfill,
+			nil,
+		)
+	}
+	// The workflow checks running workflows only when it sets PendingMigration, and a deferral
+	// leaves that flag set, so the check is repeated here. Scoped to auto-migration so the
+	// migrate-to-chasm signal can still force a migration past it.
+	if a.migrateWithRunningWorkflows != nil && !a.migrateWithRunningWorkflows() &&
+		a.autoMigrationSelected != nil &&
+		a.autoMigrationSelected(req.GetState().GetSchedulerState().GetScheduleId()) &&
+		hasRunningWorkflows(req.GetState()) {
+		return temporal.NewNonRetryableApplicationError(
+			"MigrateScheduleToChasm: deferred while scheduled workflows are running",
+			errTypeMigrationDeferredRunningWorkflows,
+			nil,
+		)
+	}
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
 		// Treat "already exists" as success (idempotency).
-		var alreadyExists *serviceerror.AlreadyExists
-		if errors.As(err, &alreadyExists) {
+		if _, ok := errors.AsType[*serviceerror.AlreadyExists](err); ok {
 			return nil
 		}
 		// Sentinel blocking migration is transient; will retry on next workflow wake-up.
-		var unavailableErr *serviceerror.Unavailable
-		if errors.As(err, &unavailableErr) {
+		if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
 			return translateError(err, "MigrateScheduleToChasm: blocked by sentinel, will retry")
 		}
 		return translateError(err, "MigrateScheduleToChasm")

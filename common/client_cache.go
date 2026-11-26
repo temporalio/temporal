@@ -5,6 +5,8 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
 
 type (
@@ -14,10 +16,9 @@ type (
 		GetClientForKey(key string, index int) (any, error)
 		GetClientForClientKey(clientKey string) (any, error)
 		GetAllClients() ([]any, error)
-		// Evict removes the cached entry for the given key and runs its
-		// release fn.
+		// Evict removes the cached entry for the given key and closes its connection.
 		Evict(clientKey string)
-		// EvictAll removes every cached entry and runs each one's release fn.
+		// EvictAll removes every cached entry and closes its connection.
 		// Used to deterministically release cached gRPC connections on shutdown.
 		EvictAll()
 	}
@@ -27,12 +28,11 @@ type (
 		GetAllAddresses() ([]string, error)
 	}
 
-	// The returned release fn (if non-nil) is invoked when the entry is evicted.
-	clientProvider func(clientKey string) (any, func() error, error)
+	clientProvider func(clientKey string) (any, *grpc.ClientConn, error)
 
 	cachedEntry struct {
-		client  any
-		release func() error
+		client     any
+		connection *grpc.ClientConn
 	}
 
 	clientCacheImpl struct {
@@ -52,7 +52,6 @@ func NewClientCache(
 	clientProvider clientProvider,
 	logger log.Logger,
 ) ClientCache {
-
 	return &clientCacheImpl{
 		keyResolver:    keyResolver,
 		clientProvider: clientProvider,
@@ -78,23 +77,28 @@ func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (any, error) {
 	c.cacheLock.RLock()
 	entry, ok := c.clients[clientKey]
 	c.cacheLock.RUnlock()
-	if ok {
+	if ok && entry.isValid() {
 		return entry.client, nil
 	}
 
 	c.cacheLock.Lock()
-	defer c.cacheLock.Unlock()
-
 	entry, ok = c.clients[clientKey]
-	if ok {
+	if ok && entry.isValid() {
+		c.cacheLock.Unlock()
 		return entry.client, nil
 	}
 
-	client, release, err := c.clientProvider(clientKey)
+	client, connection, err := c.clientProvider(clientKey)
 	if err != nil {
+		c.cacheLock.Unlock()
 		return nil, err
 	}
-	c.clients[clientKey] = cachedEntry{client: client, release: release}
+	c.clients[clientKey] = cachedEntry{client: client, connection: connection}
+	c.cacheLock.Unlock()
+
+	if ok {
+		c.release(entry)
+	}
 	return client, nil
 }
 
@@ -123,10 +127,8 @@ func (c *clientCacheImpl) Evict(clientKey string) {
 	}
 	c.cacheLock.Unlock()
 
-	if ok && entry.release != nil {
-		if err := entry.release(); err != nil {
-			c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
-		}
+	if ok {
+		c.release(entry)
 	}
 }
 
@@ -137,10 +139,19 @@ func (c *clientCacheImpl) EvictAll() {
 	c.cacheLock.Unlock()
 
 	for _, entry := range entries {
-		if entry.release != nil {
-			if err := entry.release(); err != nil {
-				c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
-			}
-		}
+		c.release(entry)
+	}
+}
+
+func (e cachedEntry) isValid() bool {
+	return e.connection == nil || e.connection.GetState() != connectivity.Shutdown
+}
+
+func (c *clientCacheImpl) release(entry cachedEntry) {
+	if entry.connection == nil {
+		return
+	}
+	if err := entry.connection.Close(); err != nil {
+		c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
 	}
 }

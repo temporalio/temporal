@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -57,6 +58,8 @@ type (
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
 		ChasmRegistry        *chasm.Registry
+		TestHooks            testhooks.TestHooks
+		ThrottleState        *queues.ThrottleState
 	}
 
 	QueueFactoryBase struct {
@@ -78,6 +81,7 @@ var QueueModule = fx.Options(
 	circuitbreakerpool.Module,
 	fx.Provide(
 		QueueSchedulerRateLimiterProvider,
+		ThrottleStateProvider,
 		func(tqm persistence.HistoryTaskQueueManager) queues.QueueWriter {
 			return tqm
 		},
@@ -102,6 +106,18 @@ var QueueModule = fx.Options(
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+func ThrottleStateProvider(
+	config *configs.Config,
+	timeSource clock.TimeSource,
+	metricsHandler metrics.Handler,
+) *queues.ThrottleState {
+	return queues.NewThrottleState(
+		config.TaskThrottleController,
+		timeSource,
+		metricsHandler,
+	)
+}
 
 // additionalQueueFactories is a container for a list of queue factories that are only added to the group if
 // they are enabled. This exists because there is no way to conditionally add to a group with a provider that returns

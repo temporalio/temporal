@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -11,11 +12,13 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -51,7 +54,10 @@ func SetFailureSourceOnContext(ctx context.Context, response *http.Response) {
 	}
 }
 
-var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
+var (
+	failureTypeString                  = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
+	resourceExhaustedFailureTypeString = string((&errordetailspb.ResourceExhaustedFailure{}).ProtoReflect().Descriptor().FullName())
+)
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
 func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
@@ -181,6 +187,27 @@ func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Fai
 		Details: data,
 		Cause:   causep,
 	}, nil
+}
+
+// CoerceToCanceledFailure replaces failure's FailureInfo with CanceledFailureInfo so it
+// surfaces as a Temporal CanceledError. Every other field is left unchanged. A nil failure yields an empty
+// CanceledFailure rather than nil. A canceled operation must always carry a cause bearing CanceledFailureInfo.
+//
+// Call it only for canceled operations: old SDKs and non-Temporal handlers may send a canceled
+// completion whose converted cause is a plain ApplicationFailure, which would otherwise surface as
+// an ApplicationError to the caller.
+func CoerceToCanceledFailure(failure *failurepb.Failure) *failurepb.Failure {
+	if failure.GetCanceledFailureInfo() != nil {
+		return failure
+	}
+	canceled := &failurepb.Failure{}
+	if failure != nil {
+		canceled = common.CloneProto(failure)
+	}
+	canceled.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
+		CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+	}
+	return canceled
 }
 
 // NexusFailureToTemporalFailure converts a Nexus Failure to an API proto Failure.
@@ -323,16 +350,10 @@ func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failu
 // and
 // https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
 func ConvertGRPCError(err error, exposeDetails bool) error {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// The Nexus SDK will translate this into an internal server error and will not expose the error details.
-			return err
-		}
+	st, ok := common.GetRPCStatus(err)
+	if !ok {
+		// The Nexus SDK will translate this into an internal server error and will not expose the error details.
+		return err
 	}
 
 	errMessage := err.Error()
@@ -400,10 +421,26 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 		if !exposeDetails {
 			errMessage = "resource exhausted"
 		}
-		return &nexus.HandlerError{
+		handlerErr := &nexus.HandlerError{
 			Type:    nexus.HandlerErrorTypeResourceExhausted,
 			Message: errMessage,
 		}
+		if resourceErr, ok := serviceerror.FromStatus(st).(*serviceerror.ResourceExhausted); ok &&
+			resourceErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT &&
+			resourceErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
+			details, err := protojson.Marshal(&errordetailspb.ResourceExhaustedFailure{
+				Cause: resourceErr.Cause, Scope: resourceErr.Scope,
+			})
+			if err != nil {
+				return handlerErr
+			}
+			handlerErr.Cause = &nexus.FailureError{Failure: nexus.Failure{
+				Message:  errMessage,
+				Metadata: map[string]string{"type": resourceExhaustedFailureTypeString},
+				Details:  details,
+			}}
+		}
+		return handlerErr
 	case codes.Unimplemented:
 		if !exposeDetails {
 			errMessage = "not implemented"
@@ -433,9 +470,51 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	return err
 }
 
+// CallerRPSLimitError returns a ResourceExhausted error for a retryable
+// namespace-scoped Nexus caller RPS rejection, or nil for other errors.
+func CallerRPSLimitError(err error) error {
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
+		return nil
+	}
+	handlerErr, ok := errors.AsType[*nexus.HandlerError](err)
+	if !ok || handlerErr.Type != nexus.HandlerErrorTypeResourceExhausted || !handlerErr.Retryable() {
+		return nil
+	}
+	cause, ok := errors.AsType[*nexus.FailureError](handlerErr.Cause)
+	if !ok || cause.Failure.Metadata["type"] != resourceExhaustedFailureTypeString {
+		return nil
+	}
+	var details errordetailspb.ResourceExhaustedFailure
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(cause.Failure.Details, &details); err != nil {
+		return nil
+	}
+	if details.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_CALLER_RPS_LIMIT || details.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
+		return nil
+	}
+	return &serviceerror.ResourceExhausted{Cause: details.Cause, Scope: details.Scope, Message: cause.Failure.Message}
+}
+
 func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) error {
 	if permissionDeniedError.Reason != "" {
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
+}
+
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// The Nexus failure may contain a metadata key requesting that the unwrapped
+	// [Cause] of the failure is sent, to avoid an unnecessary layer of indirection.
+	unwrappedFailure := nexusrpc.UnwrapFailure(&nf)
+	return NexusFailureToTemporalFailure(*unwrappedFailure)
 }

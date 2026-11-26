@@ -27,6 +27,18 @@ type (
 	}
 )
 
+// IgnoresRunningWorkflow reports whether a start with the given (already
+// resolved) overlap policy is started regardless of whether a workflow is
+// currently running for the schedule. This is only true for ALLOW_ALL: every
+// other policy either waits for the running workflow to finish, skips, or
+// cancels/terminates it first. Callers that need to know whether a buffered
+// start was actually blocked on a prior run finishing (as opposed to merely
+// following it in time) should use this instead of re-deriving the same
+// condition.
+func IgnoresRunningWorkflow(overlapPolicy enumspb.ScheduleOverlapPolicy) bool {
+	return overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+}
+
 func ProcessBuffer[T Overlappable](
 	buffer []T,
 	isRunning bool,
@@ -48,7 +60,7 @@ func ProcessBuffer[T Overlappable](
 		overlapPolicy := resolve(start.GetOverlapPolicy())
 
 		// For allow-all, just collect and start all at once
-		if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+		if IgnoresRunningWorkflow(overlapPolicy) {
 			action.OverlappingStarts = append(action.OverlappingStarts, start)
 			continue
 		}

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/testx/softassert"
 )
 
 // mockT wraps a testing.T such that we can know if a test is failed.
@@ -78,6 +79,8 @@ func assertMatches(t *testing.T, level testlogger.Level, msg string, tags []tag.
 }
 
 func TestTestLogger_ExpectationsMatch(t *testing.T) {
+	t.Parallel()
+
 	for _, level := range []testlogger.Level{testlogger.Error, testlogger.DPanic, testlogger.Panic, testlogger.Fatal} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
 			assertMatches(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
@@ -93,6 +96,8 @@ func TestTestLogger_ExpectationsMatch(t *testing.T) {
 }
 
 func TestTestLogger_InfoExpectationMatchCount(t *testing.T) {
+	t.Parallel()
+
 	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	expected := tl.Expect(testlogger.Info, "expected info", tag.String("key", "value"))
 	require.False(t, expected.Matched())
@@ -133,6 +138,8 @@ func assertFails(t *testing.T, level testlogger.Level, msg string, tags []tag.Ta
 }
 
 func TestTestLogger_Uncaught(t *testing.T) {
+	t.Parallel()
+
 	// Non-panicking levels
 	for _, level := range []testlogger.Level{testlogger.Error, testlogger.DPanic} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
@@ -169,6 +176,8 @@ func TestTestLogger_Uncaught(t *testing.T) {
 // the first failure-worthy log in FailOnAnyUnexpectedError mode and that
 // subsequent failures do not overwrite it (first-failure-wins via CAS).
 func TestTestLogger_Failure_StickyOnAnyUnexpected(t *testing.T) {
+	t.Parallel()
+
 	mt := &mockT{T: t}
 	tl := testlogger.NewTestLogger(mt, testlogger.FailOnAnyUnexpectedError)
 	require.Nil(t, tl.Failure())
@@ -186,14 +195,16 @@ func TestTestLogger_Failure_StickyOnAnyUnexpected(t *testing.T) {
 
 // TestTestLogger_Failure_OnExpectedMatch is the soft-assert path: in
 // FailOnExpectedErrorOnly mode, an Error matching a registered expectation
-// (e.g. tag.FailedAssertion) should mark Failure().
+// (e.g. softassert.FailedAssertion) should mark Failure().
 func TestTestLogger_Failure_OnExpectedMatch(t *testing.T) {
+	t.Parallel()
+
 	mt := &mockT{T: t}
 	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
-	tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+	tl.Expect(testlogger.Error, ".*", softassert.FailedAssertion)
 	require.Nil(t, tl.Failure())
 
-	tl.Error("failed assertion: bad", tag.FailedAssertion)
+	tl.Error("failed assertion: bad", softassert.FailedAssertion)
 
 	f := tl.Failure()
 	require.NotNil(t, f)
@@ -203,6 +214,8 @@ func TestTestLogger_Failure_OnExpectedMatch(t *testing.T) {
 // TestTestLogger_Failure_NoMatch verifies that FailOnExpectedErrorOnly remains an
 // escape hatch: an Error with no matching expectation does not flip Failure().
 func TestTestLogger_Failure_NoMatch(t *testing.T) {
+	t.Parallel()
+
 	mt := &mockT{T: t}
 	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
 	require.Nil(t, tl.Failure())

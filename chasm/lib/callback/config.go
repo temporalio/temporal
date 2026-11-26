@@ -14,6 +14,20 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
+var TotalMaxSizePerExecution = dynamicconfig.NewNamespaceIntSetting(
+	"callback.totalMaxSizePerExecution",
+	2*1024*1024,
+	`The maximum allowed total size, in bytes, of all [commonpb.Callback]s attached to a single
+execution. This includes things like links, URLs, headers, etc.`,
+)
+
+var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.nexusHandler.sourceContext.maxSize",
+	1024*1024,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a single NexusHandler
+completion callback. The server carries this payload to the callback's handler untouched.`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,
@@ -32,9 +46,19 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
+var InspectSourceHeader = dynamicconfig.NewGlobalBoolSetting(
+	"callback.inspectSourceHeader",
+	false,
+	`Controls whether the legacy "source" header should be inspected to determine if a Nexus callback request is internal
+or external. This header was used before worker callbacks used the temporal://system URL. Leave this disabled unless it
+is required for mixed-version compatibility because trusting a caller-controlled header can route external requests
+internally.`,
+)
+
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader dynamicconfig.BoolPropertyFn
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
@@ -49,17 +73,16 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		InspectSourceHeader: InspectSourceHeader.Get(dc),
 	}
 }
 
+// EncodeInternalTokenWithEnvelope controls token encoding. todo (david.porter): remove this entirely.
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
 	"callback.encodeInternalTokenWithEnvelope",
-	false,
+	true,
 	`Controls how the internal CHASM Nexus completion callback token is encoded. When true the token is
-encoded as a NexusOperationCompletion envelope; when false (default) it is the legacy bare base64-encoded
-ChasmComponentRef. Gates a safe fleet-wide rollout of the envelope encoding: keep disabled until every
-server can read it (any server able to read the envelope also accepts the legacy form), then enable
-per-namespace.`,
+encoded as a NexusOperationCompletion envelope. This can be removed in future and existed only as a means to control a breaking enconding change from a buggy one.`,
 )
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(

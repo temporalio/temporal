@@ -3,6 +3,7 @@ package configs
 import (
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -255,6 +256,22 @@ var (
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
 
+	// PodOnlyAPIToPriority is deliberately separate from APIToPriority: RateLimitInterceptorProvider
+	// composes this map, NamespaceRateLimitInterceptorProvider must not. Holds only APIs that are
+	// unconditionally pod-only rate-limited, with no dynamic config flag gating them.
+	// It's a placeholder for now but will contain APIs once their proven out using dynamic config
+	PodOnlyAPIToPriority = map[string]int{}
+
+	// AdminAPIToPriority holds the AdminService APIs' pod-only rate-limit priorities while they're
+	// still gated by AdminEnablePodLevelRateLimit. RateLimitInterceptorProvider
+	// Once the rollout is complete and the flag is retired, move these entries into PodOnlyAPIToPriority
+	// above and delete this map.
+	AdminAPIToPriority = map[string]int{
+		adminservice.AdminService_DescribeMutableState_FullMethodName:             5,
+		adminservice.AdminService_GetWorkflowExecutionRawHistory_FullMethodName:   5,
+		adminservice.AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName: 5,
+	}
+
 	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
 	// This includes some APIs, history tasks, etc.
 	operationExcludedAPIs = map[string]struct{}{
@@ -271,31 +288,6 @@ var (
 	}
 )
 
-func NewRequestToRateLimiter(
-	executionRateBurstFn quotas.RateBurst,
-	visibilityRateBurstFn quotas.RateBurst,
-	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
-	operatorRPSRatio dynamicconfig.FloatPropertyFn,
-) quotas.RequestRateLimiter {
-	mapping := make(map[string]quotas.RequestRateLimiter)
-
-	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, operatorRPSRatio)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
-	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
-
-	for api := range APIToPriority {
-		mapping[api] = executionRateLimiter
-	}
-	for api := range VisibilityAPIToPriority {
-		mapping[api] = visibilityRateLimiter
-	}
-	for api := range NamespaceReplicationInducingAPIToPriority {
-		mapping[api] = namespaceReplicationInducingRateLimiter
-	}
-
-	return quotas.NewRoutingRateLimiter(mapping)
-}
-
 func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
@@ -308,6 +300,12 @@ func NewExecutionPriorityRateLimiter(
 				return quotas.OperatorPriority
 			}
 			if priority, ok := APIToPriority[req.API]; ok {
+				return priority
+			}
+			if priority, ok := PodOnlyAPIToPriority[req.API]; ok {
+				return priority
+			}
+			if priority, ok := AdminAPIToPriority[req.API]; ok {
 				return priority
 			}
 			return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]

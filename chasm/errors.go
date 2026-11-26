@@ -1,10 +1,24 @@
 package chasm
 
-import "go.temporal.io/api/serviceerror"
+import (
+	"fmt"
+	"strings"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log/tag"
+)
 
 // ErrRequestIDAlreadyUsed is returned by UpdateComponent when the request ID supplied via
 // WithRequestID has already been recorded on the execution.
 var ErrRequestIDAlreadyUsed = serviceerror.NewFailedPrecondition("request ID has already been used for this execution")
+
+// ErrSpeculativeStartExecution is returned by StartExecution when WithSpeculative is set. Creating an
+// execution must persist it to claim the business ID.  TODO Add support.
+var ErrSpeculativeStartExecution = serviceerror.NewInvalidArgument("WithSpeculative is not supported for StartExecution")
+
+// ErrSpeculativeComponentRef is returned by Ref for a component created by a speculative transition that
+// isn't persisted yet. Ref succeeds once a normal transition persists the component.
+var ErrSpeculativeComponentRef = serviceerror.NewFailedPrecondition("component created by a speculative transition has no reference until it is persisted")
 
 type ExecutionAlreadyStartedError struct {
 	Message          string
@@ -24,4 +38,102 @@ func NewExecutionAlreadyStartedErr(
 
 func (e *ExecutionAlreadyStartedError) Error() string {
 	return e.Message
+}
+
+// TaskNotInvalidatedError indicates a CHASM task executed successfully but its
+// validator still reports the task as valid. Retrying such a task can loop
+// forever, so queue executors should treat it as terminal and send it to DLQ
+// when task DLQ is enabled.
+type TaskNotInvalidatedError struct {
+	TaskKind string
+	TaskInfo string
+
+	TaskNotInvalidatedDetails
+}
+
+func NewTaskNotInvalidatedError(
+	taskKind string,
+	taskInfo string,
+) *TaskNotInvalidatedError {
+	return &TaskNotInvalidatedError{
+		TaskKind: taskKind,
+		TaskInfo: taskInfo,
+	}
+}
+
+// TaskNotInvalidatedDetails identifies the logical CHASM task that remained
+// valid after successful handler execution.
+type TaskNotInvalidatedDetails struct {
+	TaskType             string
+	TaskTypeID           uint32
+	Archetype            string
+	ArchetypeID          ArchetypeID
+	ComponentPath        []string
+	EncodedComponentPath string
+	TaskAttributes       TaskAttributes
+}
+
+// NewTaskNotInvalidatedErrorWithDetails returns an error with logical task
+// context that can be used to locate and repair a stuck CHASM execution.
+func NewTaskNotInvalidatedErrorWithDetails(
+	taskKind string,
+	details TaskNotInvalidatedDetails,
+) *TaskNotInvalidatedError {
+	return &TaskNotInvalidatedError{
+		TaskKind:                  taskKind,
+		TaskNotInvalidatedDetails: details,
+	}
+}
+
+func (e *TaskNotInvalidatedError) Error() string {
+	msg := fmt.Sprintf("CHASM %s task remained valid after successful execution", e.TaskKind)
+	if e.TaskInfo != "" {
+		return fmt.Sprintf("%s: %s", msg, e.TaskInfo)
+	}
+	return msg
+}
+
+func (e *TaskNotInvalidatedError) LogTags() []tag.Tag {
+	tags := []tag.Tag{
+		tag.String("chasm-task-kind", e.TaskKind),
+	}
+
+	if e.TaskType != "" {
+		tags = append(tags, tag.String("chasm-task-type", e.TaskType))
+	}
+	if e.TaskTypeID != 0 {
+		tags = append(tags, tag.UInt32("chasm-task-type-id", e.TaskTypeID))
+	}
+	if e.Archetype != "" {
+		tags = append(tags, tag.Archetype(e.Archetype))
+	}
+	if e.ArchetypeID != 0 {
+		tags = append(tags, tag.ArchetypeID(uint32(e.ArchetypeID)))
+	}
+	if e.ComponentPath != nil {
+		tags = append(tags, tag.String("chasm-component-path", formatTaskNotInvalidatedPath(e.ComponentPath)))
+	}
+	if e.EncodedComponentPath != "" {
+		tags = append(tags, tag.String("chasm-encoded-component-path", e.EncodedComponentPath))
+	}
+	if !e.TaskAttributes.ScheduledTime.IsZero() {
+		tags = append(tags, tag.Time("chasm-task-scheduled-time", e.TaskAttributes.ScheduledTime))
+	}
+	if e.TaskAttributes.Destination != "" {
+		tags = append(tags, tag.String("chasm-task-destination", e.TaskAttributes.Destination))
+	}
+	if e.TaskAttributes.IsImmediate() {
+		tags = append(tags, tag.Bool("chasm-task-immediate", true))
+	}
+	return tags
+}
+
+func formatTaskNotInvalidatedPath(
+	path []string,
+) string {
+	return strings.Join(path, "/")
+}
+
+func (e *TaskNotInvalidatedError) IsTerminalTaskError() bool {
+	return true
 }

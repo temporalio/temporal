@@ -42,18 +42,28 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 
 // newTaggedMetricsHandler returns a metrics handler tagged with the Scheduler's namespace and backend.
 func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) metrics.Handler {
-	return baseHandler.WithTags(
-		metrics.NamespaceTag(scheduler.Namespace),
+	return newNamespaceTaggedMetricsHandler(baseHandler, scheduler.Namespace)
+}
+
+// newNamespaceTaggedMetricsHandler carries the V1-compatible label set; see
+// metrics.ScheduleSDKCompatTags.
+func newNamespaceTaggedMetricsHandler(baseHandler metrics.Handler, namespace string) metrics.Handler {
+	return baseHandler.WithTags(append(
+		metrics.ScheduleSDKCompatTags(),
+		metrics.NamespaceTag(namespace),
 		metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendChasm),
-	)
+	)...)
 }
 
 // Outcomes for task-lifecycle counters (e.g. ScheduleIdleTask). Mutually
 // exclusive: a given task run either fires (Validate=true, Execute ran) or is
-// invalidated (Validate=false; reason tag explains why).
+// invalidated (Validate=false; reason tag explains why). "skipped" covers the
+// arm side rather than a task run: a task that was deliberately not created
+// because an equivalent one is already pending.
 const (
 	outcomeFired       = "fired"
 	outcomeInvalidated = "invalidated"
+	outcomeSkipped     = "skipped"
 )
 
 // reasonNone is the ReasonTag value emitted on the "fired" outcome. Prometheus
@@ -62,6 +72,16 @@ const (
 // ReasonTag, so the fired path sets this sentinel to keep the label set
 // identical.
 const reasonNone metrics.ReasonString = "none"
+
+// Outcomes and reasons for ScheduleCallbackReattach. not_found synthesizes a
+// completion, so it is recorded distinctly from already_closed.
+const (
+	outcomeReattachAttached  = "attached"
+	outcomeReattachCompleted = "completed"
+
+	reasonReattachNotFound      metrics.ReasonString = "not_found"
+	reasonReattachAlreadyClosed metrics.ReasonString = "already_closed"
+)
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
 // task timestamp. A task is valid if its scheduled time is after the high water mark.

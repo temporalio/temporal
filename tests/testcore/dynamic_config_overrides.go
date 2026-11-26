@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 )
 
 var (
@@ -14,8 +14,8 @@ var (
 	//
 	// There are 4 ways to override a setting:
 	// 1. Globally using this file. Every test suite creates a new test cluster using this overrides.
-	// 2. Per test suite using FunctionalTestBase.SetupSuiteWithCluster() and WithDynamicConfigOverrides() option.
-	// 3. Per test using FunctionalTestBase.OverrideDynamicConfig() method.
+	// 2. Per test using testcore.WithDynamicConfig() option passed to testcore.NewEnv().
+	// 3. Per test using TestEnv.OverrideDynamicConfig() method.
 	// 4. Per specific cluster per test (if test has more than one cluster) using TestCluster.OverrideDynamicConfig() method.
 	//
 	// NOTE1: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level,
@@ -79,7 +79,6 @@ var (
 		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
-		nexusoperations.UseSystemCallbackURL.Key():                          true,
 
 		// CHASM scheduler rollout percents default to 0 in production; in tests we
 		// dial them to 100 so existing tests that only flip the binary enable flag

@@ -1,15 +1,69 @@
 package rpc
 
 import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"math"
+	"reflect"
 	"sync"
 	"testing"
+	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/testing/await"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func TestErrorInterceptorPreservesResourceExhaustedRetryDelay(t *testing.T) {
+	t.Parallel()
+
+	serverStatus, err := status.New(codes.ResourceExhausted, "namespace rate limit exceeded").WithDetails(
+		&errordetailspb.ResourceExhaustedFailure{
+			Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		},
+		&errdetails.RetryInfo{RetryDelay: durationpb.New(2 * time.Second)},
+	)
+	require.NoError(t, err)
+
+	gotErr := errorInterceptor(context.Background(), "/test/method", nil, nil, nil,
+		func(context.Context, string, any, any, *grpc.ClientConn, ...grpc.CallOption) error {
+			return serverStatus.Err()
+		},
+	)
+	resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](gotErr)
+	require.True(t, ok)
+	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhaustedErr.Cause)
+	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhaustedErr.Scope)
+	retryInfo := retryInfoDetail(gotErr)
+	require.NotNil(t, retryInfo)
+	require.Equal(t, 2*time.Second, retryInfo.GetRetryDelay().AsDuration())
+}
+
+func retryInfoDetail(err error) *errdetails.RetryInfo {
+	for _, detail := range serviceerror.ToStatus(err).Details() {
+		if retryInfo, ok := detail.(*errdetails.RetryInfo); ok {
+			return retryInfo
+		}
+	}
+	return nil
+}
 
 func TestCreateLocalFrontendGRPCConnectionIsCached(t *testing.T) {
 	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
@@ -19,6 +73,156 @@ func TestCreateLocalFrontendGRPCConnectionIsCached(t *testing.T) {
 	require.NotNil(t, first)
 	require.Same(t, first, second, "expected the internal frontend connection to be reused")
 	t.Cleanup(func() { _ = first.Close() })
+}
+
+func TestCreateLocalFrontendGRPCConnection_DefaultKeepAliveOptions(t *testing.T) {
+	t.Parallel()
+
+	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+	conn := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, conn)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	params, ok := getClientConnKeepaliveParams(conn)
+	require.True(t, ok, "expected keepalive parameters to be present on ClientConn")
+	require.Equal(t, time.Duration(math.MaxInt64), params.Time)
+	require.Equal(t, 20*time.Second, params.Timeout)
+	require.False(t, params.PermitWithoutStream)
+}
+
+func TestCreateLocalFrontendGRPCConnection_ConfiguredKeepAliveOptions(t *testing.T) {
+	t.Parallel()
+
+	keepAliveTime := 45 * time.Second
+	keepAliveTimeout := 15 * time.Second
+	permitWithoutStream := true
+
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.InternalFrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:                &keepAliveTime,
+							Timeout:             &keepAliveTimeout,
+							PermitWithoutStream: &permitWithoutStream,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	f := NewFactory(cfg, primitives.FrontendService, log.NewNoopLogger(),
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+	f.EnableInternodeClientKeepalive = true
+
+	conn := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, conn)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	params, ok := getClientConnKeepaliveParams(conn)
+	require.True(t, ok, "expected keepalive parameters to be present on ClientConn")
+	require.Equal(t, keepAliveTime, params.Time)
+	require.Equal(t, keepAliveTimeout, params.Timeout)
+	require.True(t, params.PermitWithoutStream)
+}
+
+func TestCreateLocalFrontendGRPCConnection_FallbackToFrontendService(t *testing.T) {
+	t.Parallel()
+
+	keepAliveTime := 30 * time.Second
+	keepAliveTimeout := 10 * time.Second
+	permitWithoutStream := true
+
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.FrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:                &keepAliveTime,
+							Timeout:             &keepAliveTimeout,
+							PermitWithoutStream: &permitWithoutStream,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	f := NewFactory(cfg, primitives.FrontendService, log.NewNoopLogger(),
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+	f.EnableInternodeClientKeepalive = true
+
+	conn := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, conn)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	params, ok := getClientConnKeepaliveParams(conn)
+	require.True(t, ok, "expected keepalive parameters to be present on ClientConn")
+	require.Equal(t, keepAliveTime, params.Time)
+	require.Equal(t, keepAliveTimeout, params.Timeout)
+	require.True(t, params.PermitWithoutStream)
+}
+
+func TestCreateLocalFrontendGRPCConnection_PrefersInternalFrontendService(t *testing.T) {
+	t.Parallel()
+
+	ifeKeepAliveTime := 50 * time.Second
+	ifeKeepAliveTimeout := 25 * time.Second
+	feKeepAliveTime := 10 * time.Second
+	feKeepAliveTimeout := 5 * time.Second
+
+	cfg := &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.InternalFrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:    &ifeKeepAliveTime,
+							Timeout: &ifeKeepAliveTimeout,
+						},
+					},
+				},
+			},
+			string(primitives.FrontendService): {
+				RPC: config.RPC{
+					ClientConnectionConfig: config.ClientConnectionConfig{
+						KeepAliveClientConfig: &config.KeepAliveClientParameters{
+							Time:    &feKeepAliveTime,
+							Timeout: &feKeepAliveTimeout,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	f := NewFactory(cfg, primitives.FrontendService, log.NewNoopLogger(),
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+	f.EnableInternodeClientKeepalive = true
+
+	conn := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, conn)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	params, ok := getClientConnKeepaliveParams(conn)
+	require.True(t, ok, "expected keepalive parameters to be present on ClientConn")
+	require.Equal(t, ifeKeepAliveTime, params.Time)
+	require.Equal(t, ifeKeepAliveTimeout, params.Timeout)
+}
+
+func getClientConnKeepaliveParams(conn *grpc.ClientConn) (keepalive.ClientParameters, bool) {
+	val := reflect.ValueOf(conn).Elem()
+	kpField := val.FieldByName("keepaliveParams")
+	if kpField.IsValid() && kpField.CanAddr() {
+		ptr := unsafe.Pointer(kpField.UnsafeAddr())
+		params := *(*keepalive.ClientParameters)(ptr)
+		return params, true
+	}
+	return keepalive.ClientParameters{}, false
 }
 
 func TestCreateRemoteFrontendGRPCConnection_CachedPerAddress(t *testing.T) {
@@ -62,4 +266,90 @@ func TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressConverges(t *te
 		require.Same(t, conns[0], conns[i], "expected all concurrent callers to converge on the same cached connection")
 	}
 	t.Cleanup(func() { _ = conns[0].Close() })
+}
+
+func TestRPCFactoryCloseConnections(t *testing.T) {
+	t.Parallel()
+
+	for name, create := range map[string]func(*RPCFactory, string) *grpc.ClientConn{
+		"history":        (*RPCFactory).CreateHistoryGRPCConnection,
+		"matching":       (*RPCFactory).CreateMatchingGRPCConnection,
+		"remoteFrontend": (*RPCFactory).CreateRemoteFrontendGRPCConnection,
+		"localFrontend": func(f *RPCFactory, _ string) *grpc.ClientConn {
+			return f.CreateLocalFrontendGRPCConnection()
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
+				metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+			t.Cleanup(f.Close)
+			cached := create(f, hostA)
+			require.NotNil(t, cached)
+
+			f.Close()
+			require.Equal(t, connectivity.Shutdown, cached.GetState())
+
+			afterClose := create(f, hostB)
+			require.NotNil(t, afterClose)
+			t.Cleanup(func() { _ = afterClose.Close() })
+			require.Equal(t, connectivity.Shutdown, afterClose.GetState())
+		})
+	}
+}
+
+func TestRPCFactoryCloseDuringConnectionCreation(t *testing.T) {
+	t.Parallel()
+
+	for name, create := range map[string]func(*RPCFactory, string) *grpc.ClientConn{
+		"history":        (*RPCFactory).CreateHistoryGRPCConnection,
+		"matching":       (*RPCFactory).CreateMatchingGRPCConnection,
+		"remoteFrontend": (*RPCFactory).CreateRemoteFrontendGRPCConnection,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			started := make(chan struct{})
+			release := make(chan struct{})
+			ctx := t.Context()
+			tlsProvider := &gatedTLSConfigProvider{
+				getClientConfig: func() (*tls.Config, error) {
+					close(started)
+					select {
+					case <-release:
+						return nil, nil
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+				},
+			}
+			f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
+				metrics.NoopMetricsHandler, tlsProvider, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+			t.Cleanup(f.Close)
+			result := make(chan *grpc.ClientConn, 1)
+			go func() { result <- create(f, hostA) }()
+
+			await.Rcv(t, started)
+			f.Close()
+			close(release)
+			conn := await.Rcv(t, result)
+			require.NotNil(t, conn)
+			t.Cleanup(func() { _ = conn.Close() })
+			require.Equal(t, connectivity.Shutdown, conn.GetState())
+		})
+	}
+}
+
+type gatedTLSConfigProvider struct {
+	encryption.FixedTLSConfigProvider
+	getClientConfig func() (*tls.Config, error)
+}
+
+func (p *gatedTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
+	return p.getClientConfig()
+}
+
+func (p *gatedTLSConfigProvider) GetRemoteClusterClientConfig(string) (*tls.Config, error) {
+	return p.getClientConfig()
 }

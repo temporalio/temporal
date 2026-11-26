@@ -10,7 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -208,8 +210,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -218,6 +222,52 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution_VisibilityTaskCarriesTimes() {
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+	startTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	createTime := startTime.Add(-2 * time.Hour)
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
+	var captured *persistence.AddHistoryTasksRequest
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *persistence.AddHistoryTasksRequest) error {
+			captured = req
+			return nil
+		})
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		chasm.WorkflowArchetypeID,
+		tests.Version,
+		[]byte("branchToken"),
+		0,
+		time.Time{},
+		startTime,
+		createTime,
+		&stage,
+		true,
+	)
+	s.NoError(err)
+
+	s.Require().NotNil(captured)
+	visibilityTasks := captured.Tasks[tasks.CategoryVisibility]
+	s.Require().Len(visibilityTasks, 1)
+	deleteTask, ok := visibilityTasks[0].(*tasks.DeleteExecutionVisibilityTask)
+	s.Require().True(ok)
+	s.Equal(startTime, deleteTask.StartTime)
+	s.Equal(createTime, deleteTask.CreateTime)
+	s.True(deleteTask.IsRetentionDelete)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
@@ -236,8 +286,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -253,8 +305,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -269,8 +323,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -296,8 +352,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -312,8 +370,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -328,8 +388,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -343,8 +405,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -355,7 +419,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkflowActiveInCurrentCluster() {
-	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName)
+	lastWriteVersion := tests.Version + 100
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName, lastWriteVersion)
 
 	replicationTasks := captured.Tasks[tasks.CategoryReplication]
 	s.Require().Len(replicationTasks, 1, "expected a DeleteExecutionReplicationTask when workflow is active in current cluster")
@@ -363,10 +428,11 @@ func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkf
 	s.True(ok, "task should be *DeleteExecutionReplicationTask")
 	s.Equal(captured.WorkflowID, deleteTask.WorkflowID)
 	s.Equal(captured.NamespaceID, deleteTask.NamespaceID)
+	s.Equal(lastWriteVersion, deleteTask.Version)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflowActiveInOtherCluster() {
-	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName)
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName, tests.Version)
 
 	s.Empty(captured.Tasks[tasks.CategoryReplication],
 		"expected no DeleteExecutionReplicationTask when workflow is active in another cluster")
@@ -374,6 +440,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflow
 
 func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 	workflowActiveCluster string,
+	lastWriteVersion int64,
 ) *persistence.AddHistoryTasksRequest {
 	nsID := namespace.NewID()
 	nsEntry := namespace.NewGlobalNamespaceForTest(
@@ -412,8 +479,10 @@ func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		lastWriteVersion,
 		[]byte("branchToken"),
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -439,8 +508,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -457,8 +528,10 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
+		time.Time{},
 		time.Time{},
 		time.Time{},
 		&stage,
@@ -763,6 +836,199 @@ func (s *contextSuite) TestShardStopReasonAssertOwnership() {
 
 	s.False(s.mockShard.IsValid())
 	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_NonIncreasingTransactionID_StaleOwner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(2<<20, 1<<20),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	var ownershipLostErr *persistence.ShardOwnershipLostError
+	s.ErrorAs(err, &ownershipLostErr)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_NonIncreasingTransactionID_Owner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	_, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(2<<20, 1<<20),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	var invalidRequestErr *persistence.InvalidPersistenceRequestError
+	s.ErrorAs(err, &invalidRequestErr)
+
+	s.True(s.mockShard.IsValid())
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_NonIncreasingTransactionID_ValidationDisabled() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(false)
+	s.mockExecutionManager.EXPECT().AppendHistoryNodes(gomock.Any(), gomock.Any()).
+		Return(&persistence.AppendHistoryNodesResponse{Size: 1}, nil).Times(1)
+
+	size, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(2<<20, 1<<20),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	s.NoError(err)
+	s.Equal(1, size)
+}
+
+func (s *contextSuite) TestAppendHistoryEvents_IncreasingTransactionID() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockExecutionManager.EXPECT().AppendHistoryNodes(gomock.Any(), gomock.Any()).
+		Return(&persistence.AppendHistoryNodesResponse{Size: 1}, nil).Times(1)
+
+	size, err := s.mockShard.AppendHistoryEvents(
+		context.Background(),
+		s.newAppendHistoryNodesRequest(1<<20, 1<<20+1),
+		tests.NamespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+	)
+	s.NoError(err)
+	s.Equal(1, size)
+}
+
+func (s *contextSuite) TestAppendRawHistoryEvents_NonIncreasingTransactionID_StaleOwner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.AppendRawHistoryEvents(
+		context.Background(),
+		&persistence.AppendRawHistoryNodesRequest{NodeID: 5, PrevTransactionID: 2 << 20, TransactionID: 1 << 20},
+	)
+	var ownershipLostErr *persistence.ShardOwnershipLostError
+	s.ErrorAs(err, &ownershipLostErr)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestAppendRawHistoryEvents_NonIncreasingTransactionID_Owner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	_, err := s.mockShard.AppendRawHistoryEvents(
+		context.Background(),
+		&persistence.AppendRawHistoryNodesRequest{NodeID: 5, PrevTransactionID: 2 << 20, TransactionID: 1 << 20},
+	)
+	var invalidRequestErr *persistence.InvalidPersistenceRequestError
+	s.ErrorAs(err, &invalidRequestErr)
+
+	s.True(s.mockShard.IsValid())
+}
+
+func (s *contextSuite) TestAppendRawHistoryEvents_IncreasingTransactionID() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	request := &persistence.AppendRawHistoryNodesRequest{NodeID: 5, PrevTransactionID: 1 << 20, TransactionID: 1<<20 + 1}
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), request).
+		Return(&persistence.AppendHistoryNodesResponse{Size: 1}, nil).Times(1)
+
+	resp, err := s.mockShard.AppendRawHistoryEvents(context.Background(), request)
+	s.NoError(err)
+	s.Equal(1, resp.Size)
+	s.Equal(s.shardID, request.ShardID)
+}
+
+func (s *contextSuite) TestUpdateWorkflowExecution_NonIncreasingTransactionID_StaleOwner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.UpdateWorkflowExecution(
+		context.Background(),
+		&persistence.UpdateWorkflowExecutionRequest{
+			UpdateWorkflowEvents: []*persistence.WorkflowEvents{s.newWorkflowEvents(2<<20, 1<<20)},
+		},
+	)
+	var ownershipLostErr *persistence.ShardOwnershipLostError
+	s.ErrorAs(err, &ownershipLostErr)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestWorkflowExecutionWrites_NonIncreasingTransactionID_Owner() {
+	s.mockShard.config.EnableHistoryNodeTransactionIDValidation = dynamicconfig.GetBoolPropertyFn(true)
+	increasing := s.newWorkflowEvents(1<<20, 1<<20+1)
+	nonIncreasing := s.newWorkflowEvents(2<<20, 1<<20)
+
+	testCases := []struct {
+		name  string
+		write func() error
+	}{
+		{
+			name: "CreateWorkflowExecution",
+			write: func() error {
+				_, err := s.mockShard.CreateWorkflowExecution(context.Background(), &persistence.CreateWorkflowExecutionRequest{
+					NewWorkflowEvents: []*persistence.WorkflowEvents{increasing, nonIncreasing},
+				})
+				return err
+			},
+		},
+		{
+			name: "UpdateWorkflowExecution",
+			write: func() error {
+				_, err := s.mockShard.UpdateWorkflowExecution(context.Background(), &persistence.UpdateWorkflowExecutionRequest{
+					UpdateWorkflowEvents: []*persistence.WorkflowEvents{increasing},
+					NewWorkflowEvents:    []*persistence.WorkflowEvents{nonIncreasing},
+				})
+				return err
+			},
+		},
+		{
+			name: "ConflictResolveWorkflowExecution",
+			write: func() error {
+				_, err := s.mockShard.ConflictResolveWorkflowExecution(context.Background(), &persistence.ConflictResolveWorkflowExecutionRequest{
+					ResetWorkflowEvents:   []*persistence.WorkflowEvents{increasing},
+					NewWorkflowEvents:     []*persistence.WorkflowEvents{increasing},
+					CurrentWorkflowEvents: []*persistence.WorkflowEvents{nonIncreasing},
+				})
+				return err
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+			err := tc.write()
+			var invalidRequestErr *persistence.InvalidPersistenceRequestError
+			s.ErrorAs(err, &invalidRequestErr)
+
+			s.True(s.mockShard.IsValid())
+		})
+	}
+}
+
+func (s *contextSuite) newAppendHistoryNodesRequest(prevTransactionID, transactionID int64) *persistence.AppendHistoryNodesRequest {
+	return &persistence.AppendHistoryNodesRequest{
+		Events:            []*historypb.HistoryEvent{{EventId: 5, Version: 1}},
+		PrevTransactionID: prevTransactionID,
+		TransactionID:     transactionID,
+	}
+}
+
+func (s *contextSuite) newWorkflowEvents(prevTransactionID, transactionID int64) *persistence.WorkflowEvents {
+	return &persistence.WorkflowEvents{
+		Events:    []*historypb.HistoryEvent{{EventId: 5, Version: 1}},
+		PrevTxnID: prevTransactionID,
+		TxnID:     transactionID,
+	}
 }
 
 func (s *contextSuite) TestShardStopReasonShardRead() {

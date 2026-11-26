@@ -103,16 +103,36 @@ func Invoke(
 		execution.GetWorkflowId(),
 		shardContext.GetConfig().NumberOfShards,
 	)
-	rawHistoryResponse, err := shardContext.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		BranchToken: targetVersionHistory.GetBranchToken(),
-		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
-		// ReadRawHistoryBranch is inclusive exclusive.
-		MinEventID:    pageToken.GetStartEventId() + 1,
-		MaxEventID:    pageToken.GetEndEventId(),
-		PageSize:      pageSize,
-		NextPageToken: pageToken.PersistenceToken,
-		ShardID:       shardID,
-	})
+	readPage := func(branchToken []byte) (*persistence.ReadRawHistoryBranchResponse, error) {
+		return shardContext.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			BranchToken: branchToken,
+			// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
+			// ReadRawHistoryBranch is inclusive exclusive.
+			MinEventID:    pageToken.GetStartEventId() + 1,
+			MaxEventID:    pageToken.GetEndEventId(),
+			PageSize:      pageSize,
+			NextPageToken: pageToken.PersistenceToken,
+			ShardID:       shardID,
+		})
+	}
+	rawHistoryResponse, err := readPage(targetVersionHistory.GetBranchToken())
+	refreshedBranchToken, refreshErr := api.RefreshBranchTokenAfterRead(
+		ctx,
+		shardContext,
+		workflowConsistencyChecker,
+		ns.Name(),
+		ns.ID(),
+		execution,
+		targetVersionHistory.GetBranchToken(),
+	)
+	if refreshErr != nil {
+		return nil, refreshErr
+	}
+	if refreshedBranchToken != nil {
+		// The version histories are carried in the next page token, so later pages use the refreshed token too.
+		targetVersionHistory.BranchToken = refreshedBranchToken
+		rawHistoryResponse, err = readPage(refreshedBranchToken)
+	}
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// when no events can be returned from DB, DB layer will return

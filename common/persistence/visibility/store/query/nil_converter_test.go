@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -95,6 +97,12 @@ func TestNilStoreQueryConverter_ConvertIsExpr(t *testing.T) {
 
 func TestNewNilQueryConverter(t *testing.T) {
 	t.Parallel()
-	c := NewNilQueryConverter("", searchattribute.TestNameTypeMap(), nil)
+	c := NewNilQueryConverter(
+		"",
+		searchattribute.TestNameTypeMap(),
+		nil, // saMapper
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+	)
 	require.Equal(t, &nilStoreQueryConverter{}, c.storeQC)
 }

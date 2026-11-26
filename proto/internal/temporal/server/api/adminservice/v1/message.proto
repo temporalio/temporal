@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package temporal.server.api.adminservice.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/server/api/enums/v1/workflow.proto";
+
+option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
+
+message VisibilityExecutionInfo {
+  // Namespace ID.
+  string namespace_id = 1;
+  // Namespace name. It may be empty if the namespace was deleted and this
+  // record is still in Visibility.
+  string namespace = 2;
+  // Archetype ID.
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 3;
+  // Execution business ID.
+  string business_id = 4;
+  // Execution run ID.
+  string run_id = 5;
+  // Execution state.
+  temporal.server.api.enums.v1.WorkflowExecutionState state = 6;
+  // Start time.
+  google.protobuf.Timestamp start_time = 7;
+  // Close time. It is nil if execution is still running.
+  google.protobuf.Timestamp close_time = 8;
+  // Duration. It is nil if execution is still running.
+  google.protobuf.Duration execution_duration = 9;
+  // History length. It is 0 if execution is still running.
+  int64 history_length = 10;
+  // History size bytes. It is 0 if execution is still running.
+  int64 history_size_bytes = 11;
+  // State transition count. It is 0 if execution is still running.
+  int64 state_transition_count = 12;
+}

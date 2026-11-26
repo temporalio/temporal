@@ -53,7 +53,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/deleteexecution"
@@ -64,9 +63,11 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 )
@@ -99,6 +100,7 @@ type (
 		archivalMetadata             archiver.ArchivalMetadata
 		hostInfoProvider             membership.HostInfoProvider
 		controller                   shard.Controller
+		workflowCache                wcache.Cache
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
@@ -137,6 +139,7 @@ type (
 		ArchivalMetadata             archiver.ArchivalMetadata
 		HostInfoProvider             membership.HostInfoProvider
 		ShardController              shard.Controller
+		WorkflowCache                wcache.Cache
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
@@ -244,6 +247,18 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
+	}
+	if componentRefBytes := request.GetComponentRef(); len(componentRefBytes) > 0 {
+		isValid, err := chasm.ReadComponent(
+			ctx,
+			componentRefBytes,
+			(*activity.Activity).IsDispatchTaskValid,
+			request.GetStamp(),
+		)
+		if err != nil {
+			return nil, h.convertError(err)
+		}
+		return &historyservice.IsActivityTaskValidResponse{IsValid: isValid}, nil
 	}
 	workflowID := request.Execution.WorkflowId
 
@@ -2027,11 +2042,10 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID.String(),
-		request.Request.Execution.WorkflowId,
-		h.config.NumberOfShards,
-	)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.Request.Execution.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
 
 	workflowExecution := request.GetRequest().GetExecution()
 	h.logger.Info("ForceDeleteWorkflowExecution requested",
@@ -2042,7 +2056,8 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,
-		shardID,
+		shardContext,
+		h.workflowCache,
 		h.chasmRegistry,
 		h.persistenceExecutionManager,
 		h.persistenceVisibilityManager,
@@ -2540,6 +2555,9 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 	return unpauseResp, nil
 }
 
+// StartNexusOperation is the History Service's StartNexusOperation endpoint is for dispatching requests
+// to the System Nexus Endpoint, distinct from the Frontend Service's `nexus_handler.go` which
+// starts Nexus operations by sending Nexus tasks directly to workers via the Matching Service.
 func (h *Handler) StartNexusOperation(
 	ctx context.Context,
 	req *historyservice.StartNexusOperationRequest,
@@ -2571,8 +2589,7 @@ func (h *Handler) StartNexusOperation(
 	}
 	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
 	if err != nil {
-		var opErr *nexus.OperationError
-		if errors.As(err, &opErr) {
+		if opErr, ok := errors.AsType[*nexus.OperationError](err); ok {
 			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
 			if convErr != nil {
 				return nil, convErr
@@ -2600,19 +2617,32 @@ func (h *Handler) StartNexusOperation(
 	case interface{ ValueAsAny() any }:
 		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
-			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
+			h.logger.Error("failed to encode payload", tag.NexusStageHandlerInbound, tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 		}
+
 		var payload *commonpb.Payload
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
+		// Responses from the System Nexus Endpoint are server generated, so we must mark them as system payloads.
 		if payload != nil {
 			if payload.Metadata == nil {
 				payload.Metadata = make(map[string][]byte, 1)
 			}
+
+			// For now, we require all responess from the System Nexus Endpoint be protobufs.
+			encoding := string(payload.Metadata["encoding"])
+			if encoding != "binary/protobuf" {
+				return nil, serviceerror.NewFailedPreconditionf("system payload must be encoded as binary/protobuf but got %s", encoding)
+			}
+			if _, ok := payload.Metadata["messageType"]; !ok {
+				return nil, serviceerror.NewFailedPrecondition("system payload missing messageType metadata key")
+			}
+
 			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
 		}
+
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 				Payload: payload,
@@ -2627,7 +2657,7 @@ func (h *Handler) StartNexusOperation(
 			},
 		}
 	default:
-		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.RequestID(req.Request.RequestId))
+		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.NexusStageHandlerInbound, tag.RequestID(req.Request.RequestId))
 		return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 	}
 

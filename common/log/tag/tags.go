@@ -66,6 +66,16 @@ func RequestID(requestID string) ZapTag {
 	return NewStringTag("request-id", requestID)
 }
 
+// NextPageToken returns tag for NextPageToken
+func NextPageToken(nextPageToken []byte) ZapTag {
+	return NewBinaryTag("next-page-token", nextPageToken)
+}
+
+// PageSize returns tag for PageSize
+func PageSize(pageSize int) ZapTag {
+	return NewInt("page-size", pageSize)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -190,6 +200,11 @@ func WorkflowNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("wf-namespace-id", namespaceID)
 }
 
+// TargetNamespaceID returns tag for a target namespace ID, e.g. the namespace a request is routed to.
+func TargetNamespaceID(namespaceID string) ZapTag {
+	return NewStringTag("target-namespace-id", namespaceID)
+}
+
 // WorkflowNamespace returns tag for WorkflowNamespace
 func WorkflowNamespace(namespace string) ZapTag {
 	return NewStringTag("wf-namespace", namespace)
@@ -291,14 +306,14 @@ func WorkflowTaskFailedCause(workflowTaskFailCause enumspb.WorkflowTaskFailedCau
 	return NewStringerTag("workflow-task-fail-cause", workflowTaskFailCause)
 }
 
-// WorkflowTaskQueueType returns tag for WorkflowTaskQueueType
-func WorkflowTaskQueueType(taskQueueType enumspb.TaskQueueType) ZapTag {
-	return NewStringTag("wf-task-queue-type", taskQueueType.String())
+// TaskQueueType returns tag for the type of a task queue: workflow, activity or Nexus.
+func TaskQueueType(taskQueueType enumspb.TaskQueueType) ZapTag {
+	return NewStringTag("task-queue-type", taskQueueType.String())
 }
 
-// WorkflowTaskQueueName returns tag for WorkflowTaskQueueName
-func WorkflowTaskQueueName(taskQueueName string) ZapTag {
-	return NewStringTag("wf-task-queue-name", taskQueueName)
+// TaskQueueName returns tag for the name of a task queue of any type.
+func TaskQueueName(taskQueueName string) ZapTag {
+	return NewStringTag("task-queue-name", taskQueueName)
 }
 
 // WorkerVersion returns tag for worker build ID
@@ -382,6 +397,10 @@ func ScheduleID(scheduleID string) ZapTag {
 // Component returns tag for Component
 func component(component string) ZapTag {
 	return NewStringTag("component", component)
+}
+
+func nexusStage(stage string) ZapTag {
+	return NewStringTag("nexus-stage", stage)
 }
 
 // Lifecycle returns tag for Lifecycle
@@ -550,9 +569,6 @@ func CertThumbprint(thumbprint string) ZapTag {
 func WorkerComponent(v any) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
-
-// FailedAssertion is a tag for marking a message as a failed assertion.
-var FailedAssertion = NewBoolTag("failed-assertion", true)
 
 // history engine shard
 
@@ -795,6 +811,7 @@ func SourceShardID(shardID int32) ZapTag {
 func TargetShardID(shardID int32) ZapTag {
 	return NewInt32("xdc-target-shard-id", shardID)
 }
+
 func ReplicationTask(replicationTask any) ZapTag {
 	return NewAnyTag("xdc-replication-task", replicationTask)
 }
@@ -1023,13 +1040,13 @@ func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
 
-func NexusService(service string) ZapTag {
-	return NewStringTag("nexus-service", service)
+// NexusCompletionSource retuns a tag for the source of the Nexus completion callback.
+func NexusCompletionSource(source string) ZapTag {
+	return NewStringTag("nexus-completion-source", source)
 }
 
-// NexusTaskQueueName returns tag for NexusTaskQueueName
-func NexusTaskQueueName(taskQueueName string) ZapTag {
-	return NewStringTag("nexus-task-queue-name", taskQueueName)
+func NexusService(service string) ZapTag {
+	return NewStringTag("nexus-service", service)
 }
 
 // NexusEndpointTargetNamespaceID returns a tag for the namespace ID targeted by a Nexus endpoint's worker target.

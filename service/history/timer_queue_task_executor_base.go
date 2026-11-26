@@ -163,7 +163,7 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 // isValidExpirationTime returns true when the workflow is still running and
 // expirationTime has been reached. Callers pass fields from an execution
 // (e.g. WorkflowRunExpirationTime), which are stored in the execution's virtual
-// frame (if time skipping happens); this converts via ms.ToRealTime before
+// frame (if time skipping happens); this converts via ms.ToPhysicalTimeWithCurrentTimeSkippingOffset before
 // comparing to t.Now() because the timer queue dispatches against wall-clock.
 func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	mutableState historyi.MutableState,
@@ -174,7 +174,7 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 		return false
 	}
 	taskShouldTriggerAt := expirationTime.AsTime()
-	expired := queues.IsTimeExpired(task, t.Now(), mutableState.ToRealTime(taskShouldTriggerAt))
+	expired := queues.IsTimeExpired(task, t.Now(), mutableState.ToPhysicalTimeWithCurrentTimeSkippingOffset(taskShouldTriggerAt))
 	return expired
 }
 
@@ -280,8 +280,9 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// truncated to a common (millisecond) precision later on.
 	//
 	// See also queues.IsTimeExpired.
-	// TODO@time-skipping: hasn's supported time skipping for CHASM system yet
-	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
+	// Component task deadlines use logical time; the queue's fire time uses physical time.
+	logicalFireTime := ms.ToLogicalTimeWithCurrentTimeSkippingOffset(task.GetKey().FireTime)
+	referenceTime := util.MaxTime(ms.Now(), logicalFireTime)
 
 	return tree.EachPureTask(referenceTime, callback)
 }
@@ -309,7 +310,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(task, t.Now(), ms.ToRealTime(group.Deadline.AsTime())) {
+		if !queues.IsTimeExpired(task, t.Now(), ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(group.Deadline.AsTime())) {
 			break
 		}
 

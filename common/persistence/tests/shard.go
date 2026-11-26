@@ -150,3 +150,28 @@ func (s *ShardSuite) TestUpdateShard_Success() {
 	s.NoError(err)
 	s.ProtoEqual(updateShardInfo, resp.ShardInfo)
 }
+
+func (s *ShardSuite) TestAssertShardOwnership() {
+	shardInfo := RandomShardInfo(s.ShardID, 41)
+	_, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
+		ShardID: s.ShardID, InitialShardInfo: shardInfo,
+	})
+	s.NoError(err)
+	s.NoError(s.ShardManager.AssertShardOwnership(s.Ctx, &p.AssertShardOwnershipRequest{ShardID: s.ShardID, RangeID: 41}))
+
+	updated := RandomShardInfo(s.ShardID, 42)
+	s.NoError(s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{ShardInfo: updated, PreviousRangeID: 41}))
+
+	var ownershipLost *p.ShardOwnershipLostError
+	err = s.ShardManager.AssertShardOwnership(s.Ctx, &p.AssertShardOwnershipRequest{ShardID: s.ShardID, RangeID: 41})
+	s.ErrorAs(err, &ownershipLost)
+	s.Equal(s.ShardID, ownershipLost.ShardID)
+	err = s.ShardManager.AssertShardOwnership(s.Ctx, &p.AssertShardOwnershipRequest{ShardID: s.ShardID, RangeID: 43})
+	s.ErrorAs(err, &ownershipLost)
+	s.Equal(s.ShardID, ownershipLost.ShardID)
+	s.NoError(s.ShardManager.AssertShardOwnership(s.Ctx, &p.AssertShardOwnershipRequest{ShardID: s.ShardID, RangeID: 42}))
+
+	response, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{ShardID: s.ShardID})
+	s.NoError(err)
+	s.ProtoEqual(updated, response.ShardInfo)
+}

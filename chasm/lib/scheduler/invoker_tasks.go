@@ -16,7 +16,9 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -43,6 +45,9 @@ type (
 		// the request makes it through metering's interceptor. Because we don't change for
 		// terminate/cancels, we can go directly to history for other service calls.
 		FrontendClient workflowservice.WorkflowServiceClient
+
+		// TimeSource stamps StartTime on started workflows. Defaults to real time.
+		TimeSource clock.TimeSource `optional:"true"`
 	}
 
 	InvokerExecuteTaskHandler struct {
@@ -52,6 +57,7 @@ type (
 		baseLogger     log.Logger
 		historyClient  resource.HistoryClient
 		frontendClient workflowservice.WorkflowServiceClient
+		timeSource     clock.TimeSource
 	}
 
 	InvokerProcessBufferTaskHandler struct {
@@ -107,12 +113,17 @@ const (
 )
 
 func NewInvokerExecuteTaskHandler(opts InvokerTaskHandlerOptions) *InvokerExecuteTaskHandler {
+	timeSource := opts.TimeSource
+	if timeSource == nil {
+		timeSource = clock.NewRealTimeSource()
+	}
 	return &InvokerExecuteTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
+		timeSource:     timeSource,
 	}
 }
 
@@ -174,6 +185,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var scheduler *Scheduler
 	var lastCompletionState *schedulerpb.LastCompletionResult
 	var schedulerRef []byte
+	var timeSkippingConfig *commonpb.TimeSkippingConfig
+	var timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation
 	var now time.Time
 
 	// Read and deep copy returned components, since we'll continue to access them
@@ -195,6 +208,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 
 			lcs := s.LastCompletionResult.Get(ctx)
 			lastCompletionState = common.CloneProto(lcs)
+			timeSkippingConfig, timeSkippingStatePropagation =
+				ctx.GetTimeSkippingPropagateState()
 
 			// Capture the scheduler's component ref so a per-start completion callback (carrying that
 			// start's request ID in its token) can be built outside the MS lock.
@@ -232,7 +247,18 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
+	result = result.Append(h.startWorkflows(
+		ictx,
+		logger,
+		metricsHandler,
+		scheduler,
+		invoker,
+		lastCompletionState,
+		schedulerRef,
+		timeSkippingConfig,
+		timeSkippingStatePropagation,
+		now,
+	))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -243,7 +269,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			s := i.Scheduler.Get(ctx)
 			// Use newlyStarted (not len(result.CompletedStarts)) so a concurrent
 			// ExecuteTask's duplicate StartWorkflow can't inflate ActionCount.
-			newlyStarted, droppedDuplicates := i.recordExecuteResult(ctx, &result)
+			newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions := i.recordExecuteResult(ctx, &result)
+			s.advanceLastEventTimeTo(latestStartTime)
+			s.recordStartOnlyActions(ctx, startOnlyActions)
 			s.recordActionResult(&schedulerActionResult{actionCount: int64(newlyStarted)})
 			if droppedDuplicates > 0 {
 				h.recordDuplicateExecuteDrops(s, droppedDuplicates)
@@ -362,6 +390,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 	now time.Time,
 ) (result executeResult) {
 	metricsWithTag := metricsHandler.WithTags(
@@ -378,14 +408,23 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Clone start before concurrent access. The clone will have RunId/StartTime
-		// set by startWorkflow, then copied back to the original in recordExecuteResult.
+		// Clone start before concurrent access. Buffered starts carry the policy
+		// resolved when they entered CHASM, including through migration.
 		start = common.CloneProto(start)
 
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, schedulerRef)
+			err := h.startWorkflow(
+				newCtx,
+				metricsHandler,
+				scheduler,
+				start,
+				lastCompletionState,
+				schedulerRef,
+				timeSkippingConfig,
+				timeSkippingStatePropagation,
+			)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -498,7 +537,6 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	scheduler *Scheduler,
 ) (result processBufferResult) {
 	runningWorkflows := invoker.runningWorkflowExecutions()
-	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
 	// Processing ignores starts that are already executing or backing off. An existing
@@ -509,7 +547,9 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
-	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, isRunning, scheduler.resolveOverlapPolicy)
+	// A selected start blocks overlapping work even before its RPC records a
+	// RunId. Its eventual result will release or reconsider deferred starts.
+	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, invoker.hasPendingOrRunningStart(), scheduler.resolveOverlapPolicy)
 
 	// ProcessBuffer will drop starts by omitting them from NewBuffer. Start with the
 	// diff between the input and NewBuffer, and add any executing starts.
@@ -546,7 +586,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 				// was already past this start's deadline.
 				// Note: if no prior action completed, DesiredTime is zero-valued,
 				// so After(deadline) is false, correctly yielding actionRunning=false.
-				actionRunning := isRunning ||
+				actionRunning := len(runningWorkflows) > 0 ||
 					start.GetDesiredTime().AsTime().After(deadline)
 				result.missedCatchupByActionRunning[actionRunning]++
 			}
@@ -635,6 +675,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
@@ -660,41 +702,48 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
-	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
-		lcr = append(lcr, lastCompletionState.Success)
+	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
+	// Nil unless there is a result: SDKs treat any non-nil Payloads as present (V1 parity).
+	var lcr *commonpb.Payloads
+	continuedFailure := lastCompletionState.Failure
+	// Older binaries may have persisted an empty payload from a no-result workflow.
+	if tracksCompletionResult && !internal.IsEmptyPayload(lastCompletionState.Success) {
+		lcr = &commonpb.Payloads{Payloads: []*commonpb.Payload{lastCompletionState.Success}}
 	}
-	// Build the completion callback with this start's request ID packed into its token, so the
-	// completion is matched by a request ID that rides in the callback header and survives
-	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
-	// new run.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
-	if err != nil {
-		return err
+	if !tracksCompletionResult {
+		continuedFailure = nil
+	}
+	var callbacks []*commonpb.Callback
+	if tracksCompletionResult {
+		callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
+		if err != nil {
+			return err
+		}
+		callbacks = []*commonpb.Callback{callback}
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
-		Header:                   requestSpec.Header,
-		Identity:                 scheduler.identity(),
-		Input:                    requestSpec.Input,
-		Memo:                     requestSpec.Memo,
-		Namespace:                scheduler.Namespace,
-		RequestId:                start.RequestId,
-		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
-		TaskQueue:                requestSpec.TaskQueue,
-		UserMetadata:             requestSpec.UserMetadata,
-		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
-		WorkflowId:               start.WorkflowId,
-		WorkflowIdReusePolicy:    reusePolicy,
-		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
-		WorkflowType:             requestSpec.WorkflowType,
-		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
-		LastCompletionResult: &commonpb.Payloads{
-			Payloads: lcr,
-		},
+		CompletionCallbacks:          callbacks,
+		Header:                       requestSpec.Header,
+		Identity:                     scheduler.identity(),
+		Input:                        requestSpec.Input,
+		Memo:                         requestSpec.Memo,
+		Namespace:                    scheduler.Namespace,
+		RequestId:                    start.RequestId,
+		RetryPolicy:                  requestSpec.RetryPolicy,
+		SearchAttributes:             scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
+		TaskQueue:                    requestSpec.TaskQueue,
+		UserMetadata:                 requestSpec.UserMetadata,
+		WorkflowExecutionTimeout:     requestSpec.WorkflowExecutionTimeout,
+		WorkflowId:                   start.WorkflowId,
+		WorkflowIdReusePolicy:        reusePolicy,
+		WorkflowRunTimeout:           requestSpec.WorkflowRunTimeout,
+		WorkflowTaskTimeout:          requestSpec.WorkflowTaskTimeout,
+		WorkflowType:                 requestSpec.WorkflowType,
+		Priority:                     requestSpec.Priority,
+		TimeSkippingConfig:           timeSkippingConfig,
+		TimeSkippingStatePropagation: timeSkippingStatePropagation,
+		ContinuedFailure:             continuedFailure,
+		LastCompletionResult:         lcr,
 	}
 	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
 		request.VersioningOverride = requestSpec.VersioningOverride
@@ -704,17 +753,21 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if err != nil {
 		return err
 	}
-	actualStartTime := time.Now()
+	actualStartTime := h.timeSource.Now()
+	// Reconstruct virtual time from wall time.
+	actualStartTime = actualStartTime.Add(
+		timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration(),
+	)
 
 	// Set metadata on the cloned start. The clone was created in startWorkflows
 	// before spawning this goroutine, and will be copied back to the Invoker's
 	// BufferedStarts in recordExecuteResult.
 	start.RunId = result.RunId
 	start.StartTime = timestamppb.New(actualStartTime)
-	start.HasCallback = true
+	start.HasCallback = tracksCompletionResult
 
 	// Record time taken from action eligible to workflow started.
-	if !start.Manual {
+	if !start.Manual && !timeSkippingConfig.GetEnabled() {
 		desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
@@ -779,8 +832,7 @@ func isAlreadyStartedError(err error) bool {
 }
 
 func isRateLimitedError(err error) (time.Duration, bool) {
-	var expectedErr *rateLimitedError
-	if errors.As(err, &expectedErr) {
+	if expectedErr, ok := errors.AsType[*rateLimitedError](err); ok {
 		return expectedErr.delay, true
 	}
 	return 0, false

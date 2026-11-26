@@ -6,6 +6,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -43,6 +44,15 @@ func Invoke(
 			mutableState := workflowLease.GetMutableState()
 			runID = mutableState.GetExecutionState().GetRunId()
 			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
+				if len(request.GetLinks()) > 0 {
+					shard.GetThrottledLogger().Info("Signal deduplicated by request ID, links on this request not attached.",
+						tag.WorkflowNamespace(request.GetNamespace()),
+						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()),
+						tag.WorkflowRunID(runID),
+						tag.RequestID(request.GetRequestId()),
+						tag.Int("link-count", len(request.GetLinks())))
+				}
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,

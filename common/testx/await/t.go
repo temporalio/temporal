@@ -1,0 +1,178 @@
+package await
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+type attemptFailed struct{}
+
+// T is passed to the condition callback. It intercepts assertion failures
+// so the polling loop can retry.
+//
+// Only use T for assertions (require.*, assert.*, t.Errorf, t.Fatal, t.FailNow).
+type T struct {
+	tb     testing.TB
+	ctx    context.Context
+	errors []string
+	failed bool
+}
+
+// Context returns the await-scoped context for the current attempt.
+func (t *T) Context() context.Context {
+	if t.ctx != nil {
+		return t.ctx
+	}
+	return t.tb.Context()
+}
+
+// TB returns the test handle running the await loop.
+func (t *T) TB() testing.TB {
+	return t.tb
+}
+
+// Require returns assertions bound to the current attempt.
+func (t *T) Require() *require.Assertions {
+	return require.New(t)
+}
+
+// AssertionT returns the current attempt as an assertion target.
+func (t *T) AssertionT() require.TestingT {
+	return t
+}
+
+// Containsf requires the container to contain the element for the current attempt.
+func (t *T) Containsf(container, element any, msg string, args ...any) {
+	t.Helper()
+	require.Containsf(t, container, element, msg, args...)
+}
+
+// Failf reports a formatted failure and stops the current attempt.
+func (t *T) Failf(failureMessage, msg string, args ...any) {
+	t.Helper()
+	require.Failf(t, failureMessage, msg, args...)
+}
+
+// NoError requires err to be nil for the current attempt.
+func (t *T) NoError(err error, msgAndArgs ...any) {
+	t.Helper()
+	require.NoError(t, err, msgAndArgs...)
+}
+
+// Equal requires expected and actual to be equal for the current attempt.
+func (t *T) Equal(expected, actual any, msgAndArgs ...any) {
+	t.Helper()
+	require.Equal(t, expected, actual, msgAndArgs...)
+}
+
+// EqualValuesf requires equivalent values, allowing comparable numeric types.
+func (t *T) EqualValuesf(expected, actual any, msg string, args ...any) {
+	t.Helper()
+	require.EqualValuesf(t, expected, actual, msg, args...)
+}
+
+// Greater requires actual to exceed threshold for the current attempt.
+func (t *T) Greater(actual, threshold any, msgAndArgs ...any) {
+	t.Helper()
+	require.Greater(t, actual, threshold, msgAndArgs...)
+}
+
+// GreaterOrEqual requires actual to meet or exceed threshold.
+func (t *T) GreaterOrEqual(actual, threshold any, msgAndArgs ...any) {
+	t.Helper()
+	require.GreaterOrEqual(t, actual, threshold, msgAndArgs...)
+}
+
+// GreaterOrEqualf reports a formatted failure if actual is below threshold.
+func (t *T) GreaterOrEqualf(actual, threshold any, msg string, args ...any) {
+	t.Helper()
+	require.GreaterOrEqualf(t, actual, threshold, msg, args...)
+}
+
+// Len requires object to have the given length.
+func (t *T) Len(object any, length int, msgAndArgs ...any) {
+	t.Helper()
+	require.Len(t, object, length, msgAndArgs...)
+}
+
+// LessOrEqual requires actual to be at or below threshold.
+func (t *T) LessOrEqual(actual, threshold any, msgAndArgs ...any) {
+	t.Helper()
+	require.LessOrEqual(t, actual, threshold, msgAndArgs...)
+}
+
+// Nil requires object to be nil for the current attempt.
+func (t *T) Nil(object any, msgAndArgs ...any) {
+	t.Helper()
+	require.Nil(t, object, msgAndArgs...)
+}
+
+// NotNil requires object to be non-nil for the current attempt.
+func (t *T) NotNil(object any, msgAndArgs ...any) {
+	t.Helper()
+	require.NotNil(t, object, msgAndArgs...)
+}
+
+// NotEmpty requires object to be nonempty for the current attempt.
+func (t *T) NotEmpty(object any, msgAndArgs ...any) {
+	t.Helper()
+	require.NotEmpty(t, object, msgAndArgs...)
+}
+
+// True requires value to be true for the current attempt.
+func (t *T) True(value bool, msgAndArgs ...any) {
+	t.Helper()
+	require.True(t, value, msgAndArgs...)
+}
+
+// Fail marks the current attempt as failed without stopping it.
+func (t *T) Fail() {
+	t.failed = true
+}
+
+// Error records an error message for reporting on timeout.
+func (t *T) Error(args ...any) {
+	t.Fail()
+	t.errors = append(t.errors, strings.TrimSuffix(fmt.Sprintln(args...), "\n"))
+}
+
+// Errorf records an error message for reporting on timeout.
+func (t *T) Errorf(format string, args ...any) {
+	t.Fail()
+	t.errors = append(t.errors, fmt.Sprintf(format, args...))
+}
+
+// FailNow is called by require.* on failure. It stops the current attempt.
+// Unlike testing.TB.FailNow(), this does NOT mark the test as failed.
+func (t *T) FailNow() {
+	t.Fail()
+	panic(attemptFailed{}) //nolint:forbidigo // Unwind only the current assertion attempt.
+}
+
+// Fatal records an error message and stops this attempt.
+func (t *T) Fatal(args ...any) {
+	t.errors = append(t.errors, strings.TrimSuffix(fmt.Sprintln(args...), "\n"))
+	t.FailNow()
+}
+
+// Fatalf records an error message and stops this attempt.
+func (t *T) Fatalf(format string, args ...any) {
+	t.Errorf(format, args...)
+	t.FailNow()
+}
+
+// Failed reports whether this attempt has failed.
+func (t *T) Failed() bool {
+	return t.failed
+}
+
+// Helper marks the calling function as a test helper.
+func (t *T) Helper() {
+	if t.tb != nil {
+		t.tb.Helper()
+	}
+}

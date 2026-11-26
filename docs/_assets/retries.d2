@@ -3,34 +3,18 @@
 
 vars: {
   d2-config: {
-    layout-engine: elk
+    layout-engine: tala
   }
-}
-
-classes: {
-    invisible: {
-        style.opacity: 0
-        label: a
-    }
-    textonly: {
-        label: ""
-        style.stroke: transparent
-        style.fill: transparent
-    }
 }
 
 Client
 
 Server: {
     label: ""
-    grid-columns: 3
-    horizontal-gap: 120
-    class: textonly
+    style.stroke: transparent
+    style.fill: transparent
 
     Frontend: {
-        grid-columns: 3
-        vertical-gap: 70
-
         Interceptor: { label: "🔁 gRPC interceptor" }
         Handlers: {
             label: "..."
@@ -39,9 +23,6 @@ Server: {
         Client: { label: "🔁 History client" }
     }
     History: {
-        grid-columns: 2
-        vertical-gap: 70
-
         Interceptor: { label: "🔁 gRPC interceptor" }
         Handlers: {
             label: "..."

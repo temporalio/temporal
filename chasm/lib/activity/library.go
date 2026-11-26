@@ -1,6 +1,7 @@
 package activity
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"google.golang.org/grpc"
@@ -53,6 +54,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Activity](
 			componentName,
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_ACTIVITY),
 			chasm.WithSearchAttributes(
 				TypeSearchAttribute,
 				StatusSearchAttribute,
@@ -60,6 +62,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				chasm.SearchAttributeExecutionTime,
 			),
 			chasm.WithBusinessIDAlias("ActivityId"),
+			chasm.WithRecordPrincipals(),
 			chasm.WithContextValues(map[any]any{
 				ctxKeyActivityContext: &activityContext{
 					config: l.config,
@@ -82,6 +85,7 @@ type library struct {
 
 	handler                           *handler
 	activityDispatchTaskHandler       *activityDispatchTaskHandler
+	workerCommandDispatchTaskHandler  *workerCommandDispatchTaskHandler
 	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
 	startToCloseTimeoutTaskHandler    *startToCloseTimeoutTaskHandler
@@ -91,6 +95,7 @@ type library struct {
 func newLibrary(
 	handler *handler,
 	activityDispatchTaskHandler *activityDispatchTaskHandler,
+	workerCommandDispatchTaskHandler *workerCommandDispatchTaskHandler,
 	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler,
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler,
 	startToCloseTimeoutTaskHandler *startToCloseTimeoutTaskHandler,
@@ -101,6 +106,7 @@ func newLibrary(
 		componentOnlyLibrary:              *newComponentOnlyLibrary(config),
 		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
+		workerCommandDispatchTaskHandler:  workerCommandDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
 		scheduleToCloseTimeoutTaskHandler: scheduleToCloseTimeoutTaskHandler,
 		startToCloseTimeoutTaskHandler:    startToCloseTimeoutTaskHandler,
@@ -133,6 +139,10 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(
 			"heartbeatTimer",
 			l.heartbeatTimeoutTaskHandler,
+		),
+		chasm.NewRegistrableSideEffectTask(
+			"workerCommandDispatch",
+			l.workerCommandDispatchTaskHandler,
 		),
 	}
 }

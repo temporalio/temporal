@@ -14,6 +14,14 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 	switch r := req.(type) {
 	case *workflowservice.CreateScheduleRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
+	case *workflowservice.CreateWorkerDeploymentRequest:
+		return namespace.RoutingKey{ID: r.GetDeploymentName()}
+	case *workflowservice.CreateWorkerDeploymentVersionRequest:
+		return namespace.RoutingKey{ID: r.GetDeploymentVersion().GetDeploymentName()}
+	case *workflowservice.DeleteActivityExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetActivityId()}
+	case *workflowservice.DeleteNexusOperationExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetOperationId()}
 	case *workflowservice.DeleteScheduleRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.DeleteWorkerDeploymentRequest:
@@ -26,6 +34,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.DescribeBatchOperationRequest:
 		return namespace.RoutingKey{ID: r.GetJobId()}
+	case *workflowservice.DescribeNexusOperationExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetOperationId()}
 	case *workflowservice.DescribeScheduleRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.DescribeTaskQueueRequest:
@@ -42,6 +52,10 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.FetchWorkerConfigRequest:
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
+	case *workflowservice.GetWorkerBuildIdCompatibilityRequest:
+		return namespace.RoutingKey{ID: r.GetTaskQueue()}
+	case *workflowservice.GetWorkerVersioningRulesRequest:
+		return namespace.RoutingKey{ID: r.GetTaskQueue()}
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.GetWorkflowExecutionHistoryReverseRequest:
@@ -62,6 +76,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.PollActivityTaskQueueRequest:
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
+	case *workflowservice.PollNexusOperationExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetOperationId()}
 	case *workflowservice.PollNexusTaskQueueRequest:
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
 	case *workflowservice.PollWorkflowExecutionTimeSkippingRequest:
@@ -80,6 +96,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.RequestCancelActivityExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetActivityId()}
+	case *workflowservice.RequestCancelNexusOperationExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetOperationId()}
 	case *workflowservice.RequestCancelWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
 	case *workflowservice.ResetActivityExecutionRequest:
@@ -126,12 +144,16 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.StartBatchOperationRequest:
 		return namespace.RoutingKey{ID: r.GetJobId()}
+	case *workflowservice.StartNexusOperationExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetOperationId()}
 	case *workflowservice.StartWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowId()}
 	case *workflowservice.StopBatchOperationRequest:
 		return namespace.RoutingKey{ID: r.GetJobId()}
 	case *workflowservice.TerminateActivityExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetActivityId()}
+	case *workflowservice.TerminateNexusOperationExecutionRequest:
+		return namespace.RoutingKey{ID: r.GetOperationId()}
 	case *workflowservice.TerminateWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
 	case *workflowservice.TriggerWorkflowRuleRequest:
@@ -150,14 +172,22 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.UpdateTaskQueueConfigRequest:
 		return namespace.RoutingKey{ID: r.GetTaskQueue()}
+	case *workflowservice.UpdateWorkerBuildIdCompatibilityRequest:
+		return namespace.RoutingKey{ID: r.GetTaskQueue()}
 	case *workflowservice.UpdateWorkerConfigRequest:
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
+	case *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest:
+		return namespace.RoutingKey{ID: r.GetDeploymentVersion().GetDeploymentName()}
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest:
 		return namespace.RoutingKey{ID: r.GetDeploymentVersion().GetDeploymentName()}
+	case *workflowservice.UpdateWorkerVersioningRulesRequest:
+		return namespace.RoutingKey{ID: r.GetTaskQueue()}
 	case *workflowservice.UpdateWorkflowExecutionOptionsRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
 	case *workflowservice.UpdateWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
+	case *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest:
+		return namespace.RoutingKey{ID: r.GetDeploymentVersion().GetDeploymentName()}
 	default:
 		return namespace.RoutingKey{}
 	}

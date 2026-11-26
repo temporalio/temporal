@@ -105,16 +105,29 @@ func (s *cmSketch) SkipRate() float64 {
 	return float64(s.skips) / float64(s.incs*s.params.D)
 }
 
+// EstimateDistinctKeys uses linear counting (Whang et al. 1990) pooled across all rows,
+// including the shadow row. Each row is effectively a bitmap of W cells, where a cell is
+// nonzero iff some key hashed to it, so after n distinct keys the expected fraction of zero
+// cells in a row is (1-1/W)^n. Treating the rows as independent trials with the same n, the
+// maximum likelihood estimate is n = ln(Z/(W*rows)) / ln(1-1/W), where Z is the total number
+// of zero cells. (This is the same as the estimator for a partitioned Bloom filter.)
+//
+// Since reseed clears rows at different times, rows actually remember keys over different
+// windows (roughly the last 0 to D+1 reseed intervals). Pooling gives something like the
+// average over those windows while rows are sparse, and is dominated by the younger rows as
+// older ones saturate, so it degrades gracefully. If all rows are saturated, this returns
+// about W*ln(2*W*rows), which should be read as a lower bound. Cells zeroed by slideBase
+// belong to very stale keys, so not counting them is fine.
 func (s *cmSketch) EstimateDistinctKeys() int {
-	// this is not very accurate at all, especially with the shadow row.
-	// TODO: improve this estimate with more math
-	count := 0
+	zeros := 0
 	for _, c := range s.cells {
-		if c > 0 {
-			count++
+		if c == 0 {
+			zeros++
 		}
 	}
-	return count / s.params.D
+	z := max(float64(zeros), 0.5) // avoid ln(0) when saturated
+	n := math.Log(z/float64(len(s.cells))) / math.Log1p(-1/float64(s.params.W))
+	return int(math.Round(n))
 }
 
 func (s *cmSketch) TopK() []TopKEntry {

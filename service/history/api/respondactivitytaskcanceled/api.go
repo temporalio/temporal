@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -44,6 +45,7 @@ func Invoke(
 	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var hasTimeSkippingClockOffset bool
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -99,6 +101,7 @@ func Invoke(
 
 			attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
+			hasTimeSkippingClockOffset = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).HasTimeSkippingClockOffset()
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
@@ -117,15 +120,19 @@ func Invoke(
 			namespaceName,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
-				Status:             workflow.ActivityStatusCanceled,
-				AttemptStartedTime: attemptStartedTime,
-				FirstScheduledTime: firstScheduledTime,
-				Closed:             true,
+				Status:                     workflow.ActivityStatusCanceled,
+				AttemptStartedTime:         attemptStartedTime,
+				FirstScheduledTime:         firstScheduledTime,
+				HasTimeSkippingClockOffset: hasTimeSkippingClockOffset,
+				Closed:                     true,
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          versioningBehavior,
+					DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),
+				},
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.VersioningBehaviorTag(versioningBehavior))
+			metrics.ActivityTypeTag(token.ActivityType))
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err
 }

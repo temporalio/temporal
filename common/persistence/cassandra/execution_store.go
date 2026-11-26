@@ -152,6 +152,12 @@ func (d *ExecutionStore) GetName() string {
 	return cassandraPersistenceName
 }
 
+var _ p.RunAlreadyExistsChecker = (*ExecutionStore)(nil)
+
+func (d *ExecutionStore) SupportsCheckRunAlreadyExists() bool {
+	return true
+}
+
 func (d *ExecutionStore) Close() {
 	if d.HistoryStore.Session != nil {
 		d.HistoryStore.Session.Close()

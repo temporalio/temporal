@@ -39,6 +39,26 @@ func (c *clientImpl) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ApplyNamespaceMutation(ctx, request, opts...)
+}
+
+func (c *clientImpl) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+}
+
 func (c *clientImpl) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -57,6 +77,16 @@ func (c *clientImpl) CloseShard(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.CloseShard(ctx, request, opts...)
+}
+
+func (c *clientImpl) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CountExecutions(ctx, request, opts...)
 }
 
 func (c *clientImpl) DeepHealthCheck(
@@ -199,6 +229,16 @@ func (c *clientImpl) GetNamespaceReplicationMessages(
 	return c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetRemoteClusterNamespaceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetRemoteClusterNamespace(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
@@ -297,6 +337,16 @@ func (c *clientImpl) ListClusters(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ListClusters(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListExecutions(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListHistoryTasks(

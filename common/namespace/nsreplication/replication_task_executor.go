@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -48,9 +49,27 @@ var (
 // NOTE: the counterpart of namespace replication transmission logic is in service/frontend package
 
 type (
+	// ApplyOutcome reports how a namespace mutation affected receiver state.
+	ApplyOutcome int
+
 	// TaskExecutor is the interface for executing namespace replication tasks
 	TaskExecutor interface {
 		Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error
+	}
+
+	// MutationTaskExecutor applies namespace mutations and reports the receiver outcome.
+	MutationTaskExecutor interface {
+		ExecuteWithOutcome(ctx context.Context, task *replicationspb.NamespaceTaskAttributes, options MutationApplyOptions) (ApplyOutcome, error)
+	}
+
+	// MutationApplyOptions controls how a receiver applies a namespace mutation.
+	// The zero value preserves ordinary replication behavior.
+	MutationApplyOptions struct {
+		// Admission controls processing when the namespace does not exist locally.
+		Admission AdmissionOptions
+		// OperatorRepair preserves receiver-local configuration and checks namespace
+		// identity before updating an existing snapshot.
+		OperatorRepair bool
 	}
 
 	// TaskExecutorOption configures a namespace replication task executor.
@@ -62,10 +81,21 @@ type (
 		dataMerger                   NamespaceDataMerger
 		admitter                     NamespaceReplicationAdmitter
 		logger                       log.Logger
+		metricsHandler               metrics.Handler
 		eventLogger                  otellog.Logger
 		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 		testHooks                    testhooks.TestHooks
+		repairPolicy                 RepairPolicy
 	}
+)
+
+const (
+	ApplyOutcomeUnspecified ApplyOutcome = iota
+	ApplyOutcomeCreated
+	ApplyOutcomeApplied
+	ApplyOutcomeNoOpStale
+	ApplyOutcomeDuplicate
+	ApplyOutcomeNotAdmitted
 )
 
 // NewTaskExecutor creates a new instance of namespace replicator
@@ -78,6 +108,47 @@ func NewTaskExecutor(
 	testHooks testhooks.TestHooks,
 	options ...TaskExecutorOption,
 ) TaskExecutor {
+	return newTaskExecutor(
+		currentCluster,
+		metadataManagerV2,
+		dataMerger,
+		admitter,
+		logger,
+		testHooks,
+		options...,
+	)
+}
+
+// NewMutationTaskExecutor creates a namespace mutation executor that reports apply outcomes.
+func NewMutationTaskExecutor(
+	currentCluster string,
+	metadataManagerV2 persistence.MetadataManager,
+	dataMerger NamespaceDataMerger,
+	admitter NamespaceReplicationAdmitter,
+	logger log.Logger,
+	testHooks testhooks.TestHooks,
+	options ...TaskExecutorOption,
+) MutationTaskExecutor {
+	return newTaskExecutor(
+		currentCluster,
+		metadataManagerV2,
+		dataMerger,
+		admitter,
+		logger,
+		testHooks,
+		options...,
+	)
+}
+
+func newTaskExecutor(
+	currentCluster string,
+	metadataManagerV2 persistence.MetadataManager,
+	dataMerger NamespaceDataMerger,
+	admitter NamespaceReplicationAdmitter,
+	logger log.Logger,
+	testHooks testhooks.TestHooks,
+	options ...TaskExecutorOption,
+) *taskExecutorImpl {
 	executor := &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
@@ -92,6 +163,13 @@ func NewTaskExecutor(
 	return executor
 }
 
+// WithNamespaceReplicationMetrics configures namespace replication outcome metrics.
+func WithNamespaceReplicationMetrics(metricsHandler metrics.Handler) TaskExecutorOption {
+	return func(executor *taskExecutorImpl) {
+		executor.metricsHandler = metricsHandler
+	}
+}
+
 // WithNamespaceReplicationLifecycleEvents configures processed lifecycle event emission.
 func WithNamespaceReplicationLifecycleEvents(
 	eventLogger otellog.Logger,
@@ -103,6 +181,15 @@ func WithNamespaceReplicationLifecycleEvents(
 	}
 }
 
+// WithOperatorRepairPolicy checks operator repairs of an existing namespace
+// against the stored namespace, not only the payload: a payload can omit what
+// the policy looks for.
+func WithOperatorRepairPolicy(policy RepairPolicy) TaskExecutorOption {
+	return func(executor *taskExecutorImpl) {
+		executor.repairPolicy = policy
+	}
+}
+
 // Execute handles receiving of the namespace replication task
 func (h *taskExecutorImpl) Execute(
 	ctx context.Context,
@@ -111,24 +198,59 @@ func (h *taskExecutorImpl) Execute(
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
+	execute := func() error {
+		outcome, err := h.executeValidatedTask(ctx, task, MutationApplyOptions{})
+		if err == nil && outcome == ApplyOutcomeDuplicate {
+			h.observeDuplicate(ctx, task)
+		}
+		return err
+	}
 	if hook, ok := testhooks.Get(
 		h.testHooks,
 		testhooks.NamespaceReplicationTaskInterceptor,
 		namespace.Name(task.GetInfo().GetName()),
 	); ok {
-		return hook(ctx, task, func() error {
-			return h.executeValidatedTask(ctx, task)
-		})
+		return hook(ctx, task, execute)
 	}
-	return h.executeValidatedTask(ctx, task)
+	return execute()
+}
+
+// ExecuteWithOutcome applies a receiver mutation without the legacy queue test
+// interceptor and returns the state effect of the successful attempt. A stale
+// no-op does not rule out a committed write from an earlier ambiguous attempt.
+func (h *taskExecutorImpl) ExecuteWithOutcome(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+	options MutationApplyOptions,
+) (ApplyOutcome, error) {
+	if err := h.validateNamespaceReplicationTask(task); err != nil {
+		return ApplyOutcomeUnspecified, err
+	}
+	outcome, err := h.executeValidatedTask(ctx, task, options)
+	if err == nil && outcome == ApplyOutcomeDuplicate && task.GetNamespaceOperation() == enumsspb.NAMESPACE_OPERATION_UPDATE {
+		// An UPDATE can lose a missing-row CREATE race to an older snapshot.
+		// Retry through apply-if-higher before acknowledging the newer update.
+		return ApplyOutcomeUnspecified, serviceerror.NewUnavailable("namespace created concurrently; retry namespace update")
+	}
+	if err == nil && outcome == ApplyOutcomeDuplicate {
+		h.observeDuplicate(ctx, task)
+	}
+	return outcome, err
+}
+
+func (h *taskExecutorImpl) observeDuplicate(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) {
+	h.recordOutcome(ctx, task, metricsOutcomeNoChange)
+	h.emitNamespaceReplicationProcessed(ctx, wideevents.NamespaceReplicationOutcomeDuplicate, nil, nil, nil)
 }
 
 func (h *taskExecutorImpl) executeValidatedTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
-) error {
-	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
+	options MutationApplyOptions,
+) (ApplyOutcome, error) {
+	if shouldProcess, err := h.shouldProcessTask(ctx, task, options.Admission); !shouldProcess || err != nil {
 		if !shouldProcess && err == nil {
+			h.recordOutcome(ctx, task, metricsOutcomeNotAdmitted)
 			h.emitNamespaceReplicationProcessed(
 				ctx,
 				wideevents.NamespaceReplicationOutcomeNotAdmitted,
@@ -137,20 +259,23 @@ func (h *taskExecutorImpl) executeValidatedTask(
 				nil,
 			)
 		}
-		return err
+		if err != nil {
+			return ApplyOutcomeUnspecified, err
+		}
+		return ApplyOutcomeNotAdmitted, nil
 	}
 
 	switch task.GetNamespaceOperation() {
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		return h.handleNamespaceCreationReplicationTask(ctx, task)
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return h.handleNamespaceUpdateReplicationTask(ctx, task)
+		return h.handleNamespaceUpdateReplicationTask(ctx, task, options)
 	default:
-		return ErrInvalidNamespaceOperation
+		return ApplyOutcomeUnspecified, ErrInvalidNamespaceOperation
 	}
 }
 
-func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
+func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes, options AdmissionOptions) (bool, error) {
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
 	})
@@ -164,10 +289,19 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 				tag.String("Task Namespace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
+		if !resp.IsGlobalNamespace {
+			h.logger.Warn(
+				"Namespace replication task skipped because namespace is local",
+				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+				tag.WorkflowNamespace(resp.Namespace.Info.Name),
+				tag.String("namespace-operation", task.GetNamespaceOperation().String()),
+			)
+			return false, nil
+		}
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		return h.admitter.Admit(ctx, h.currentCluster, task), nil
+		return h.admitter.Admit(ctx, h.currentCluster, task, options), nil
 	default:
 		// return the original err
 		return false, err
@@ -178,11 +312,11 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
-) error {
+) (ApplyOutcome, error) {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
-		return err
+		return ApplyOutcomeUnspecified, err
 	}
 
 	request := &persistence.CreateNamespaceRequest{
@@ -194,9 +328,11 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				Description: task.Info.GetDescription(),
 				Owner:       task.Info.GetOwnerEmail(),
 				Data:        task.Info.Data,
+				RestoreInfo: task.GetRestoreInfo(),
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
+				BadBinaries:                  task.Config.GetBadBinaries(),
 				HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
 				HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
 				VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
@@ -233,7 +369,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 					tag.String("Task Namespace Id", task.GetId()),
 					tag.String("Task Namespace Info Id", task.Info.GetId()),
 					tag.Error(err))
-				return ErrNameUUIDCollision
+				return ApplyOutcomeUnspecified, ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
 			// no check is necessary
@@ -245,7 +381,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				tag.WorkflowNamespace(task.Info.GetName()),
 				tag.WorkflowNamespaceID(task.Info.GetId()),
 				tag.Error(err))
-			return err
+			return ApplyOutcomeUnspecified, err
 		}
 
 		resp, getErr = h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
@@ -259,30 +395,24 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 					tag.WorkflowNamespace(resp.Namespace.Info.Name),
 					tag.String("Task Namespace Name", task.Info.GetName()),
 					tag.Error(err))
-				return ErrNameUUIDCollision
+				return ApplyOutcomeUnspecified, ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
 			// no check is necessary
 			recordExists = false
 		default:
 			// return the original err
-			return err
+			return ApplyOutcomeUnspecified, err
 		}
 
 		if recordExists {
 			// name -> id & id -> name check pass, this is duplication request
-			h.emitNamespaceReplicationProcessed(
-				ctx,
-				wideevents.NamespaceReplicationOutcomeDuplicate,
-				nil,
-				nil,
-				nil,
-			)
-			return nil
+			return ApplyOutcomeDuplicate, nil
 		}
-		return err
+		return ApplyOutcomeUnspecified, err
 	}
 
+	h.recordOutcome(ctx, task, metricsOutcomeApplied)
 	h.emitNamespaceReplicationProcessed(
 		ctx,
 		wideevents.NamespaceReplicationOutcomeCreated,
@@ -290,24 +420,25 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 		request,
 		nil,
 	)
-	return nil
+	return ApplyOutcomeCreated, nil
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
 func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
-) error {
+	options MutationApplyOptions,
+) (ApplyOutcome, error) {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
-		return err
+		return ApplyOutcomeUnspecified, err
 	}
 
 	// first we need to get the current notification version since we need to it for conditional update
 	metadata, err := h.metadataManager.GetMetadata(ctx)
 	if err != nil {
-		return err
+		return ApplyOutcomeUnspecified, err
 	}
 	notificationVersion := metadata.NotificationVersion
 
@@ -322,18 +453,35 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			// e.g. new cluster which does not have anything
 			return h.handleNamespaceCreationReplicationTask(ctx, task)
 		}
-		return err
+		return ApplyOutcomeUnspecified, err
 	}
 	localNamespacePreMutation := h.cloneLocalNamespaceForReplicationEvent(ctx, resp.Namespace)
 
 	recordUpdated := false
+	if options.OperatorRepair && resp.Namespace.GetInfo().GetId() != task.GetId() {
+		return ApplyOutcomeUnspecified, ErrNameUUIDCollision
+	}
+	if options.OperatorRepair && h.repairPolicy != nil {
+		// The update below is conditional on the notification version read before
+		// this namespace, so a namespace that changes after this check fails the
+		// write, and the retry checks it again.
+		info := resp.Namespace.GetInfo()
+		if err := h.repairPolicy(ctx, info.GetId(), info.GetName(), info.GetData()); err != nil {
+			return ApplyOutcomeUnspecified, err
+		}
+	}
 	request := &persistence.UpdateNamespaceRequest{
 		Namespace:           resp.Namespace,
 		NotificationVersion: notificationVersion,
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	mergedData, dataMerged := h.dataMerger.MergeData(
+		resp.Namespace.Info.Data,
+		task.Info.Data,
+		resp.Namespace.ConfigVersion,
+		task.GetConfigVersion(),
+	)
 	if dataMerged {
 		recordUpdated = true
 		request.Namespace.Info.Data = mergedData
@@ -353,23 +501,31 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
 			Data:        data,
+			RestoreInfo: task.GetRestoreInfo(),
 		}
-		request.Namespace.Config = &persistencespb.NamespaceConfig{
-			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
-			HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
-			HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
-			VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:        task.Config.GetVisibilityArchivalUri(),
-			CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
+		config := &persistencespb.NamespaceConfig{}
+		if options.OperatorRepair && request.Namespace.Config != nil {
+			// Repair changes replicated fields without clearing receiver-local config,
+			// including when preparing the active source's config version.
+			config = proto.CloneOf(request.Namespace.Config)
 		}
-		if task.Config.GetBadBinaries() != nil {
-			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
-		}
+		config.Retention = task.Config.GetWorkflowExecutionRetentionTtl()
+		config.HistoryArchivalState = task.Config.GetHistoryArchivalState()
+		config.HistoryArchivalUri = task.Config.GetHistoryArchivalUri()
+		config.VisibilityArchivalState = task.Config.GetVisibilityArchivalState()
+		config.VisibilityArchivalUri = task.Config.GetVisibilityArchivalUri()
+		config.CustomSearchAttributeAliases = task.Config.GetCustomSearchAttributeAliases()
+		request.Namespace.Config = config
+		request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
 		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
+		// Source-local ramps must not survive an active-cluster change.
+		if resp.Namespace.ReplicationConfig.GetActiveClusterName() != task.ReplicationConfig.GetActiveClusterName() {
+			request.Namespace.ReplicationConfig.ClusterReplicationRamps = nil
+		}
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.Namespace.ReplicationConfig.State = task.ReplicationConfig.GetState()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
@@ -378,6 +534,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	if !recordUpdated {
+		h.recordOutcome(ctx, task, metricsOutcomeNoChange)
 		if localNamespacePreMutation != nil {
 			h.emitNamespaceReplicationProcessed(
 				ctx,
@@ -387,12 +544,13 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 				nil,
 			)
 		}
-		return nil
+		return ApplyOutcomeNoOpStale, nil
 	}
 
 	if err := h.metadataManager.UpdateNamespace(ctx, request); err != nil {
-		return err
+		return ApplyOutcomeUnspecified, err
 	}
+	h.recordOutcome(ctx, task, metricsOutcomeApplied)
 	if localNamespacePreMutation != nil {
 		h.emitNamespaceReplicationProcessed(
 			ctx,
@@ -402,13 +560,25 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			request,
 		)
 	}
-	return nil
+	return ApplyOutcomeApplied, nil
+}
+
+func (h *taskExecutorImpl) recordOutcome(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+	outcome string,
+) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
+	recordOutcome(ctx, h.metricsHandler, task, outcome)
 }
 
 func (h *taskExecutorImpl) cloneLocalNamespaceForReplicationEvent(
 	ctx context.Context,
 	namespaceDetail *persistencespb.NamespaceDetail,
-) *persistencespb.NamespaceDetail {
+) (cloned *persistencespb.NamespaceDetail) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	if h.eventLogger == nil ||
 		h.emitNamespaceLifecycleEvents == nil ||
 		!h.emitNamespaceLifecycleEvents() {
@@ -432,6 +602,8 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 	createRequest *persistence.CreateNamespaceRequest,
 	updateRequest *persistence.UpdateNamespaceRequest,
 ) {
+	var telemetryPanic error
+	defer log.CapturePanic(h.logger, &telemetryPanic)
 	if h.eventLogger == nil ||
 		h.emitNamespaceLifecycleEvents == nil ||
 		!h.emitNamespaceLifecycleEvents() {
@@ -443,14 +615,13 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 		return
 	}
 
-	sourceTaskID := metadata.SourceTaskID
 	wideevents.EmitNamespaceReplicationLifecycle(h.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 		Phase:                     wideevents.NamespaceReplicationProcessed,
 		Outcome:                   outcome,
 		EventData:                 metadata.EventData,
 		SourceCluster:             metadata.SourceCluster,
 		TargetCluster:             metadata.TargetCluster,
-		SourceTaskID:              &sourceTaskID,
+		SourceTaskID:              metadata.SourceTaskID,
 		AttemptCount:              metadata.AttemptCount,
 		LocalNamespacePreMutation: localNamespacePreMutation,
 		CreateNamespaceRequest:    createRequest,
@@ -499,7 +670,9 @@ func ConvertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.F
 
 func (h *taskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
 	switch input {
-	case enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED:
+	case enumspb.NAMESPACE_STATE_REGISTERED,
+		enumspb.NAMESPACE_STATE_DEPRECATED,
+		enumspb.NAMESPACE_STATE_SOFT_DELETED:
 		return nil
 	default:
 		return ErrInvalidNamespaceState

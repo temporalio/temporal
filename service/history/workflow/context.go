@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"strconv"
 
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -44,6 +46,7 @@ type (
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
 		config          *configs.Config
+		testHooks       testhooks.TestHooks
 
 		lock           locks.PrioritySemaphore
 		MutableState   historyi.MutableState
@@ -56,6 +59,8 @@ type (
 		// paginationLimiter enforces the process-wide and per-namespace limits on the
 		// total size of all in-flight pagination buffers. nil is treated as "no limit".
 		paginationLimiter *limiter.KeyedBytesLimiter
+
+		checkRunAlreadyExists bool
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -72,6 +77,31 @@ type (
 		totalSize int64                          // cumulative size of buffered commands
 		identity  workflowTaskIdentity           // the workflow task this buffer belongs to
 		namespace string                         // namespace name
+	}
+
+	// TestHookUpdateExecutionRequest is passed only to the test-only
+	// HistoryPassiveReplicationTest.
+	TestHookUpdateExecutionRequest struct {
+		ExecutionContext                 *ContextImpl
+		ShardContext                     historyi.ShardContext
+		UpdateMode                       persistence.UpdateWorkflowMode
+		NewContext                       historyi.WorkflowContext
+		NewMutableState                  historyi.MutableState
+		UpdateExecutionTransactionPolicy historyi.TransactionPolicy
+		NewExecutionTransactionPolicy    *historyi.TransactionPolicy
+		PrepareMutableStateTransaction   func() error
+		CloseMutableStateTransaction     func() (*ExecutionTransactionPayload, error)
+		ExecuteExecutionTransaction      func(*ExecutionTransactionPayload) error
+	}
+
+	// ExecutionTransactionPayload contains the persistence payload produced by closing
+	// an update-with-new transaction.
+	ExecutionTransactionPayload struct {
+		ExecutionMutation                 *persistence.WorkflowMutation
+		ExecutionEvents                   []*persistence.WorkflowEvents
+		NewExecutionSnapshot              *persistence.WorkflowSnapshot
+		NewExecutionEvents                []*persistence.WorkflowEvents
+		NewExecutionCheckRunAlreadyExists bool
 	}
 )
 
@@ -98,6 +128,7 @@ func NewContext(
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	paginationLimiter *limiter.KeyedBytesLimiter,
+	testHooks testhooks.TestHooks,
 ) *ContextImpl {
 	tags := func() []tag.Tag {
 		return []tag.Tag{
@@ -115,6 +146,7 @@ func NewContext(
 		config:            config,
 		lock:              locks.NewPrioritySemaphore(1),
 		paginationLimiter: paginationLimiter,
+		testHooks:         testHooks,
 	}
 	softassert.That(
 		contextImpl.throttledLogger,
@@ -130,6 +162,10 @@ func (c *ContextImpl) Lock(
 	lockPriority locks.Priority,
 ) error {
 	return c.lock.Acquire(ctx, lockPriority, 1)
+}
+
+func (c *ContextImpl) TryLock(lockPriority locks.Priority) bool {
+	return c.lock.TryAcquire(lockPriority, 1)
 }
 
 func (c *ContextImpl) Unlock() {
@@ -163,11 +199,21 @@ func (c *ContextImpl) clearTaskCompletionBuffer() {
 	if c.taskCompletionBuffer == nil {
 		return
 	}
-	if c.paginationLimiter != nil {
-		used := c.paginationLimiter.Release(c.taskCompletionBuffer.namespace, c.taskCompletionBuffer.totalSize)
+	c.detachTaskCompletionBuffer()()
+}
+
+// detachTaskCompletionBuffer drops the in-progress buffer but keeps its bytes reserved
+// in the limiter. The returned func returns them and must be called exactly once
+func (c *ContextImpl) detachTaskCompletionBuffer() func() {
+	buffer := c.taskCompletionBuffer
+	c.taskCompletionBuffer = nil
+	if buffer == nil || c.paginationLimiter == nil {
+		return func() {}
+	}
+	return func() {
+		used := c.paginationLimiter.Release(buffer.namespace, buffer.totalSize)
 		metrics.WorkflowTaskCompletionBufferInflightBytes.With(c.metricsHandler).Record(float64(used))
 	}
-	c.taskCompletionBuffer = nil
 }
 
 // startedWorkflowTaskIdentity returns the identity of the currently started workflow
@@ -224,7 +270,8 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	if c.taskCompletionBuffer != nil && c.taskCompletionBuffer.identity != identity {
 		c.clearTaskCompletionBuffer()
 	}
-	if c.taskCompletionBuffer == nil {
+	newPagination := c.taskCompletionBuffer == nil
+	if newPagination {
 		c.taskCompletionBuffer = &TaskCompletionBuffer{
 			pages:     make(map[int32][]*commandpb.Command),
 			identity:  identity,
@@ -246,18 +293,33 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	}
 
 	// Apply the process-wide limit and its per-namespace share so one
-	// namespace cannot exhaust the whole process budget.
+	// namespace cannot exhaust the whole process budget. A page that starts a
+	// new pagination only gets a fraction of both limits. The rest is kept for
+	// in-flight paginations, so they can complete under memory pressure.
 	if c.paginationLimiter != nil {
-		processLimit := int64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
-		nsRatio := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName)
-		nsLimit := int64(nsRatio * float64(processLimit))
-		ok, used := c.paginationLimiter.TryReserve(nsName, pageBytes, processLimit, nsLimit)
+		processLimit := float64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+		nsLimit := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName) * processLimit
+		if newPagination {
+			ratio := c.config.WorkflowTaskCompletionBufferNewPaginationRatio(nsName)
+			if ratio <= 0 || ratio > 1 {
+				ratio = 1
+			}
+			processLimit *= ratio
+			nsLimit *= ratio
+		}
+		ok, used := c.paginationLimiter.TryReserve(
+			nsName, pageBytes, int64(math.Ceil(processLimit)), int64(math.Ceil(nsLimit)))
 		if !ok {
-			// BufferLost makes the SDK resend from page 0, so retaining the
-			// partial buffer buys. Clear it to release the reserved bytes back
-			// to the budget.
+			// BufferLost makes the SDK resend from page 0, so the partial buffer
+			// can never be used. Clear it to release the reserved bytes back to
+			// the budget.
 			c.clearTaskCompletionBuffer()
-			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+			if newPagination {
+				metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonNewPaginationLimit))
+				return serviceerror.NewWorkflowTaskCompletionBufferLostf(
+					"workflow task completion buffer memory limit for new paginations reached")
+			}
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMemoryLimit))
 			return serviceerror.NewWorkflowTaskCompletionBufferLostf(
 				"workflow task completion buffer memory limit reached while buffering page %d", request.GetPageNumber())
 		}
@@ -305,6 +367,11 @@ func validatePageRequest(request *workflowservice.RespondWorkflowTaskCompletedRe
 // (0..finalPageNumber-1) in order, clears the buffer, and returns the merged
 // commands to be prepended to the final page's own commands.
 //
+// On success the buffer's bytes stay reserved in the pagination limiter until
+// the caller invokes the returned release func, which it does once the
+// transaction is persisted. This way the limiter also bounds the memory held
+// while persisting.
+//
 // It returns a typed WorkflowTaskCompletionBufferLost error when the buffer
 // is missing, belongs to a different workflow task/attempt, or has a gap.
 // Buffer-lost is transient: no WorkflowTaskCompleted event is written and
@@ -313,33 +380,38 @@ func (c *ContextImpl) GetMergedTaskCompletionPages(
 	schedID int64,
 	attempt int32,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-) ([]*commandpb.Command, error) {
+) ([]*commandpb.Command, func(), error) {
 	if request.GetIntermediatePage() {
-		return nil, serviceerror.NewInternal(
+		return nil, nil, serviceerror.NewInternal(
 			"GetMergedTaskCompletionPages: expected final page")
 	}
 	if err := validatePageRequest(request); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer c.clearTaskCompletionBuffer()
+	// Merged or not, the buffer can't be used again. On error its bytes are
+	// returned right away, on success by the caller after the persist.
+	buffer := c.taskCompletionBuffer
+	release := c.detachTaskCompletionBuffer()
 	finalPageNumber := request.GetPageNumber()
 	// The version comes from the started workflow task, the same authority buffering used,
 	// so a buffer built for a workflow task that has since been superseded on a
 	// higher-version branch (same schedID/attempt) is treated as lost.
 	identity := workflowTaskIdentity{schedID: schedID, attempt: attempt, version: c.startedWorkflowTaskIdentity().version}
-	if c.taskCompletionBuffer == nil || c.taskCompletionBuffer.identity != identity {
-		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
-		return nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
+	if buffer == nil || buffer.identity != identity {
+		release()
+		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMissingBuffer))
+		return nil, nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
 			"workflow task completion buffer lost for scheduled event %d attempt %d", schedID, attempt)
 	}
 	// Every page in 0..finalPageNumber-1 must be present. A gap means a page was
 	// lost or never sent; merging anyway would silently drop commands.
-	merged := make([]*commandpb.Command, 0, len(c.taskCompletionBuffer.pages))
+	merged := make([]*commandpb.Command, 0, len(buffer.pages))
 	for page := range finalPageNumber {
-		cmds, ok := c.taskCompletionBuffer.pages[page]
+		cmds, ok := buffer.pages[page]
 		if !ok {
-			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
-			return nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
+			release()
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMissingPage))
+			return nil, nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
 				"workflow task completion buffer missing page %d of %d", page, finalPageNumber)
 		}
 		merged = append(merged, cmds...)
@@ -347,8 +419,8 @@ func (c *ContextImpl) GetMergedTaskCompletionPages(
 	// Total completion size = buffered intermediate pages plus the final page (which
 	// is never buffered, so it must be added explicitly)
 	metrics.WorkflowTaskCompletionPaginatedBytes.With(c.metricsHandler).Record(
-		c.taskCompletionBuffer.totalSize + taskCompletionPageBytes(request.Commands))
-	return merged, nil
+		buffer.totalSize + taskCompletionPageBytes(request.Commands))
+	return merged, release, nil
 }
 
 func (c *ContextImpl) GetArchetypeID() chasm.ArchetypeID {
@@ -383,6 +455,15 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if c.MutableState != nil {
+		// Speculative CHASM changes from an earlier failover version were never replicated. Reload from
+		// the DB so they are not mixed with state written by another cluster.
+		version, pending := c.MutableState.ChasmTree().SpeculativeTransitionFailoverVersion()
+		if pending && version != namespaceEntry.FailoverVersion(c.workflowKey.WorkflowID) {
+			c.Clear()
+		}
 	}
 
 	if c.MutableState == nil {
@@ -477,6 +558,14 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
+func (c *ContextImpl) SetCheckRunAlreadyExists(verify bool) {
+	c.checkRunAlreadyExists = verify
+}
+
+func (c *ContextImpl) CheckRunAlreadyExists() bool {
+	return c.checkRunAlreadyExists
+}
+
 func (c *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -491,7 +580,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
 		if rl := shardContext.BusinessIDReuseRateLimiter(
-			namespace.ID(c.workflowKey.NamespaceID),
+			newMutableState.GetNamespaceEntry().Name(),
 			c.workflowKey.WorkflowID,
 			c.archetypeID,
 		); rl != nil && !rl.Allow() {
@@ -520,6 +609,8 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: c.archetypeID,
+
+		CheckRunAlreadyExists: c.checkRunAlreadyExists,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
@@ -788,6 +879,84 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) error {
+	if hook, ok := testhooks.Get(
+		c.testHooks,
+		testhooks.HistoryPassiveReplicationTest,
+		namespace.ID(c.workflowKey.NamespaceID),
+	); ok {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(c.metricsHandler).Record(
+			1,
+			metrics.OperationTag("WorkflowContext"),
+		)
+		request := &TestHookUpdateExecutionRequest{
+			ExecutionContext:                 c,
+			ShardContext:                     shardContext,
+			UpdateMode:                       updateMode,
+			NewContext:                       newContext,
+			NewMutableState:                  newMutableState,
+			UpdateExecutionTransactionPolicy: updateWorkflowTransactionPolicy,
+			NewExecutionTransactionPolicy:    newWorkflowTransactionPolicy,
+			PrepareMutableStateTransaction: func() error {
+				return c.prepareMutableStateTransaction(
+					shardContext,
+					newContext,
+					newMutableState,
+					newWorkflowTransactionPolicy,
+				)
+			},
+			CloseMutableStateTransaction: func() (*ExecutionTransactionPayload, error) {
+				return c.closeMutableStateTransaction(
+					ctx,
+					newContext,
+					newMutableState,
+					updateWorkflowTransactionPolicy,
+					newWorkflowTransactionPolicy,
+				)
+			},
+			ExecuteExecutionTransaction: func(payload *ExecutionTransactionPayload) error {
+				return c.executeWorkflowTransaction(
+					ctx,
+					shardContext,
+					updateMode,
+					newMutableState,
+					updateWorkflowTransactionPolicy,
+					payload,
+				)
+			},
+		}
+		return hook.InterceptUpdate(ctx, request, func() error {
+			return c.updateWorkflowExecutionWithNew(
+				ctx,
+				shardContext,
+				updateMode,
+				newContext,
+				newMutableState,
+				updateWorkflowTransactionPolicy,
+				newWorkflowTransactionPolicy,
+			)
+		})
+	}
+
+	return c.updateWorkflowExecutionWithNew(
+		ctx,
+		shardContext,
+		updateMode,
+		newContext,
+		newMutableState,
+		updateWorkflowTransactionPolicy,
+		newWorkflowTransactionPolicy,
+	)
+}
+
+func (c *ContextImpl) updateWorkflowExecutionWithNew(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	updateMode persistence.UpdateWorkflowMode,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
@@ -795,13 +964,55 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			c.Clear()
 		}
 	}()
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		defer func() {
+			if retError != nil {
+				newContext.Clear()
+			}
+		}()
+	}
 
+	if err := c.prepareMutableStateTransaction(
+		shardContext,
+		newContext,
+		newMutableState,
+		newWorkflowTransactionPolicy,
+	); err != nil {
+		return err
+	}
+
+	payload, err := c.closeMutableStateTransaction(
+		ctx,
+		newContext,
+		newMutableState,
+		updateWorkflowTransactionPolicy,
+		newWorkflowTransactionPolicy,
+	)
+	if err != nil {
+		return err
+	}
+	return c.executeWorkflowTransaction(
+		ctx,
+		shardContext,
+		updateMode,
+		newMutableState,
+		updateWorkflowTransactionPolicy,
+		payload,
+	)
+}
+
+func (c *ContextImpl) prepareMutableStateTransaction(
+	shardContext historyi.ShardContext,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) error {
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
 			execInfo := newMutableState.GetExecutionInfo()
 			newArchetypeID := newContext.GetArchetypeID()
 			if rl := shardContext.BusinessIDReuseRateLimiter(
-				namespace.ID(execInfo.NamespaceId),
+				newMutableState.GetNamespaceEntry().Name(),
 				execInfo.WorkflowId,
 				newArchetypeID,
 			); rl != nil && !rl.Allow() {
@@ -821,42 +1032,58 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
 	// RespondWorkflowTaskCompleted requests.
 	c.reconcileTaskCompletionBuffer()
+	return nil
+}
 
+func (c *ContextImpl) closeMutableStateTransaction(
+	ctx context.Context,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) (*ExecutionTransactionPayload, error) {
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
 		updateWorkflowTransactionPolicy,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var newWorkflow *persistence.WorkflowSnapshot
-	var newWorkflowEventsSeq []*persistence.WorkflowEvents
+	payload := &ExecutionTransactionPayload{
+		ExecutionMutation: updateWorkflow,
+		ExecutionEvents:   updateWorkflowEventsSeq,
+	}
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		defer func() {
-			if retError != nil {
-				newContext.Clear()
-			}
-		}()
-
-		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+		payload.NewExecutionSnapshot, payload.NewExecutionEvents, err = newMutableState.CloseTransactionAsSnapshot(
 			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		payload.NewExecutionCheckRunAlreadyExists = payload.NewExecutionSnapshot != nil && newContext.CheckRunAlreadyExists()
 	}
+	return payload, nil
+}
 
+func (c *ContextImpl) executeWorkflowTransaction(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	updateMode persistence.UpdateWorkflowMode,
+	newMutableState historyi.MutableState,
+	transactionPolicy historyi.TransactionPolicy,
+	payload *ExecutionTransactionPayload,
+) error {
 	if err := c.mergeUpdateWithNewReplicationTasks(
-		updateWorkflow,
-		newWorkflow,
+		payload.ExecutionMutation,
+		payload.NewExecutionSnapshot,
 	); err != nil {
 		return err
 	}
 
-	eventsToReapply := updateWorkflowEventsSeq
-	if len(updateWorkflowEventsSeq) == 0 {
+	eventsToReapply := payload.ExecutionEvents
+	if len(payload.ExecutionEvents) == 0 {
 		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
 			eventsToReapply = []*persistence.WorkflowEvents{
 				{
@@ -876,7 +1103,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		eventsToReapply,
 		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
 		// So we can use newWorkflowEventsSeq directly to reapply events.
-		newWorkflowEventsSeq,
+		payload.NewExecutionEvents,
 	); err != nil {
 		return err
 	}
@@ -886,14 +1113,18 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		updateMode,
 		c.archetypeID,
 		c.MutableState.GetCurrentVersion(),
-		updateWorkflow,
-		updateWorkflowEventsSeq,
+		payload.ExecutionMutation,
+		payload.ExecutionEvents,
 		MutableStateFailoverVersion(newMutableState),
-		newWorkflow,
-		newWorkflowEventsSeq,
+		payload.NewExecutionSnapshot,
+		payload.NewExecutionEvents,
+		payload.NewExecutionCheckRunAlreadyExists,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
+	}
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		c.handleWorkflowHeartbeatNotification(shardContext, payload.ExecutionMutation.NewBufferedEvents)
 	}
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
@@ -904,6 +1135,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
 		c.MutableState.GetExecutionState().State,
+		wroteEvents(payload.ExecutionEvents),
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)
@@ -1152,7 +1384,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 		for _, e := range events.Events {
 			event := e
-			if shouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
+			if ShouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
@@ -1292,7 +1524,12 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history size limit
 	if c.maxHistorySizeExceeded(shardContext) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistorySizeExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(
+			ctx,
+			shardContext,
+			common.FailureReasonHistorySizeExceedsLimit,
+			chasm.ExecutionForceTerminationReasonHistorySizeExceedsLimit,
+		); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1330,7 +1567,12 @@ func (c *ContextImpl) enforceHistoryCountCheck(
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history count limit
 	if c.maxHistoryCountExceeded(shardContext) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistoryCountExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(
+			ctx,
+			shardContext,
+			common.FailureReasonHistoryCountExceedsLimit,
+			chasm.ExecutionForceTerminationReasonHistoryCountExceedsLimit,
+		); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1366,7 +1608,12 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext historyi.ShardContext
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
 func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardContext historyi.ShardContext) (bool, error) {
 	if c.maxMutableStateSizeExceeded(shardContext.ChasmRegistry()) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(
+			ctx,
+			shardContext,
+			common.FailureReasonMutableStateSizeExceedsLimit,
+			chasm.ExecutionForceTerminationReasonMutableStateSizeExceedsLimit,
+		); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1407,6 +1654,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	failureReason string,
+	metricReasonString metrics.ReasonString,
 ) error {
 	if !c.MutableState.IsWorkflowExecutionRunning() {
 		return nil
@@ -1427,27 +1675,33 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	}
 
 	if !mutableState.IsWorkflow() {
-		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity:  consts.IdentityHistoryService,
-			Reason:    failureReason,
-			Details:   nil,
-			RequestID: primitives.NewUUID().String(),
-		})
+		return mutableState.ChasmTree().Terminate(
+			chasm.TerminateComponentRequest{
+				Identity:  consts.IdentityHistoryService,
+				Reason:    failureReason,
+				Details:   nil,
+				RequestID: primitives.NewUUID().String(),
+			},
+			metricReasonString,
+		)
 	}
 
-	return TerminateWorkflow(
+	return ForceTerminateWorkflow(
 		mutableState,
 		failureReason,
 		nil,
 		consts.IdentityHistoryService,
 		false,
 		nil, // No links necessary.
+		shardContext.GetMetricsHandler(),
+		metricReasonString,
 	)
 }
 
-// CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
+// ApproximateSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
 // which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
-func (c *ContextImpl) CacheSize() int {
+// ApproximateSize reads the mutable state and the update registry, so it requires the workflow lock.
+func (c *ContextImpl) ApproximateSize() int {
 	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
 	}

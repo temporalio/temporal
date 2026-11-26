@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
@@ -2042,57 +2043,27 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_MaxVersionsLi
 	s.True(s.env.IsWorkflowCompleted())
 }
 
-// Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesCreateRequestID tests that
-// syncing a version summary from the version workflow preserves the create_request_id
-func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesCreateRequestID() {
+func (s *WorkerDeploymentSuite) Test_SyncSummaryPreservesDeploymentOwnedFields() {
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
 	requestID := tv.Any().String()
-	identity := tv.ClientIdentity()
 	version := tv.DeploymentVersionString()
+	taskQueueFamilySummary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"existing-queue": {},
+	})
+	incomingTaskQueueFamilySummary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"other-queue": {},
+	})
 
-	var a *Activities
-	s.env.RegisterActivity(a.StartWorkerDeploymentVersionWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentVersionWorkflow, mock.Anything, mock.Anything).Return(nil).Once()
-
-	// First create the version
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(CreateWorkerDeploymentVersion, "", &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("CreateWorkerDeploymentVersion should not have been rejected", err)
-			},
-			OnAccept: func() {},
-			OnComplete: func(result any, err error) {
-				s.Require().NoError(err)
-			},
-		}, &deploymentspb.CreateWorkerDeploymentVersionArgs{
-			Identity:  identity,
-			RequestId: requestID,
-			Version:   version,
-		})
-	}, 1*time.Millisecond)
-
-	// Then send a SyncVersionSummary signal (simulating version workflow syncing back)
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SyncVersionSummarySignal, &deploymentspb.WorkerDeploymentVersionSummary{
-			Version:    version,
-			CreateTime: timestamppb.Now(),
-			Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
-			// Note: no CreateRequestId in the signal - version workflow doesn't set it
+			Version:                version,
+			CreateTime:             timestamppb.Now(),
+			Status:                 enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			TaskQueueFamilySummary: incomingTaskQueueFamilySummary,
 		})
-	}, 5*time.Millisecond)
-
-	// Verify create_request_id is preserved after sync
-	s.env.RegisterDelayedCallback(func() {
-		queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-		s.Require().NoError(err)
-		var state deploymentspb.QueryDescribeWorkerDeploymentResponse
-		s.Require().NoError(queryResult.Get(&state))
-		s.Require().Contains(state.State.Versions, version)
-		s.Equal(requestID, state.State.Versions[version].CreateRequestId,
-			"create_request_id should be preserved after summary sync")
-	}, 10*time.Millisecond)
+	}, time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  tv.NamespaceName().String(),
@@ -2100,9 +2071,25 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPr
 		DeploymentName: tv.DeploymentSeries(),
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			CreateRequestId: "deployment-request-id",
-			Versions:        map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version: {
+					Version:                version,
+					CreateRequestId:        requestID,
+					TaskQueueFamilySummary: taskQueueFamilySummary,
+				},
+			},
 		},
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+	var workflowErr *temporal.WorkflowExecutionError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &workflowErr)
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(workflowErr.Unwrap(), &canErr)
+	var nextRunArgs deploymentspb.WorkerDeploymentWorkflowArgs
+	s.Require().NoError(sdk.PreferProtoDataConverter.FromPayloads(canErr.Input, &nextRunArgs))
+	versionSummary := nextRunArgs.GetState().GetVersions()[version]
+	s.Require().NotNil(versionSummary)
+	s.Equal(requestID, versionSummary.GetCreateRequestId())
+	s.Equal(taskQueueFamilySummary, versionSummary.GetTaskQueueFamilySummary())
 }

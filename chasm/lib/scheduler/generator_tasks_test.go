@@ -328,6 +328,7 @@ func TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark(t *tes
 	require.NoError(t, env.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
 		generator = s.Generator.Get(ctx)
 		generator.LastProcessedTime = timestamppb.New(watermark)
+		generator.Generate(ctx)
 		return nil
 	}))
 

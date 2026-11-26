@@ -2,6 +2,7 @@ package mixedbrain
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"io"
 	"os"
@@ -83,7 +84,7 @@ var scenarios = []omesScenario{
 // and the other using the latest release tag. It then runs the Omes
 // throughput_stress and scheduler_stress scenarios to ensure that the mixed
 // brain works correctly.
-// Uses PostgreSQL because older release config templates do not support SQLite.
+// Uses shared SQLite files by default so both server processes access the same persistence stores.
 func TestMixedBrain(t *testing.T) {
 	tmpDir := t.TempDir()
 	logRoot := logDir(t)
@@ -109,17 +110,16 @@ func TestMixedBrain(t *testing.T) {
 		return
 	}
 
-	persistenceDriver := os.Getenv("PERSISTENCE_DRIVER")
-	if persistenceDriver == "" {
-		persistenceDriver = "postgres12"
-	}
+	persistenceDriver := cmp.Or(os.Getenv("PERSISTENCE_DRIVER"), "sqlite")
 	switch persistenceDriver {
+	case "sqlite":
+		configureSharedSQLite(t)
 	case "postgres12", "postgres12_pgx":
 		setDefaultEnv(t, "POSTGRES_SEEDS", "127.0.0.1")
 		setDefaultEnv(t, "POSTGRES_USER", "temporal")
 		setDefaultEnv(t, "POSTGRES_PWD", "temporal")
 	default:
-		t.Fatalf("mixedbrain requires PostgreSQL because older release config templates do not support SQLite")
+		t.Fatalf("unsupported mixedbrain persistence driver %q", persistenceDriver)
 	}
 	persistence := devserver.PersistenceOptions{Driver: persistenceDriver}
 
@@ -159,9 +159,11 @@ func TestMixedBrain(t *testing.T) {
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
 			},
-			// TODO: remove this once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
 			DynamicConfigValues: map[string]any{
+				// TODO: remove this override once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
 				"activity.enableStandalone": true,
+				// TODO: remove this override once the release server defaults to standalone nexus operations on. Currently the downgrade version of 1.32 has SANO defaulted to off.
+				"nexusoperation.enableStandalone": true,
 			},
 		})
 	})

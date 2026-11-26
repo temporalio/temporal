@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -32,6 +34,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -40,7 +43,7 @@ import (
 )
 
 // defaultMaxSkipPerSession mirrors the compiled default of
-// dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession. The frontend populates a request's
+// dynamicconfig.TimeSkippingMaxSkipPerSession. The frontend populates a request's
 // unset MaxSkipPerSession with this value, so tests that leave it empty expect it back.
 const defaultMaxSkipPerSession = 200
 
@@ -70,7 +73,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
-	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.ErrorAs(err, new(*serviceerror.PermissionDenied))
 }
 
 // TestTimeSkipping_StartWorkflow_DCEnabled verifies that StartWorkflowExecution with
@@ -109,6 +112,251 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	s.False(startTime.After(afterStart), "zero-offset start must not move after the admission window")
 	s.Equal(startTime, ms.State.ExecutionInfo.GetStartTime().AsTime())
 	s.Equal(startTime, ms.State.ExecutionInfo.GetExecutionTime().AsTime())
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	runID := s.startWorkflowWithTimeSkipping(env, tv, time.Hour)
+	s.True(s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, false)
+	updateRequest := &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	}
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), updateRequest)
+	s.ErrorAs(err, new(*serviceerror.PermissionDenied))
+	s.ErrorContains(err, "workflow time skipping is not enabled for the namespace")
+
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("flag-off-timer", 10*time.Minute)},
+		}, nil
+	})
+	s.NoError(err)
+
+	tsi := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.True(tsi.GetConfig().GetEnabled())
+	s.Zero(tsi.GetSessionSkipCount())
+	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration())
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), updateRequest)
+	s.NoError(err)
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		SignalName:        tv.SignalName(),
+		Identity:          "test",
+		RequestId:         uuid.NewString(),
+	})
+	s.NoError(err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.True(firedTimers(task)["flag-off-timer"])
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	tsi = s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.Positive(tsi.GetSessionSkipCount())
+	s.Positive(tsi.GetAccumulatedSkippedDuration().AsDuration())
+	history = env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+}
+
+func (s *TimeSkippingTestSuite) TestReuseWorkflowIDAfterTimeSkipping() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableWorkflowIdReuseStartTimeValidation, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Minute)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	first, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	poller := env.TaskPoller()
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("skip", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        tv.WorkflowType(),
+						TaskQueue:           tv.TaskQueue(),
+						WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	var skippedRunID string
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		skippedRunID = task.GetWorkflowExecution().GetRunId()
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+	s.NotEqual(first.GetRunId(), skippedRunID)
+	s.True(hasEventType(
+		env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: first.GetRunId()}),
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+	))
+	s.True(s.getMutableState(env, tv.WorkflowID(), skippedRunID).State.ExecutionState.GetStartTime().AsTime().After(time.Now()))
+
+	beforeRealStart := time.Now()
+	realRun, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:             uuid.NewString(),
+		Namespace:             env.Namespace().String(),
+		WorkflowId:            tv.WorkflowID(),
+		WorkflowType:          tv.WorkflowType(),
+		TaskQueue:             tv.TaskQueue(),
+		WorkflowRunTimeout:    durationpb.New(time.Minute),
+		WorkflowTaskTimeout:   durationpb.New(10 * time.Second),
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	})
+	s.NoError(err)
+	afterRealStart := time.Now()
+	s.NotEqual(skippedRunID, realRun.GetRunId())
+	realState := s.getMutableState(env, tv.WorkflowID(), realRun.GetRunId()).State
+	s.Nil(realState.ExecutionInfo.GetTimeSkippingInfo())
+	s.False(realState.ExecutionState.GetStartTime().AsTime().Before(beforeRealStart))
+	s.False(realState.ExecutionState.GetStartTime().AsTime().After(afterRealStart))
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	current, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.NoError(err)
+	s.Equal(realRun.GetRunId(), current.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.GetWorkflowExecutionInfo().GetStatus())
+}
+
+func (s *TimeSkippingTestSuite) TestTerminateExistingWorkflowAfterTimeSkipping() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableWorkflowIdReuseStartTimeValidation, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Minute)
+	tv := testvars.New(s.T())
+
+	first, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	poller := env.TaskPoller()
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("skip", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        tv.WorkflowType(),
+						TaskQueue:           tv.TaskQueue(),
+						WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	current, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.NoError(err)
+	virtualRunID := current.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+	s.NotEqual(first.GetRunId(), virtualRunID)
+	s.True(s.getMutableState(env, tv.WorkflowID(), virtualRunID).State.ExecutionState.GetStartTime().AsTime().After(time.Now()))
+
+	realRun, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               tv.WorkflowID(),
+		WorkflowType:             tv.WorkflowType(),
+		TaskQueue:                tv.TaskQueue(),
+		WorkflowRunTimeout:       durationpb.New(time.Minute),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	})
+	s.NoError(err)
+	s.NotEqual(virtualRunID, realRun.GetRunId())
+	s.True(hasEventType(
+		env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: virtualRunID}),
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+	))
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	current, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.NoError(err)
+	s.Equal(realRun.GetRunId(), current.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, current.GetWorkflowExecutionInfo().GetStatus())
 }
 
 // TestTimeSkipping_SignalWithStart_DCEnabled verifies that SignalWithStartWorkflowExecution
@@ -623,7 +871,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	s.NoError(err)
 
 	// Verify history.
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED), "timer must have fired via time-skipping")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"time-skipping transitioned event expected")
@@ -701,7 +949,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 	s.NoError(err)
 	wallElapsed := time.Since(wallStart)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED),
 		"activity must complete on its retry attempt")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
@@ -779,7 +1027,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 	s.NoError(err)
 	wallElapsed := time.Since(wallStart)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tvA.WorkflowID(),
 		RunId:      aResp.RunId,
 	})
@@ -889,7 +1137,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip
 	s.NoError(err)
 	wallElapsed := time.Since(wallStart)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      runID,
 	})
@@ -910,6 +1158,200 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingNexusOperationBlocksSkip
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
 	s.Less(wallElapsed, 5*time.Minute,
 		"wall elapsed = %v; the 1h timer must be skipped once the nexus operation completes", wallElapsed)
+}
+
+// TestTimeSkipping_HSMNexusRetryUsesWorkflowTime verifies that an HSM Nexus retry created
+// after the workflow has already skipped time retains its real-time backoff. HSM task deadlines
+// are workflow-logical timestamps; using the executor's wall clock would cause AddTasks to apply
+// the accumulated skip offset again and make the retry immediately eligible.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_HSMNexusRetryUsesWorkflowTime() {
+	const (
+		retryInterval     = 6 * time.Second
+		minimumRetryDelay = 3 * time.Second
+		maximumRetryDelay = 10 * time.Second
+	)
+
+	env := newNexusTestEnv(s.T(), true,
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(nexusoperations.RetryPolicyInitialInterval, retryInterval),
+	)
+	tv := testvars.New(s.T())
+	attemptTimes := make(chan time.Time, 2)
+	var attempts atomic.Int32
+	handler := nexustest.Handler{
+		OnStartOperation: func(
+			_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			attemptTimes <- time.Now()
+			if attempts.Add(1) == 1 {
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional retryable error")
+			}
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), handler)
+	runID := s.startWorkflowWithTimeSkipping(env.TestEnv, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: establish a one-hour workflow-time offset before creating the Nexus operation.
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("pre-nexus-skip", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT2: the timer has fired through time skipping. Schedule the HSM Nexus operation while
+	// the workflow clock is ahead of wall time.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.True(firedTimers(task)["pre-nexus-skip"])
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     testcore.MustToPayload(s.T(), "input"),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	timeSkippingInfo := s.getMutableState(env.TestEnv, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.Positive(timeSkippingInfo.GetAccumulatedSkippedDuration().AsDuration())
+
+	var firstAttempt time.Time
+	select {
+	case firstAttempt = <-attemptTimes:
+	case <-time.After(maximumRetryDelay):
+		s.FailNow("first Nexus attempt was not dispatched")
+	}
+
+	// Assert on the timer written to persistence instead of waiting for the retry to execute.
+	// The recorder timestamp distinguishes it from state-machine timers written before the attempt.
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	s.NotNil(recorder)
+	findRetryTimer := func() *historytasks.StateMachineTimerTask {
+		recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+			NamespaceID: env.NamespaceID().String(),
+			WorkflowID:  tv.WorkflowID(),
+			RunID:       runID,
+		})
+		for _, rec := range recorded {
+			if rec.Timestamp.Before(firstAttempt) {
+				continue
+			}
+			if timer, ok := rec.Task.(*historytasks.StateMachineTimerTask); ok {
+				return timer
+			}
+		}
+		return nil
+	}
+
+	s.AwaitTruef(func() bool {
+		return findRetryTimer() != nil
+	}, maximumRetryDelay, 100*time.Millisecond, "Nexus retry timer was not generated")
+	retryTimer := findRetryTimer()
+	s.NotNil(retryTimer)
+
+	retryDelay := retryTimer.VisibilityTimestamp.Sub(firstAttempt)
+	s.GreaterOrEqual(retryDelay, minimumRetryDelay,
+		"Nexus retry timer was shifted into the past by the accumulated workflow-time offset")
+	s.LessOrEqual(retryDelay, maximumRetryDelay,
+		"Nexus retry timer was scheduled later than the configured retry interval allows")
+
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
+	s.NoError(err)
+}
+
+// TestTimeSkipping_PendingCHASMNexusOperationBlocksSkip verifies that a workflow-owned
+// CHASM Nexus operation prevents the workflow's timer from advancing virtual time.
+// Completing the operation allows the next workflow task to skip to the timer.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingCHASMNexusOperationBlocksSkip() {
+	env := newNexusTestEnv(s.T(), true,
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(chasmnexus.Enabled, true),
+		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
+		testcore.WithDynamicConfig(chasmnexus.ChasmWorkflowOperationsRolloutPercent, 100),
+	)
+	tv := testvars.New(s.T())
+	started := make(chan struct{}, 1)
+	release := make(chan struct{}, 1)
+	defer close(release)
+	handler := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			select {
+			case <-release:
+				return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), handler)
+	runID := s.startWorkflowWithTimeSkipping(env.TestEnv, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint: endpointName, Service: "service", Operation: "operation",
+						Input: testcore.MustToPayload(s.T(), "input"),
+					},
+				},
+			},
+			startTimerCmd("timer-1", time.Hour),
+		}}, nil
+	})
+	s.NoError(err)
+
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		s.FailNow("Nexus operation did not start")
+	}
+
+	ms := s.getMutableState(env.TestEnv, tv.WorkflowID(), runID)
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	scheduledEvent := s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	_, inCHASM := ms.State.ChasmNodes["Operations#"+strconv.FormatInt(scheduledEvent.EventId, 10)]
+	s.True(inCHASM, "pending Nexus operation must be stored in the CHASM tree")
+	s.Zero(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+
+	release <- struct{}{}
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{completeWorkflowCmd()}}, nil
+	})
+	s.NoError(err)
+
+	history = env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.Less(indexOfEventType(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED),
+		indexOfEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 }
 
 // TestTimeSkipping_StartWithDelay_NoBound verifies that time-skipping with no
@@ -1070,7 +1512,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarge
 	})
 	s.NoError(err)
 
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(), RunId: runID,
 	})
 	timerExpiry := make(map[string]time.Time)
@@ -1239,7 +1681,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	wallAfterClose := time.Now()
 
 	// ── Assertion 1/2/3: the three history events are present. ────────────────
-	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	history := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED), "activity must have completed")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED), "skip transition must have happened")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must have completed")
@@ -1495,7 +1937,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeo
 	s.Less(time.Since(startWall), executionTimeout,
 		"time skipping must reach the execution timeout in far less than the 5 min real timeout")
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1, "exactly one transition: skip to the execution timeout")
 	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
@@ -1543,7 +1985,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOption
 	})
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 
 	// The transition and the OPTIONS_UPDATED that triggered it must both be present, and the
 	// OPTIONS_UPDATED must come first (the transition is the last event of the transaction).
@@ -1680,7 +2122,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	tsi := timeSkippingInfo()
 	s.True(tsi.GetConfig().GetEnabled())
 	s.False(tsi.GetFastForwardInfo().GetHasReached(), "the fast-forward starts out pending")
-	s.False(hasEventType(env.GetHistory(env.Namespace().String(), execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+	s.False(hasEventType(env.RequireHistory(s, execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"enabling time skipping on a paused workflow must not skip")
 
 	// (4) Pause does not hold off the fast-forward. Its timer task is wall-clock-anchored, and
@@ -1696,7 +2138,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration(),
 		"the fast-forward disable must not advance the clock of a paused workflow")
 
-	histPaused := env.GetHistory(env.Namespace().String(), execution)
+	histPaused := env.RequireHistory(s, execution)
 	s.False(hasEventType(histPaused, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must not fire while paused")
 	transitions := timeSkippingTransitions(histPaused)
 	s.Len(transitions, 1, "the only transition so far is the fast-forward disable")
@@ -1716,7 +2158,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 	tsi = timeSkippingInfo()
 	s.True(tsi.GetConfig().GetEnabled(), "time skipping must stay enabled — nothing disabled it")
 	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration(), "a paused workflow must not skip time")
-	histStillPaused := env.GetHistory(env.Namespace().String(), execution)
+	histStillPaused := env.RequireHistory(s, execution)
 	s.False(hasEventType(histStillPaused, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must not fire while paused")
 	s.Len(timeSkippingTransitions(histStillPaused), 1, "no new transition while paused")
 
@@ -1753,7 +2195,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
 		"the post-unpause skip covers what was left of the 5min timer")
 	s.True(tsi.GetConfig().GetEnabled(), "one skip with no fast-forward and a fresh session count leaves skipping enabled")
 
-	histFinal := env.GetHistory(env.Namespace().String(), execution)
+	histFinal := env.RequireHistory(s, execution)
 	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must fire once the workflow is unpaused")
 	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED))
 	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED))

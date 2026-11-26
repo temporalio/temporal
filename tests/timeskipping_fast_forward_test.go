@@ -122,7 +122,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	})
 	s.NoError(err)
 
-	// Wait for the fast-forward's TimeSkippingTimerTask to fire while the activity is still in
+	// Wait for the fast-forward's TimeSkippingFastForwardTimerTask to fire while the activity is still in
 	// flight. With timer1=29:58 and fast-forward=30m, the regenerated fast-forward task's wall
 	// VisibilityTime is at startTime+2s; the executor hits this within seconds of WT2
 	// closing. B3 not fixed: the executor emits the disable transition regardless of
@@ -146,7 +146,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	})
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 2)
 
@@ -193,7 +193,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 //	    TimeSkippingTransitioned event is added on close-tx — both
 //	    closeTransactionHandleTimeSkipping and shouldExecuteTimeSkipping
 //	    short-circuit on IsWorkflowExecutionStatusPaused.
-//	(2) The fast-forward's TimeSkippingTimerTask still fires while paused.
+//	(2) The fast-forward's TimeSkippingFastForwardTimerTask still fires while paused.
 //	    executeTimeSkippingTimerTask only checks IsWorkflowExecutionRunning
 //	    (paused workflows are State=RUNNING), so the disable transition is
 //	    written through pause — analogous to user-timer-fired events firing
@@ -270,7 +270,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	})
 	s.NoError(err)
 
-	// Wait for the fast-forward TimeSkippingTimerTask to fire while paused. The executor
+	// Wait for the fast-forward TimeSkippingFastForwardTimerTask to fire while paused. The executor
 	// writes the disable event regardless of pause status: HasReached becomes true
 	// and Config.Enabled becomes false.
 	s.AwaitTruef(func() bool {
@@ -283,7 +283,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	// Snapshot history while still paused: exactly two transitions — skip-to-timer1
 	// (from WT1 close-tx) and fast-forward-disable (from the timer task that just fired).
 	// No spurious third transition from any close-tx evaluated under pause.
-	histDuringPause := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	histDuringPause := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(), RunId: runID,
 	})
 	s.Len(s.findTransitionedEvents(histDuringPause), 2,
@@ -315,7 +315,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	})
 	s.NoError(err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 2, "expected exactly two transitions across the entire lifecycle")
 
@@ -401,7 +401,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	go func() {
 		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 			Namespace:         env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			FastForwardId:     "ff-id",
 		})
 		resultCh <- pollResult{resp, pollErr}
@@ -446,7 +446,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	// entering the notifier wait.
 	resp2, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 		FastForwardId:     "ff-id",
 	})
 	s.NoError(err)
@@ -466,8 +466,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 
 // TestFastForward_PollWakesAcrossContinueAsNew proves the subscription really spans a chain of
 // runs. The notification key carries no RunID, so a poll that parks while run 1 is alive must be
-// woken by run 2's fast-forward completion after continue-as-new — even though the poll named
-// run 1 explicitly. This exercises two things together: the propagated fast-forward target keeps
+// woken by run 2's fast-forward completion after continue-as-new. The poll omits RunID.
+// This exercises two things together: the propagated fast-forward target keeps
 // the same id across the chain, and the publisher on run 2 lands on the key run 1's waiter holds.
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcrossContinueAsNew() {
 	env := testcore.NewEnv(s.T())
@@ -508,7 +508,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcross
 	go func() {
 		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 			Namespace:         env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: run1ID},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			FastForwardId:     ffID,
 		})
 		resultCh <- pollResult{resp, pollErr}
@@ -549,7 +549,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcross
 	}
 
 	// An empty WFT drives run 2 idle, so its close-tx skip advances to the inherited target and
-	// completes the fast-forward. The publisher is run 2; the waiter subscribed naming run 1.
+	// completes the fast-forward. The publisher is run 2; the waiter subscribed during run 1.
 	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	})
@@ -700,7 +700,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	go func() {
 		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 			Namespace:         env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			FastForwardId:     "ff-id",
 		})
 		resultCh <- pollResult{resp, pollErr}
@@ -743,7 +743,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	// short-circuit (the run is closed with no continuation).
 	resp2, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
 		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 		FastForwardId:     "ff-id",
 	})
 	s.NoError(err)
@@ -784,7 +784,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	s.NoError(err)
 	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1)
 	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
@@ -844,7 +844,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	var timeoutErr *sdktemporal.TimeoutError
 	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	indexOfEventType := func(history []*historypb.HistoryEvent, t enumspb.EventType) int {
 		for i, e := range history {
 			if e.GetEventType() == t {
@@ -914,7 +914,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTim
 			}, nil
 		}, taskpoller.WithTimeout(90*time.Second))
 
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	hist := env.RequireHistory(s, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 
 	// A fast-forward disable transition (DisabledAfterFastForward) must be present.
 	sawDisableTransition := false

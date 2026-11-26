@@ -330,8 +330,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			if !common.IsContextCanceledErr(err) {
 				m.logger.Error("error fetching user data from parent", tag.Error(err))
 			}
-			var unimplErr *serviceerror.Unimplemented
-			if errors.As(err, &unimplErr) {
+			if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
 				// This might happen during a deployment. The older version couldn't have had any user data,
 				// so we act as if it just returned an empty response and set ourselves ready.
 				// Return the error so that we backoff with retry, and do not set hasFetchedUserData so that
@@ -700,8 +699,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 				OnlyIfLoaded:             true,
 			})
 			if err != nil {
-				var failed *serviceerror.FailedPrecondition
-				if errors.As(err, &failed) {
+				if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 					// this means the partition was not loaded, so skip it (if it loads, it will get the newest data)
 					err = nil
 				}

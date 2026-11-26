@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -139,55 +140,88 @@ func (g *GeneratorTaskHandler) Execute(
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
 	}
 
+	scheduler.advanceLastEventTime(ctx)
+
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+	// Task progress is independent of action progress. An obsolete timer can
+	// execute without processing an action and must still invalidate itself.
+	generator.LastProcessedTaskTime = timestamppb.New(util.MaxTime(t2, generator.GetLastProcessedTaskTime().AsTime()))
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
+	g.rearmTasks(ctx, generator, scheduler, metricsHandler, tweakables.IdleTime, result.NextWakeupTime)
+	return nil
+}
+
+func (g *GeneratorTaskHandler) rearmTasks(
+	ctx chasm.MutableContext,
+	generator *Generator,
+	sched *Scheduler,
+	metricsHandler metrics.Handler,
+	idleTimeTotal time.Duration,
+	nextWakeupTime time.Time,
+) {
 	// Schedule the next timer task. Three outcomes are possible:
 	// - isIdle: the schedule is done; arm the idle task to close it.
-	// - NextWakeupTime is set: arm the next generator tick.
+	// - nextWakeupTime is set: arm the next generator tick.
 	// - Neither: Hold open without a task. This requires both that
 	//   isHeldOpen is true (paused or backfill pending) AND that no spec
 	//   wakeup is available, e.g. a paused manual-only schedule. IdleTime=0
 	//   also lands here. An external trigger (Patch.Unpause, Update, or a
 	//   BackfillerTask's completion-time Generate call) revives us.
-	idleTimeTotal := tweakables.IdleTime
-	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
+	idleExpiration, isIdle := sched.getIdleExpiration(ctx, idleTimeTotal, nextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's
 		// backing mutable state explicitly open for the idle period, during which the
 		// customer can describe/modify/restart the schedule.
 		//
 		// Once the idle timer expires, we close the component.
+
+		// An idle task armed at exactly this deadline is already pending: arming a
+		// second one would leave a permanent duplicate in the component's PureTasks,
+		// because SchedulerIdleTaskHandler.Validate only invalidates tasks whose
+		// deadline has moved *later*.
+		if sched.GetIdleCloseTime().AsTime().Equal(idleExpiration) {
+			metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
+				Record(1, metrics.OutcomeTag(outcomeSkipped), metrics.ReasonTag(idleAlreadyArmed))
+			return
+		}
+
 		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("scheduled idle task for %s", idleExpiration.Format(time.RFC3339)))
-		ctx.AddTask(scheduler, chasm.TaskAttributes{
+		ctx.AddTask(sched, chasm.TaskAttributes{
 			ScheduledTime: idleExpiration,
 		}, &schedulerpb.SchedulerIdleTask{
 			IdleTimeTotal: durationpb.New(idleTimeTotal),
 		})
 		// Record the idle-close deadline so it can be surfaced as the
 		// ScheduleIdleCloseTime search attribute for stuck-schedule detection.
-		scheduler.IdleCloseTime = timestamppb.New(idleExpiration)
+		sched.IdleCloseTime = timestamppb.New(idleExpiration)
 
-		return nil
+		return
 	}
 
 	// Not idle: the schedule has work again (or is being held open), so it's
 	// no longer pending an idle close.
-	scheduler.IdleCloseTime = nil
+	sched.IdleCloseTime = nil
 
-	if !result.NextWakeupTime.IsZero() {
-		// Keep the generator task perpetually scheduled. When paused, the next
-		// fire will simply advance the HWM without appending actions (handled in
-		// ProcessTimeRange).
-		generator.scheduleTask(ctx, result.NextWakeupTime)
+	if !nextWakeupTime.IsZero() {
+		// A clock rollback can put the next action before the task validation
+		// watermark. Defer the wakeup to the next queue tick after that watermark
+		// so it remains valid. Keep the action cursor so the delayed action is
+		// processed when the clock catches up, subject to the catchup window.
+		validationWatermark := util.MaxTime(
+			generator.GetLastProcessedTime().AsTime(),
+			generator.GetLastProcessedTaskTime().AsTime(),
+		)
+		earliestWakeup := validationWatermark.
+			Truncate(common.ScheduledTaskMinPrecision).
+			Add(common.ScheduledTaskMinPrecision)
+		generator.scheduleTask(ctx, util.MaxTime(nextWakeupTime, earliestWakeup))
 	} else {
 		// Hold open without a task: see the comment block above.
 		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
 	}
-
-	return nil
 }
 
 func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.Logger, msg string, generator *Generator, sched *Scheduler) {
@@ -207,7 +241,7 @@ func (g *GeneratorTaskHandler) Validate(
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(
-		generator.GetLastProcessedTime(),
+		timestamppb.New(util.MaxTime(generator.GetLastProcessedTime().AsTime(), generator.GetLastProcessedTaskTime().AsTime())),
 		attrs.ScheduledTime,
 	)
 }

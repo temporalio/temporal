@@ -77,8 +77,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
-		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); !ok {
 			return false
 		}
 
@@ -121,8 +120,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
-		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); !ok {
 			return false
 		}
 
@@ -164,8 +162,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
-		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); !ok {
 			return false
 		}
 

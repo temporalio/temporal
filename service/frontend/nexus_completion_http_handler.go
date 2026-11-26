@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -60,6 +61,7 @@ type nexusCompletionHandler struct {
 	RedirectionInterceptor               *interceptor.Redirection
 	ForwardingClients                    *cluster.FrontendHTTPClientCache
 	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
+	LinkValidator                        commonlinks.Validator
 	clientVersionChecker                 headers.VersionChecker
 	preProcessErrorsCounter              metrics.CounterIface
 }
@@ -86,11 +88,12 @@ func newNexusCompletionHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	forwardingClients *cluster.FrontendHTTPClientCache,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	linkValidator commonlinks.Validator,
 ) *nexusCompletionHandler {
 	return &nexusCompletionHandler{
 		ClusterMetadata:                      clusterMetadata,
 		NamespaceRegistry:                    namespaceRegistry,
-		Logger:                               logger,
+		Logger:                               log.With(logger, tag.NexusStageCallerInbound),
 		MetricsHandler:                       metricsHandler,
 		Config:                               serviceConfig,
 		CallbackTokenGenerator:               callbackTokenGenerator,
@@ -105,16 +108,17 @@ func newNexusCompletionHandler(
 		RedirectionInterceptor:               redirectionInterceptor,
 		ForwardingClients:                    forwardingClients,
 		HTTPTraceProvider:                    httpTraceProvider,
+		LinkValidator:                        linkValidator,
 		clientVersionChecker:                 headers.NewDefaultVersionChecker(),
 		preProcessErrorsCounter:              metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 	}
 }
 
-func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler, logger log.Logger) *nexusCompletionHTTPHandler {
+func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusCompletionHTTPHandler {
 	return &nexusCompletionHTTPHandler{
 		httpHandler: nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 			Handler:    handler,
-			Logger:     log.NewSlogLogger(logger),
+			Logger:     log.NewSlogLogger(handler.Logger),
 			Serializer: commonnexus.PayloadSerializer,
 		}),
 	}
@@ -135,6 +139,9 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		h.Logger.Error("failed to decode completion from token", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
+	if completion.GetRequestId() == "" {
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+	}
 
 	// Determine the target namespace, workflow, and run ID from the completion token. The CHASM
 	// ComponentRef is canonical when present; otherwise the top-level HSM fields are used. Shared
@@ -149,8 +156,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	if err != nil {
 		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(targetNamespaceID), tag.Error(err))
 		h.preProcessErrorsCounter.Record(1)
-		var nfe *serviceerror.NamespaceNotFound
-		if errors.As(err, &nfe) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", targetNamespaceID)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
@@ -200,8 +206,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardCompleteOperation(ctx, r, rCtx)
 		}
 		return err
@@ -211,7 +216,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, logger)
+	links := commonnexus.ConvertAndSanitizeHandlerLinks(r.Links, ns.Name().String(), h.LinkValidator, logger)
 
 	var successPayload *commonpb.Payload
 	switch r.State { // nolint:exhaustive
@@ -224,7 +229,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
-			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request")
+			logger.Warn("payload size exceeds error limit")
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		successPayload = result
@@ -239,12 +244,10 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nil
 	}
 	logger.Error("failed to process nexus completion request", tag.Error(err))
-	var namespaceInactiveErr *serviceerror.NamespaceNotActive
-	if errors.As(err, &namespaceInactiveErr) {
+	if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
-	var notFoundErr *serviceerror.NotFound
-	if errors.As(err, &notFoundErr) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 	return commonnexus.ConvertGRPCError(err, false)
@@ -385,6 +388,10 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
+		}
+		// A canceled completion must carry CanceledFailureInfo so that it is recorded as canceled instead of failed.
+		if req.State == nexus.OperationStateCanceled {
+			failure = commonnexus.CoerceToCanceledFailure(failure)
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
 			Failure: failure,
@@ -551,8 +558,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	} else if c.outcomeTag.Key != "" {
 		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
-		var he *nexus.HandlerError
-		if errors.As(*errPtr, &he) {
+		if he, ok := errors.AsType[*nexus.HandlerError](*errPtr); ok {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_" + strings.ToLower(string(he.Type))))
 		} else {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_internal"))
@@ -583,7 +589,10 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	}
 
 	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfo, request.HTTPRequest.Header, func() string {
-		return "" // TODO: support audience getter
+		if !c.Config.NexusEnforceJWTAudience() {
+			return ""
+		}
+		return c.AuthInterceptor.HTTPAudience(ctx, request.HTTPRequest.Header)
 	})
 
 	var claims *authorization.Claims
@@ -606,8 +615,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
 		// "Request unauthorized." message.
 		// Otherwise, expose the underlying error.
-		var permissionDeniedError *serviceerror.PermissionDenied
-		if errors.As(err, &permissionDeniedError) {
+		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			c.outcomeTag = metrics.OutcomeTag("unauthorized")
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
 		}
@@ -640,7 +648,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		if retErr != nil {
 			c.RequestErrorHandler.HandleError(
 				request,
-				"",
+				nexusCompletionAPIName,
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(nexusCompletionMethodName), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,

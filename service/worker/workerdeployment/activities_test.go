@@ -78,6 +78,10 @@ func TestDeleteWorkerDeploymentVersion(t *testing.T) {
 				require.Equal(t, int64(1), recordings[0].Value)
 				namespaceTag := metrics.NamespaceTag(tv.NamespaceName().String())
 				require.Equal(t, namespaceTag.Value, recordings[0].Tags[namespaceTag.Key])
+				deploymentTag := metrics.WorkerDeploymentNameTag(tv.DeploymentSeries(), true)
+				require.Equal(t, deploymentTag.Value, recordings[0].Tags[deploymentTag.Key])
+				buildIDTag := metrics.WorkerDeploymentBuildIDTag(tv.BuildID(), true)
+				require.Equal(t, buildIDTag.Value, recordings[0].Tags[buildIDTag.Key])
 			}
 		})
 	}

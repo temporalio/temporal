@@ -1,18 +1,24 @@
 package batcher
 
 import (
+	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type batcherSuite struct {
@@ -35,6 +41,51 @@ func (s *batcherSuite) SetupTest() {
 func (s *batcherSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
+}
+
+func TestBatchWorkflowActivityOptionsAreIndependent(t *testing.T) {
+	const workflowCount = 32
+
+	expectedTimeouts := make([]time.Duration, workflowCount)
+	actualTimeouts := make([]time.Duration, workflowCount)
+	errs := make([]error, workflowCount)
+	envs := make([]*testsuite.TestWorkflowEnvironment, workflowCount)
+	var wg sync.WaitGroup
+	for i := range workflowCount {
+		expectedTimeout := time.Duration(i+10) * time.Second
+		var heartbeatTimeout *durationpb.Duration
+		if i == 0 {
+			expectedTimeout = defaultActivityHeartBeatTimeout
+		} else {
+			heartbeatTimeout = durationpb.New(expectedTimeout)
+		}
+		expectedTimeouts[i] = expectedTimeout
+
+		wg.Go(func() {
+			var workflowTestSuite testsuite.WorkflowTestSuite
+			env := workflowTestSuite.NewTestWorkflowEnvironment()
+			envs[i] = env
+			env.RegisterWorkflow(BatchWorkflowProtobuf)
+			var ac *activities
+			env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).
+				Return(func(ctx context.Context, _ *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+					actualTimeouts[i] = activity.GetInfo(ctx).HeartbeatTimeout
+					return HeartBeatDetails{}, nil
+				}).Once()
+			env.OnUpsertMemo(mock.Anything).Return(nil).Once()
+			env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
+				ActivityHeartbeatTimeout: heartbeatTimeout,
+			})
+			errs[i] = env.GetWorkflowError()
+		})
+	}
+	wg.Wait()
+
+	for i := range workflowCount {
+		envs[i].AssertExpectations(t)
+		require.NoError(t, errs[i])
+		require.Equal(t, expectedTimeouts[i], actualTimeouts[i])
+	}
 }
 
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
@@ -104,4 +155,136 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
+}
+
+func (s *batcherSuite) TestSetDefaultParams() {
+	for _, tc := range []struct {
+		name                     string
+		input                    *batchspb.BatchOperationInput
+		expectedAttempts         int64
+		expectedHeartbeatTimeout time.Duration
+	}{
+		{
+			name:                     "unset takes the defaults",
+			input:                    &batchspb.BatchOperationInput{},
+			expectedAttempts:         defaultAttemptsOnRetryableError,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			// A single retry is a valid request: the caller wants a task that
+			// keeps failing to be given up on quickly, not retried 50 times.
+			name:                     "one attempt is honored",
+			input:                    &batchspb.BatchOperationInput{AttemptsOnRetryableError: 1},
+			expectedAttempts:         1,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			name:                     "explicit attempts are honored",
+			input:                    &batchspb.BatchOperationInput{AttemptsOnRetryableError: 7},
+			expectedAttempts:         7,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			name:                     "negative attempts take the default",
+			input:                    &batchspb.BatchOperationInput{AttemptsOnRetryableError: -1},
+			expectedAttempts:         defaultAttemptsOnRetryableError,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			name: "explicit heartbeat timeout is honored",
+			input: &batchspb.BatchOperationInput{
+				AttemptsOnRetryableError: 3,
+				ActivityHeartbeatTimeout: durationpb.New(time.Minute),
+			},
+			expectedAttempts:         3,
+			expectedHeartbeatTimeout: time.Minute,
+		},
+		{
+			name: "non-positive heartbeat timeout takes the default",
+			input: &batchspb.BatchOperationInput{
+				AttemptsOnRetryableError: 3,
+				ActivityHeartbeatTimeout: durationpb.New(0),
+			},
+			expectedAttempts:         3,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+	} {
+		s.Run(tc.name, func() {
+			params := setDefaultParams(tc.input)
+			s.Equal(tc.expectedAttempts, params.GetAttemptsOnRetryableError())
+			s.Equal(tc.expectedHeartbeatTimeout, params.GetActivityHeartbeatTimeout().AsDuration())
+		})
+	}
+}
+
+// TestBatchActivityOptions_IndependentPerCall verifies the activity options are
+// built per call and share no mutable state, so concurrent batch workflows on a
+// worker cannot race on them or pick up each other's heartbeat timeout.
+func (s *batcherSuite) TestBatchActivityOptions_IndependentPerCall() {
+	first := batchActivityOptions(time.Second)
+	second := batchActivityOptions(time.Hour)
+
+	s.Equal(time.Second, first.HeartbeatTimeout)
+	s.Equal(time.Hour, second.HeartbeatTimeout)
+	s.Equal(5*time.Minute, first.ScheduleToStartTimeout)
+	s.Equal(infiniteDuration, first.StartToCloseTimeout)
+
+	s.Require().NotNil(first.RetryPolicy)
+	s.Require().NotNil(second.RetryPolicy)
+	s.NotSame(first.RetryPolicy, second.RetryPolicy,
+		"each call must get its own retry policy, not a shared pointer")
+}
+
+// TestBatchWorkflow_HeartbeatTimeoutFromParams verifies the activity is scheduled
+// with the heartbeat timeout from its own params, defaulted when unset.
+func (s *batcherSuite) TestBatchWorkflow_HeartbeatTimeoutFromParams() {
+	for _, tc := range []struct {
+		name             string
+		heartbeatTimeout *durationpb.Duration
+		expected         time.Duration
+	}{
+		{
+			name:             "unset uses the default",
+			heartbeatTimeout: nil,
+			expected:         defaultActivityHeartBeatTimeout,
+		},
+		{
+			name:             "explicit value is used",
+			heartbeatTimeout: durationpb.New(42 * time.Second),
+			expected:         42 * time.Second,
+		},
+	} {
+		s.Run(tc.name, func() {
+			env := s.NewTestWorkflowEnvironment()
+			env.RegisterWorkflow(BatchWorkflowProtobuf)
+
+			var ac *activities
+			var gotHeartbeatTimeout time.Duration
+			env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) {
+					ctx, ok := args.Get(0).(context.Context)
+					s.Require().True(ok)
+					gotHeartbeatTimeout = activity.GetInfo(ctx).HeartbeatTimeout
+				}).
+				Return(HeartBeatDetails{}, nil)
+			env.OnUpsertMemo(mock.Anything).Return(nil).Once()
+
+			env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
+				ActivityHeartbeatTimeout: tc.heartbeatTimeout,
+				Request: &workflowservice.StartBatchOperationRequest{
+					JobId: uuid.NewString(),
+					Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+						TerminationOperation: &batchpb.BatchOperationTermination{},
+					},
+					VisibilityQuery: "WorkflowType = 'test'",
+					Reason:          "test-reason",
+					Namespace:       "test-namespace",
+				},
+				BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			})
+
+			s.Require().NoError(env.GetWorkflowError())
+			s.Equal(tc.expected, gotHeartbeatTimeout)
+		})
+	}
 }

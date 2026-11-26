@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -24,6 +25,18 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+// workflowExecutionNotFoundMessage is the NotFound text GetWorkflowExecution returns when the execution is absent.
+const workflowExecutionNotFoundMessage = "workflow execution not found for workflow ID %q and run ID %q"
+
+// IsWorkflowExecutionNotFound reports whether err is the NotFound GetWorkflowExecution returns when the named execution is absent.
+func IsWorkflowExecutionNotFound(err error, workflowID string, runID string) bool {
+	notFound, ok := errors.AsType[*serviceerror.NotFound](err)
+	if !ok {
+		return false
+	}
+	return notFound.Message == fmt.Sprintf(workflowExecutionNotFoundMessage, workflowID, runID)
+}
+
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
@@ -34,6 +47,7 @@ type (
 		pagingTokenSerializer                       *jsonHistoryTokenSerializer
 		transactionSizeLimit                        dynamicconfig.IntPropertyFn
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+		storeChecksRunAlreadyExists                 bool
 	}
 )
 
@@ -48,6 +62,7 @@ func NewExecutionManager(
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
 	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
+	checker, ok := persistence.(RunAlreadyExistsChecker)
 	return &executionManagerImpl{
 		serializer:            serializer,
 		eventBlobCache:        eventBlobCache,
@@ -56,6 +71,7 @@ func NewExecutionManager(
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
 		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
+		storeChecksRunAlreadyExists:                 ok && checker.SupportsCheckRunAlreadyExists(),
 	}
 }
 
@@ -65,6 +81,39 @@ func (m *executionManagerImpl) GetName() string {
 
 func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
 	return m.persistence.GetHistoryBranchUtil()
+}
+
+// assertRunNotExists returns WorkflowRunAlreadyExistsError if the run already exists. It is used unless the store
+// implements RunAlreadyExistsChecker and SupportsCheckRunAlreadyExists returns true.
+func (m *executionManagerImpl) assertRunNotExists(
+	ctx context.Context,
+	shardID int32,
+	archetypeID chasm.ArchetypeID,
+	executionState *persistencespb.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+) error {
+	resp, err := m.persistence.GetWorkflowExecution(ctx, &GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: executionInfo.NamespaceId,
+		WorkflowID:  executionInfo.WorkflowId,
+		RunID:       executionState.RunId,
+		ArchetypeID: archetypeID,
+	})
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	existingState, err := m.serializer.WorkflowExecutionStateFromBlob(resp.State.ExecutionState)
+	if err != nil {
+		return err
+	}
+	return &WorkflowRunAlreadyExistsError{
+		Msg:    fmt.Sprintf("Workflow run already exists, run ID: %v", executionState.RunId),
+		RunID:  executionState.RunId,
+		Status: existingState.Status,
+	}
 }
 
 // historySizeRollback records HistorySize increments applied to caller-owned ExecutionStats
@@ -107,10 +156,17 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (_ *CreateWorkflowExecutionResponse, retErr error) {
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "CreateWorkflowExecution")
+	newSnapshot := request.NewWorkflowSnapshot
+	if request.CheckRunAlreadyExists && !m.storeChecksRunAlreadyExists {
+		if err := m.assertRunNotExists(ctx, request.ShardID, archetypeID, newSnapshot.ExecutionState, newSnapshot.ExecutionInfo); err != nil {
+			return nil, err
+		}
+	}
+
 	var rollback historySizeRollback
 	defer rollback.revertOnError(&retErr)
 
-	newSnapshot := request.NewWorkflowSnapshot
 	newWorkflowXDCKVs, newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(
 		ctx,
 		request.ShardID,
@@ -141,7 +197,6 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "CreateWorkflowExecution")
 	newRequest := &InternalCreateWorkflowExecutionRequest{
 		ShardID:                  request.ShardID,
 		RangeID:                  request.RangeID,
@@ -149,6 +204,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
 		ArchetypeID:              archetypeID,
+		CheckRunAlreadyExists:    request.CheckRunAlreadyExists && m.storeChecksRunAlreadyExists,
 		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
 		NewWorkflowNewEvents:     newWorkflowNewEvents,
 	}
@@ -170,11 +226,17 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (_ *UpdateWorkflowExecutionResponse, retErr error) {
 
-	var rollback historySizeRollback
-	defer rollback.revertOnError(&retErr)
-
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	updateMutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
+	if newSnapshot != nil && request.CheckRunAlreadyExists && !m.storeChecksRunAlreadyExists {
+		if err := m.assertRunNotExists(ctx, request.ShardID, archetypeID, newSnapshot.ExecutionState, newSnapshot.ExecutionInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
 
 	updateWorkflowXDCKVs, updateWorkflowNewEvents, updateWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(
 		ctx,
@@ -229,7 +291,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}
 	}
 
-	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
 		ShardID: request.ShardID,
 		RangeID: request.RangeID,
@@ -237,6 +298,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		Mode: request.Mode,
 
 		ArchetypeID: archetypeID,
+
+		CheckRunAlreadyExists: request.CheckRunAlreadyExists && m.storeChecksRunAlreadyExists,
 
 		UpdateWorkflowMutation:  *serializedWorkflowMutation,
 		UpdateWorkflowNewEvents: updateWorkflowNewEvents,
@@ -262,6 +325,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,
@@ -433,6 +497,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,
@@ -473,11 +538,9 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
 
-	var notFound *serviceerror.NotFound
-	if errors.As(respErr, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
-		respErr = serviceerror.NewNotFoundf(
-			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID)
+		respErr = serviceerror.NewNotFoundf(workflowExecutionNotFoundMessage, request.WorkflowID, request.RunID)
 	}
 	if respErr != nil && response == nil {
 		// try to utilize resp as much as possible, for RebuildMutableState API
@@ -894,8 +957,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
 
-	var notFound *serviceerror.NotFound
-	if errors.As(respErr, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
 		respErr = serviceerror.NewNotFoundf("workflow not found for ID: %v", request.WorkflowID)
 	}

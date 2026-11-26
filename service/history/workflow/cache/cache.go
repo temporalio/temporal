@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -66,11 +67,15 @@ type (
 		nonUserContextLockTimeout time.Duration
 		// paginationLimiter limits pagination buffer size across all workflow cache contexts
 		paginationLimiter *limiter.KeyedBytesLimiter
+		testHooks         testhooks.TestHooks
 	}
+
 	cacheItem struct {
 		shardId   int32
 		wfContext historyi.WorkflowContext
 		finalizer *finalizer.Finalizer
+		// size is the size of wfContext as last measured by updateSize.
+		size atomic.Int64
 	}
 
 	Key struct {
@@ -97,6 +102,7 @@ func NewHostLevelCache(
 	config *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) Cache {
 	maxSize := config.HistoryHostLevelCacheMaxSize()
 	if config.HistoryCacheLimitSizeBased {
@@ -129,6 +135,7 @@ func NewHostLevelCache(
 		OnEvict: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
+
 			if item.finalizer != nil {
 				wfKey := item.wfContext.GetWorkflowKey()
 				err := item.finalizer.Deregister(wfKey.String())
@@ -143,17 +150,36 @@ func NewHostLevelCache(
 			// We removed the finalizer callback before it ran, so this eviction now owns clearing
 			// the context. Without this, resources it holds, for example the bytes it reserved on the
 			// shared pagination buffer limiter would leak until process restart.
+			//
+			// A refCount of zero under lru.mut means no cache caller holds or waits on this workflow lock,
+			// so TryLock must succeed. Never block here: lru.mut is held, and the normal lock order is
+			// workflow lock then lru.mut.
+			if !item.wfContext.TryLock(locks.PriorityLow) {
+				// The invariant is broken. Skip Clear rather than race with the lock holder; the
+				// context's reserved limiter bytes leak until restart.
+				wfKey := item.wfContext.GetWorkflowKey()
+				softassert.Fail(logger, "evicted workflow context is still locked",
+					tag.ComponentHistoryCache,
+					tag.WorkflowNamespaceID(wfKey.NamespaceID),
+					tag.WorkflowID(wfKey.WorkflowID),
+					tag.WorkflowRunID(wfKey.RunID),
+				)
+				return
+			}
+			defer item.wfContext.Unlock()
 			item.wfContext.Clear()
 		},
 	}
 
 	taggedHandler := handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))
 	c := cache.NewWithMetrics(maxSize, opts, taggedHandler)
-	return &cacheImpl{
+	impl := &cacheImpl{
 		Cache:                     c,
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 		paginationLimiter:         limiter.NewKeyedBytesLimiter(),
+		testHooks:                 testHooks,
 	}
+	return impl
 }
 
 func (c *cacheImpl) stop() {
@@ -285,12 +311,9 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		ShardUUID:   shardContext.GetOwner(),
 	}
 	item, cacheHit := c.Get(cacheKey).(*cacheItem)
-	var workflowCtx historyi.WorkflowContext
-	if cacheHit {
-		workflowCtx = item.wfContext
-	} else {
+	if !cacheHit {
 		metrics.CacheMissCounter.With(handler).Record(1)
-		workflowCtx = workflow.NewContext(
+		workflowCtx := workflow.NewContext(
 			shardContext.GetConfig(),
 			cacheKey.WorkflowKey,
 			archetypeID,
@@ -298,18 +321,19 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
 			c.paginationLimiter,
+			c.testHooks,
 		)
 
-		var err error
-		value := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
+		value := newCacheItem(shardContext.GetShardID(), workflowCtx, shardContext.GetFinalizer())
 		existing, err := c.PutIfNotExist(cacheKey, value)
 		if err != nil {
 			metrics.CacheFailures.With(handler).Record(1)
 			return nil, nil, err
 		}
 		//nolint:revive
-		workflowCtx = existing.(*cacheItem).wfContext
+		item = existing.(*cacheItem)
 	}
+	workflowCtx := item.wfContext
 
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
@@ -319,8 +343,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, handler, time.Now())
-
+	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, item, forceClearContext, handler, time.Now())
 	return workflowCtx, releaseFunc, nil
 }
 
@@ -359,12 +382,13 @@ func (c *cacheImpl) lockWorkflowExecution(
 func (c *cacheImpl) makeReleaseFunc(
 	cacheKey Key,
 	shardContext historyi.ShardContext,
-	wfContext historyi.WorkflowContext,
+	item *cacheItem,
 	forceClearContext bool,
 	handler metrics.Handler,
 	acquireTime time.Time,
 ) func(error) {
 
+	wfContext := item.wfContext
 	status := cacheNotReleased
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
@@ -373,15 +397,13 @@ func (c *cacheImpl) makeReleaseFunc(
 			}()
 			if rec := recover(); rec != nil {
 				wfContext.Clear()
-				wfContext.Unlock()
-				c.Release(cacheKey)
+				c.unlockAndRelease(cacheKey, item)
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					wfContext.Clear()
-					wfContext.Unlock()
-					c.Release(cacheKey)
+					c.unlockAndRelease(cacheKey, item)
 				} else {
 					isDirty := wfContext.IsDirty()
 					if isDirty {
@@ -393,8 +415,7 @@ func (c *cacheImpl) makeReleaseFunc(
 							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
 						)
 					}
-					wfContext.Unlock()
-					c.Release(cacheKey)
+					c.unlockAndRelease(cacheKey, item)
 					if isDirty {
 						panic("Cache encountered dirty mutable state transaction")
 					}
@@ -402,6 +423,16 @@ func (c *cacheImpl) makeReleaseFunc(
 			}
 		}
 	}
+}
+
+// unlockAndRelease unlocks the item's workflow context and then releases the item's cache entry.
+// The cache reads the entry's size on release. unlockAndRelease measures that size before it
+// unlocks the context, because the context's mutable state and update registry are guarded by
+// the workflow lock. The unlock and release are deferred, so they still happen if measuring panics.
+func (c *cacheImpl) unlockAndRelease(cacheKey Key, item *cacheItem) {
+	defer c.Release(cacheKey)
+	defer item.wfContext.Unlock()
+	item.updateSize()
 }
 
 func (c *cacheImpl) validateWorkflowExecutionInfo(
@@ -485,9 +516,25 @@ func GetCurrentRunID(
 	return resp.RunID, nil
 }
 
-func (c *cacheItem) CacheSize() int {
-	if sg, ok := c.wfContext.(cache.SizeGetter); ok {
-		return sg.CacheSize()
+func newCacheItem(shardID int32, wfContext historyi.WorkflowContext, fin *finalizer.Finalizer) *cacheItem {
+	item := &cacheItem{shardId: shardID, wfContext: wfContext, finalizer: fin}
+	item.updateSize()
+	return item
+}
+
+// updateSize measures the workflow context and stores the result for CacheSize. It reads the
+// context's mutable state and update registry, so it requires the workflow lock, or a context
+// that has not yet been put into the cache.
+func (c *cacheItem) updateSize() {
+	size := 0
+	if wfContext, ok := c.wfContext.(*workflow.ContextImpl); ok {
+		size = wfContext.ApproximateSize()
 	}
-	return 0
+	c.size.Store(int64(size))
+}
+
+// CacheSize returns the size stored by the last call to updateSize. It does not read the workflow
+// context, so it is safe to call without the workflow lock.
+func (c *cacheItem) CacheSize() int {
+	return int(c.size.Load())
 }

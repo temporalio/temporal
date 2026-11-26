@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -46,6 +47,17 @@ func (l *transmissionCaptureLogger) Emit(_ context.Context, record otellog.Recor
 
 func (l *transmissionCaptureLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
 	return true
+}
+
+func replicationTaskWithVisibilityTime(expected *replicationspb.ReplicationTask) gomock.Matcher {
+	return gomock.Cond(func(actual *replicationspb.ReplicationTask) bool {
+		if actual == nil || actual.GetVisibilityTime() == nil || actual.GetVisibilityTime().CheckValid() != nil {
+			return false
+		}
+		actual = proto.Clone(actual).(*replicationspb.ReplicationTask)
+		actual.VisibilityTime = nil
+		return proto.Equal(actual, expected)
+	})
 }
 
 func TestTransmissionTaskSuite(t *testing.T) {
@@ -124,7 +136,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -154,7 +166,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -162,6 +174,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -197,6 +210,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -254,6 +268,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -306,7 +321,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -335,7 +350,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -343,6 +358,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -396,7 +412,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -426,7 +442,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -434,6 +450,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -487,7 +504,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_H
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -517,7 +534,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_H
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -525,6 +542,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_H
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -580,6 +598,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -632,7 +651,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -661,7 +680,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil).Times(1)
+	})).Return(nil).Times(1)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -669,6 +688,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		true,
 		configVersion,
 		failoverVersion,
@@ -684,10 +704,232 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		info,
 		config,
 		replicationConfig,
+		replicationConfig.Clusters,
 		false,
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// The three cases below pin, at the HandleTransmissionTask level, the
+// force/deleted/gate interaction now owned entirely by the shared
+// ShouldReplicateNamespace gate (DELETED is checked ahead of forceReplicate, so
+// force cannot bypass it). Every other test in this suite passes
+// forceReplicate=false and a non-deleted state, so these are the only ones that
+// exercise the force and deleted branches end to end.
+
+// TestHandleTransmissionTask_ForceReplicate_BypassesGate: forceReplicate must
+// publish even for a non-global, single-cluster namespace that the replicate
+// gate would otherwise skip.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_ForceReplicate_BypassesGate() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "force-ns",
+		State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a"}, // non-global + single cluster: gate would skip
+	}
+
+	// Payload correctness is pinned by the other tests via the shared converter;
+	// here we only assert that forceReplicate overrides the gate and publishes.
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		replicationConfig.Clusters,
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		false, // isGlobalNamespace
+		nil,
+		true, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_ReplicationClustersDecidePublish: the publish
+// decision follows the replication clusters the caller resolved, not
+// ReplicationConfig.Clusters, and the task carries ReplicationConfig as given.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_ReplicationClustersDecidePublish() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "resolved-ns",
+		State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a"},
+	}
+
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			clusters := task.GetNamespaceTaskAttributes().GetReplicationConfig().GetClusters()
+			s.Require().Len(clusters, 1)
+			s.Equal("cluster-a", clusters[0].GetClusterName())
+			return nil
+		}).Times(1)
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		[]string{"cluster-a", "cluster-b"},
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_SingleReplicationClusterNotReplicated: a single
+// replication cluster skips publishing even when ReplicationConfig.Clusters
+// lists more. No Publish expectation is set.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_SingleReplicationClusterNotReplicated() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "resolved-ns",
+		State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		[]string{"cluster-a"},
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_ForceReplicate_DeletedNotReplicated: a DELETED
+// namespace must never be replicated, even under forceReplicate. No Publish
+// expectation is set, so controller.Finish() fails if Publish is called.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_ForceReplicate_DeletedNotReplicated() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "deleted-ns",
+		State: enumspb.NAMESPACE_STATE_DELETED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		replicationConfig.Clusters,
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		true, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_DeletedNotReplicated: a DELETED global multi-cluster
+// namespace is not replicated on the normal (non-force) path either.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_DeletedNotReplicated() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "deleted-ns",
+		State: enumspb.NAMESPACE_STATE_DELETED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		replicationConfig.Clusters,
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_SoftDeletedReplicatedWithRestoreInfo() {
+	restoreInfo := &persistencespb.NamespaceRestoreInfo{
+		RestoreId:   "restore-id",
+		HostCluster: "cluster-a",
+		State:       enumspb.NAMESPACE_RESTORE_STATE_FAILED,
+	}
+	info := &persistencespb.NamespaceInfo{
+		Id:          primitives.NewUUID().String(),
+		Name:        "soft-deleted-ns",
+		State:       enumspb.NAMESPACE_STATE_SOFT_DELETED,
+		RestoreInfo: restoreInfo,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			attributes := task.GetNamespaceTaskAttributes()
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, attributes.GetInfo().GetState())
+			s.True(proto.Equal(restoreInfo, attributes.GetRestoreInfo()))
+			return nil
+		})
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		s.T().Context(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		replicationConfig.Clusters,
+		false, // replicationClusterListUpdated
+		int64(2),
+		int64(1),
+		true, // isGlobalNamespace
 		nil,
 		false, // forceReplicate
 	)

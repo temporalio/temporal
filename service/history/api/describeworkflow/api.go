@@ -19,8 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -30,11 +29,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -67,6 +66,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	destinationThrottled chasmnexus.DestinationThrottledFn,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -102,6 +102,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -142,12 +143,13 @@ func Invoke(
 			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
-			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
-			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
-			OriginalStartTime:       startEvent.EventTime,
-			CancelRequested:         executionInfo.CancelRequested,
-			ResetRunId:              executionInfo.ResetRunId,
-			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
+			ExecutionExpirationTime:             executionInfo.WorkflowExecutionExpirationTime,
+			RunExpirationTime:                   executionInfo.WorkflowRunExpirationTime,
+			OriginalStartTime:                   startEvent.EventTime,
+			PropagatedNexusSerializationContext: startAttributes.GetPropagatedNexusSerializationContext(),
+			CancelRequested:                     executionInfo.CancelRequested,
+			ResetRunId:                          executionInfo.ResetRunId,
+			RequestIdInfos:                      make(map[string]*workflowpb.RequestIdInfo),
 		},
 	}
 
@@ -204,7 +206,7 @@ func Invoke(
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		p, err := workflow.GetPendingActivityInfo(ctx, shard, mutableState, ai)
+		p, err := workflow.GetPendingActivityInfo(ctx, mutableState, ai)
 		if err != nil {
 			return nil, err
 		}
@@ -278,13 +280,11 @@ func Invoke(
 			)
 		}
 		chasmCallbackInfos, err := buildCallbackInfosFromChasm(
-			ctx,
 			namespaceID,
 			wf,
 			chasmCtx,
 			executionInfo,
 			executionState,
-			outboundQueueCBPool,
 			shard.GetLogger(),
 		)
 		if err != nil {
@@ -342,16 +342,7 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		outboundCB := func(endpoint string) bool {
-			cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
-				TaskGroup:   nexusoperation.TaskGroupName,
-				NamespaceID: namespaceID.String(),
-				Destination: endpoint,
-			})
-			return cb.State() != gobreaker.StateClosed
-		}
-
-		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx, outboundCB)
+		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to build Nexus operation info while building describe response",
@@ -372,6 +363,7 @@ func Invoke(
 		executionInfo,
 		executionState,
 		outboundQueueCBPool,
+		destinationThrottled,
 		shard.GetLogger(),
 	)
 	if err != nil {
@@ -502,13 +494,11 @@ func buildCallbackInfosFromHSM(
 // buildCallbackInfosFromChasm reads callbacks from the CHASM workflow component and converts them to API format.
 // TODO(long-nt-tran): move this to chasm/lib/workflow/workflow.go to be within the CHASM workflow context.
 func buildCallbackInfosFromChasm(
-	ctx context.Context,
 	namespaceID namespace.ID,
 	wf *chasmworkflow.Workflow,
 	chasmCtx chasm.Context,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	logger log.Logger,
 ) ([]*workflowpb.CallbackInfo, error) {
 	result := make([]*workflowpb.CallbackInfo, 0, len(wf.Callbacks))
@@ -519,7 +509,7 @@ func buildCallbackInfosFromChasm(
 			Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
 		}
 
-		callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, trigger, outboundQueueCBPool)
+		callbackInfo, err := buildChasmCallbackInfo(chasmCtx, callback, trigger)
 		if err != nil {
 			logger.Error(
 				"failed to build callback info from CHASM callback",
@@ -550,7 +540,7 @@ func buildCallbackInfosFromChasm(
 				},
 			}
 
-			callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, trigger, outboundQueueCBPool)
+			callbackInfo, err := buildChasmCallbackInfo(chasmCtx, callback, trigger)
 			if err != nil {
 				logger.Error(
 					"failed to build callback info from CHASM update callback",
@@ -571,83 +561,30 @@ func buildCallbackInfosFromChasm(
 	return result, nil
 }
 
-// buildCallbackInfoFromChasm converts a single CHASM callback to API format.
-func buildCallbackInfoFromChasm(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	callback *chasmcallback.Callback,
-	trigger *workflowpb.CallbackInfo_Trigger,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-) (*workflowpb.CallbackInfo, error) {
-	// Create a circuit breaker state checker function
-	circuitBreakerState := func(destination string) bool {
-		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
-			TaskGroup:   callbacks.TaskTypeInvocation,
-			NamespaceID: namespaceID.String(),
-			Destination: destination,
-		})
-		return cb.State() != gobreaker.StateClosed
-	}
-
-	return buildChasmCallbackInfo(ctx, namespaceID.String(), callback, trigger, circuitBreakerState)
-}
-
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
-// Returns nil if the callback should not be included in the response.
 func buildChasmCallbackInfo(
-	ctx context.Context,
-	namespaceID string,
+	ctx chasm.Context,
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
-	circuitBreakerState func(destination string) bool,
 ) (*workflowpb.CallbackInfo, error) {
-	nexusVariant := cb.GetCallback().GetNexus()
-	if nexusVariant == nil {
-		// Only Nexus callbacks are supported
-		return nil, nil
-	}
-
-	cbSpec, err := cb.ToAPICallback()
+	// workflowpb.CallbackInfo forks rather than embeds callbackpb.CallbackInfo, so every shared
+	// field has to be copied.
+	info, err := cb.ToAPICallbackInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var state enumspb.CallbackState
-	switch cb.Status {
-	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
-		return nil, serviceerror.NewInternal("callback with UNSPECIFIED state")
-	case callbackspb.CALLBACK_STATUS_STANDBY:
-		state = enumspb.CALLBACK_STATE_STANDBY
-	case callbackspb.CALLBACK_STATUS_SCHEDULED:
-		state = enumspb.CALLBACK_STATE_SCHEDULED
-	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
-		state = enumspb.CALLBACK_STATE_BACKING_OFF
-	case callbackspb.CALLBACK_STATUS_FAILED:
-		state = enumspb.CALLBACK_STATE_FAILED
-	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
-		state = enumspb.CALLBACK_STATE_SUCCEEDED
-	default:
-		return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
-	}
-
-	blockedReason := ""
-	if state == enumspb.CALLBACK_STATE_SCHEDULED {
-		if circuitBreakerState(cbSpec.GetNexus().GetUrl()) {
-			state = enumspb.CALLBACK_STATE_BLOCKED
-			blockedReason = "The circuit breaker is open."
-		}
-	}
-
 	return &workflowpb.CallbackInfo{
-		Callback:                cbSpec,
+		Callback:                info.GetCallback(),
 		Trigger:                 trigger,
-		RegistrationTime:        cb.RegistrationTime,
-		State:                   state,
-		Attempt:                 cb.Attempt,
-		LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
-		LastAttemptFailure:      cb.LastAttemptFailure,
-		NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
-		BlockedReason:           blockedReason,
+		RegistrationTime:        info.GetRegistrationTime(),
+		State:                   info.GetState(),
+		Attempt:                 info.GetAttempt(),
+		LastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+		LastAttemptFailure:      info.GetLastAttemptFailure(),
+		NextAttemptScheduleTime: info.GetNextAttemptScheduleTime(),
+		BlockedReason:           info.GetBlockedReason(),
+		RequestId:               info.GetRequestId(),
 	}, nil
 }
 
@@ -658,8 +595,10 @@ func buildPendingNexusOperationInfosFromHSM(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	destinationThrottled chasmnexus.DestinationThrottledFn,
 	logger log.Logger,
 ) ([]*workflowpb.PendingNexusOperationInfo, error) {
+	namespaceName := mutableState.GetNamespaceEntry().Name()
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
 	result := make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
@@ -676,7 +615,7 @@ func buildPendingNexusOperationInfosFromHSM(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, namespaceName, node, op, outboundQueueCBPool, destinationThrottled)
 		if err != nil {
 			logger.Error(
 				"failed to build Nexus operation info while building describe response",
@@ -699,9 +638,11 @@ func buildPendingNexusOperationInfosFromHSM(
 
 func buildPendingNexusOperationInfo(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	node *hsm.Node,
 	op nexusoperations.Operation,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	destinationThrottled chasmnexus.DestinationThrottledFn,
 ) (*workflowpb.PendingNexusOperationInfo, error) {
 	var state enumspb.PendingNexusOperationState
 	switch op.State() {
@@ -731,10 +672,13 @@ func buildPendingNexusOperationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
+		} else if destinationThrottled != nil && destinationThrottled(namespaceName, op.Endpoint) {
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
 	}
 
-	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, node, op, outboundQueueCBPool)
+	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, namespaceName, node, op, outboundQueueCBPool, destinationThrottled)
 	if err != nil {
 		return nil, err
 	}
@@ -769,9 +713,11 @@ func buildPendingNexusOperationInfo(
 
 func buildNexusOperationCancellationInfo(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	node *hsm.Node,
 	op nexusoperations.Operation,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	destinationThrottled chasmnexus.DestinationThrottledFn,
 ) (*workflowpb.NexusOperationCancellationInfo, error) {
 	cancelation, err := op.Cancelation(node)
 	if err != nil {
@@ -792,6 +738,9 @@ func buildNexusOperationCancellationInfo(
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
+		} else if destinationThrottled != nil && destinationThrottled(namespaceName, op.Endpoint) {
+			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			blockedReason = "Requests from this namespace to the endpoint are being rate limited."
 		}
 	}
 

@@ -284,14 +284,34 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 		s.Equal(int64(2), resp.GetCount())
 	}
 
-	// Count all workers including system workers
+	// Count all workers including system workers. The cluster's own per-namespace worker may also
+	// heartbeat into this namespace, so the total is at least our 3 workers rather than exactly 3.
 	{
 		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
 			Namespace:            env.Namespace().String(),
 			IncludeSystemWorkers: true,
 		})
 		s.NoError(err)
-		s.Equal(int64(3), resp.GetCount())
+		s.GreaterOrEqual(resp.GetCount(), int64(3))
+	}
+
+	// Our system worker is counted only when system workers are included
+	{
+		sysWorkerQuery := fmt.Sprintf("WorkerInstanceKey='%s'", sysWorkerKey)
+		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace:            env.Namespace().String(),
+			Query:                sysWorkerQuery,
+			IncludeSystemWorkers: true,
+		})
+		s.NoError(err)
+		s.Equal(int64(1), resp.GetCount())
+
+		resp, err = env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace: env.Namespace().String(),
+			Query:     sysWorkerQuery,
+		})
+		s.NoError(err)
+		s.Equal(int64(0), resp.GetCount())
 	}
 
 	// Count with query filter

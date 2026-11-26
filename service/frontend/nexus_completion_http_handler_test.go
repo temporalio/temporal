@@ -14,8 +14,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/nexusworkflowref"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -200,4 +200,31 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCompleteChasmOperation_CanceledBareFailure guards bare canceled failures
+// on the CHASM async completion path.
+func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+	var captured *historyservice.CompleteNexusOperationChasmRequest
+	client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *historyservice.CompleteNexusOperationChasmRequest, _ ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+			captured = req
+			return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+		})
+
+	h := &nexusCompletionHandler{HistoryClient: client}
+	req := &nexusrpc.CompletionRequest{
+		State: nexus.OperationStateCanceled,
+		Error: &nexus.OperationError{
+			State:           nexus.OperationStateCanceled,
+			OriginalFailure: &nexus.Failure{Message: "operation canceled"},
+		},
+	}
+	require.NoError(t, h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil))
+	require.NotNil(t, captured.GetFailure().GetCanceledFailureInfo(),
+		"bare canceled failures must carry CanceledFailureInfo")
 }

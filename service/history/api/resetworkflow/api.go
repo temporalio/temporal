@@ -43,7 +43,7 @@ func Invoke(
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 
-	if rl := shardContext.BusinessIDReuseRateLimiter(namespaceID, workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
+	if rl := shardContext.BusinessIDReuseRateLimiter(namespace.Name(request.GetNamespace()), workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
 		archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(chasm.WorkflowArchetypeID)
 		metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
 			1,
@@ -177,6 +177,11 @@ func Invoke(
 	}
 
 	allowResetWithPendingChildren := shardContext.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
+	// TODO: Remove EnableResetWorkflowRequestIDDeduplication once stable.
+	var resetRequestID string
+	if shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceEntry.Name().String()) {
+		resetRequestID = request.GetRequestId()
+	}
 	if err := ndc.NewWorkflowResetter(
 		shardContext,
 		workflowConsistencyChecker.GetWorkflowCache(),
@@ -191,6 +196,7 @@ func Invoke(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		resetRequestID,
 		baseWorkflow,
 		currentWorkflow,
 		request.GetReason(),

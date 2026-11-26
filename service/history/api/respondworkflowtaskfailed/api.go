@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -76,13 +77,21 @@ func Invoke(
 				}, nil
 			}
 
-			metrics.FailedWorkflowTasksCounter.With(shardContext.GetMetricsHandler()).Record(
-				1,
-				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),
-				metrics.NamespaceTag(namespaceEntry.Name().String()),
-				metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()),
-				metrics.FailureTag(request.GetCause().String()),
-				metrics.FirstAttemptTag(workflowTask.Attempt),
+			wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions())
+			workflow.RecordWorkflowTaskFailedMetrics(
+				shardContext.GetConfig(),
+				shardContext.GetMetricsHandler(),
+				namespaceEntry.Name(),
+				mutableState.GetExecutionInfo().GetTaskQueue(),
+				metrics.HistoryRespondWorkflowTaskFailedScope,
+				request.GetCause().String(),
+				workflow.WorkflowTaskCompletionMetrics{
+					VersioningInfo: workflow.VersioningMetricContext{
+						Behavior:          mutableState.GetEffectiveVersioningBehavior(),
+						DeploymentVersion: wftDeploymentVersion,
+					},
+					Attempt: workflowTask.Attempt,
+				},
 			)
 
 			if request.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE {

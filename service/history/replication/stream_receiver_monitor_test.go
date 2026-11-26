@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -37,6 +38,7 @@ type (
 		clientBean      *client.MockBean
 		shardController *shard.MockController
 
+		processToolBox        ProcessToolBox
 		streamReceiverMonitor *StreamReceiverMonitorImpl
 	}
 )
@@ -74,6 +76,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 		Logger:          log.NewNoopLogger(),
 		DLQWriter:       NoopDLQWriter{},
 	}
+	s.processToolBox = processToolBox
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
@@ -655,6 +658,7 @@ func (s *streamReceiverMonitorSuite) TestGenerateStatusMap_Success() {
 }
 
 func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus() {
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some cluster name").AnyTimes()
 	keyPair := &ClusterShardKeyPair{
 		Client: NewClusterShardKey(2, 1),
 		Server: NewClusterShardKey(1, 1),
@@ -735,4 +739,68 @@ func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus() {
 		},
 	),
 	)
+}
+
+func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus_StuckMetricUsesClusterNames() {
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(1)).Return("server-cluster").AnyTimes()
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("client-cluster").AnyTimes()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamReceiverMonitor.MetricsHandler = metricsHandler
+
+	s.False(s.streamReceiverMonitor.evaluateSingleStreamConnection(
+		&ClusterShardKeyPair{
+			Client: NewClusterShardKey(2, 1),
+			Server: NewClusterShardKey(1, 1),
+		},
+		&streamStatus{defaultAckLevel: 50, maxReplicationTaskId: 1000},
+		&streamStatus{defaultAckLevel: 50, maxReplicationTaskId: 500},
+	))
+
+	recordings := capture.Snapshot()[metrics.ReplicationStreamStuck.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal("server-cluster", recordings[0].Tags["from_cluster"])
+	s.Equal("client-cluster", recordings[0].Tags["to_cluster"])
+}
+
+func (s *streamReceiverMonitorSuite) TestMonitorStreamStatus_RecoversPanic() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
+			ShardCount:             1,
+		},
+		cluster.TestAlternativeClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestAlternativeClusterInitialFailoverVersion,
+			ShardCount:             1,
+		},
+	}).AnyTimes()
+	s.shardController.EXPECT().ShardIDs().Return([]int32{1}).AnyTimes()
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByID(int32(1)).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	// Nil ack manager, as in an engine created with global namespace disabled.
+	engine.EXPECT().GetMaxReplicationTaskInfo().DoAndReturn(func() (int64, time.Time) {
+		var ackMgr AckManager
+		return ackMgr.GetMaxTaskInfo()
+	})
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamReceiverMonitor.MetricsHandler = metricsHandler
+
+	s.NotPanics(s.streamReceiverMonitor.monitorStreamStatus)
+	s.Len(capture.Snapshot()[metrics.ReplicationStreamPanic.Name()], 1)
+}
+
+func (s *streamReceiverMonitorSuite) TestStreamReceiverMonitorProvider_GlobalNamespace() {
+	for _, globalNamespaceEnabled := range []bool{true, false} {
+		s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(globalNamespaceEnabled)
+		monitor := streamReceiverMonitorProvider(s.processToolBox, NewExecutableTaskConverter(s.processToolBox))
+		s.Equal(globalNamespaceEnabled, monitor.(*StreamReceiverMonitorImpl).enableStreaming)
+	}
 }
