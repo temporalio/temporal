@@ -61,12 +61,14 @@ func (p *plugin) CreateDB(
 	logger log.Logger,
 	_ metrics.Handler,
 ) (sqlplugin.GenericDB, error) {
-	conn, err := p.connPool.Allocate(cfg, r, logger, p.createDBConnection)
+	conn, release, err := p.connPool.acquire(cfg, func(dsn string) (*sqlx.DB, error) {
+		return p.createDBConnection(cfg, r, logger, dsn)
+	})
 	if err != nil {
 		return nil, err
 	}
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil, logger)
-	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
+	db.release = release
 	return db, nil
 }
 
@@ -78,12 +80,8 @@ func (p *plugin) createDBConnection(
 	cfg *config.SQL,
 	_ resolver.ServiceResolver,
 	logger log.Logger,
+	dsn string,
 ) (*sqlx.DB, error) {
-	dsn, err := buildDSN(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("error building DSN: %w", err)
-	}
-
 	db, err := sqlx.Connect(goSQLDriverName, dsn)
 	if err != nil {
 		return nil, err
@@ -163,9 +161,6 @@ func (p *plugin) setupSQLiteDatabase(cfg *config.SQL, conn *sqlx.DB, logger log.
 }
 
 func buildDSN(cfg *config.SQL) (string, error) {
-	if cfg.ConnectAttributes == nil {
-		cfg.ConnectAttributes = make(map[string]string)
-	}
 	vals, err := buildDSNAttr(cfg)
 	if err != nil {
 		return "", err
