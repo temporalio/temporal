@@ -28,7 +28,7 @@ import (
 //
 //	pending   = max(0, bufferedCount - retainedActionCount)
 //	available = max(0, maxBufferSize/2 - pending - generatorReserve)
-//	result    = available / max(1, backfillerCount)
+//	result    = min(available, max(1, available / max(1, backfillerCount)))
 func TestBackfillerBufferCapacity(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -77,7 +77,7 @@ func TestBackfillerBufferCapacity(t *testing.T) {
 		{"single backfiller gets the whole remainder", 0, 0, 1000, 50, 1, 450},
 		{"ten backfillers each get an even share (regression)", 0, 0, 1000, 50, 10, 45},
 		{"backfillers exactly dividing remainder get one each", 0, 0, 1000, 50, 450, 1},
-		{"more backfillers than remainder truncate to zero", 0, 0, 1000, 50, 451, 0},
+		{"more backfillers than remainder still progress", 0, 0, 1000, 50, 451, 1},
 		{"zero backfillers are clamped to one", 0, 0, 1000, 50, 0, 450},
 		{"negative backfillers are clamped to one", 0, 0, 1000, 50, -3, 450},
 	}
