@@ -11,3 +11,8 @@ func NewServerWithListLimit(registry *failpoint.Registry, limit int, opts ...Ser
 	s.listLimit = limit
 	return s
 }
+
+// WithListLimit sets the limit, in bytes, on the response of ListFailpoints of a fan-out.
+func WithListLimit(limit int) FanOutOption {
+	return func(f *fanOut) { f.listLimit = limit }
+}
