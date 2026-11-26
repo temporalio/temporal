@@ -749,6 +749,90 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
 
+// TestReadthroughByNameReturnsPersistenceError verifies that a transient persistence
+// failure during read-through (e.g. a timeout) is surfaced to the caller instead of
+// being misreported as NamespaceNotFound, and that it does not poison the not-found cache.
+func (s *registrySuite) TestReadthroughByNameReturnsPersistenceError() {
+	// registry start will refresh once
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: nil,
+	}, nil)
+
+	name := namespace.Name("foo")
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: name.String(),
+	}).Return(nil, context.DeadlineExceeded)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	ns, err := s.registry.GetNamespace(name)
+	s.Nil(ns)
+	s.ErrorIs(err, context.DeadlineExceeded)
+	s.NotErrorAs(err, new(*serviceerror.NamespaceNotFound))
+
+	// A transient error must not be cached as not-found: the next read-through hits
+	// persistence again and succeeds once the store recovers.
+	id := namespace.NewID()
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: name.String(),
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: name.String(),
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+
+	ns, err = s.registry.GetNamespace(name)
+	s.NoError(err)
+	s.Equal(name, ns.Name())
+}
+
+// TestReadthroughByIDReturnsPersistenceError is the by-ID counterpart of
+// TestReadthroughByNameReturnsPersistenceError.
+func (s *registrySuite) TestReadthroughByIDReturnsPersistenceError() {
+	// registry start will refresh once
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: nil,
+	}, nil)
+
+	id := namespace.NewID()
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}).Return(nil, context.DeadlineExceeded)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	ns, err := s.registry.GetNamespaceByID(id)
+	s.Nil(ns)
+	s.ErrorIs(err, context.DeadlineExceeded)
+	s.NotErrorAs(err, new(*serviceerror.NamespaceNotFound))
+
+	// A transient error must not be cached as not-found: the next read-through hits
+	// persistence again and succeeds once the store recovers.
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+
+	ns, err = s.registry.GetNamespaceByID(id)
+	s.NoError(err)
+	s.Equal(namespace.Name("foo"), ns.Name())
+}
+
 // TestNamespaceRename validates that when a namespace is renamed via the
 // background refresh loop (refreshNamespaces), the old name no longer resolves
 // and the new name resolves correctly. This tests that stale name->ID mappings

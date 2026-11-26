@@ -854,9 +854,11 @@ func (r *registry) getNamespaceByNamePersistence(name namespace.Name) (*namespac
 	if err != nil {
 		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
 			r.readthroughNotFoundCache.Put(name.String(), struct{}{})
+			return nil, serviceerror.NewNamespaceNotFound(name.String())
 		}
-		// TODO: we should return the actual error we got (e.g. timeout)
-		return nil, serviceerror.NewNamespaceNotFound(name.String())
+		// Return the actual persistence error (e.g. timeout, unavailable) so callers can
+		// retry instead of incorrectly treating the namespace as missing.
+		return nil, err
 	}
 	return ns, nil
 }
@@ -870,9 +872,11 @@ func (r *registry) getNamespaceByIDPersistence(id namespace.ID) (*namespace.Name
 	if err != nil {
 		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
 			r.readthroughNotFoundCache.Put(id.String(), struct{}{})
+			return nil, serviceerror.NewNamespaceNotFound(id.String())
 		}
-		// TODO: we should return the actual error we got (e.g. timeout)
-		return nil, serviceerror.NewNamespaceNotFound(id.String())
+		// Return the actual persistence error (e.g. timeout, unavailable) so callers can
+		// retry instead of incorrectly treating the namespace as missing.
+		return nil, err
 	}
 	return ns, nil
 }
