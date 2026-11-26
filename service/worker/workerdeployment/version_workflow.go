@@ -72,9 +72,9 @@ type (
 // history events are added to it and it has no pending work to do. This is to keep the
 // history clean so that we have less concern about backwards and forwards compatibility.
 // In steady state (i.e. absence of ongoing updates or signals) the wf should only have
-// a single wft in the history. For draining versions, the workflow history should only
-// have a single wft in history followed by a scheduled timer for refreshing drainage
-// info.
+// a single wft in the history. For draining versions, the drainage-refresh-loop refreshes
+// drainage info in-place in the current run until ContinueAsNewSuggested is set, the
+// version is deleted, forceCAN is signaled, or the drainage status leaves draining.
 func VersionWorkflow(
 	ctx workflow.Context,
 	unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion,
