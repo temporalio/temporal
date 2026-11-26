@@ -2,7 +2,9 @@ package metrics
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -79,7 +81,10 @@ func NewOpenTelemetryProviderWithPrometheus(
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err
 	}
-	metricServer := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
+	metricServer, err := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
+	if err != nil {
+		return nil, err
+	}
 	return newOpenTelemetryProvider(logger, exporter, nil, nil, prometheusConfig, metricServer, clientConfig)
 }
 
@@ -126,7 +131,7 @@ func initPrometheusListener(
 	reg *prometheus.Registry,
 	logger log.Logger,
 	fatalOnListenerError bool,
-) *http.Server {
+) (*http.Server, error) {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
 		handlerPath = "/metrics"
@@ -139,9 +144,24 @@ func initPrometheusListener(
 		logger.Fatal("Listen address must be specified.", tag.Address(config.ListenAddress))
 	}
 	server := &http.Server{Addr: config.ListenAddress, Handler: handler}
+	if config.TLS != nil {
+		cert, err := tls.LoadX509KeyPair(config.TLS.CertFile, config.TLS.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load prometheus tls certificate: %w", err)
+		}
+		server.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
 
 	go func() {
-		err := server.ListenAndServe()
+		var err error
+		if server.TLSConfig != nil {
+			err = server.ListenAndServeTLS("", "")
+		} else {
+			err = server.ListenAndServe()
+		}
 		if errors.Is(err, http.ErrServerClosed) {
 			return
 		}
@@ -156,7 +176,7 @@ func initPrometheusListener(
 		}
 	}()
 
-	return server
+	return server, nil
 }
 
 func (r *openTelemetryProviderImpl) GetMeter() metric.Meter {
