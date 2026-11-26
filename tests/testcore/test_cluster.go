@@ -79,6 +79,8 @@ type (
 		TokenProvider             auth.TokenProvider
 		TLSConfigProvider         *encryption.FixedTLSConfigProvider
 		AdditionalServerOptions   []temporal.ServerOption
+		// Buggify is the failpoints.buggify block of the static config of the servers.
+		Buggify config.FailpointsBuggify
 	}
 
 	TestClusterFactory interface {
@@ -300,6 +302,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: clusterConfig.SpanExporters,
 		},
+		Failpoints: config.Failpoints{Buggify: clusterConfig.Buggify},
 	}
 
 	if clusterConfig.EnableArchival {

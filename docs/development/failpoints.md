@@ -69,9 +69,37 @@ failpoints:
   buggify:
     seed: 42     # A positive number enables BUGGIFY and needs keys; 0 or absent leaves it off.
     trace: true  # Print one line per decision, see "BUGGIFY trace". Default false.
-    keys:        # The allowlist.
+    keys:        # The allowlist, see below; the standard list is further down.
       - {match: "dynamicconfig:*", activationProbability: 0.25, fireProbability: 0.25}
 ```
+
+The standard list is the one that test clusters of the repository use when they pass
+`testcore.StandardBuggifyKeys()` to `testcore.WithBuggify`. Copy the standard list into your server
+config:
+
+<!-- standardBuggifyKeys: testcore.StandardBuggifyKeys has the same entries, a test compares them. -->
+```yaml
+failpoints:
+  enabled: true
+  buggify:
+    seed: 42
+    keys:
+      # A narrow entry comes before the broad one that would match it: health checks are never failed.
+      - {match: "grpc:/grpc.health.v1.Health/*", activationProbability: 0, fireProbability: 0}
+      # Calls between services: 10% of the methods are activated, 1% of their executions fire.
+      - {match: "grpc:*", activationProbability: 0.1, fireProbability: 0.01, error: Unavailable}
+      - {match: "http:*", activationProbability: 0.1, fireProbability: 0.01, error: Unavailable}
+      # Hand-placed keys, which take the branch of their buggify.Fires call site.
+      - {match: "matching.skipSyncMatch", activationProbability: 0.25, fireProbability: 0.25}
+      # Dynamic config settings that BuggifiableSettings lists: 25% of them get another value.
+      - {match: "dynamicconfig:*", activationProbability: 0.25, fireProbability: 0.25}
+```
+
+Test clusters run BUGGIFY only if their test asks for it, with `testcore.WithBuggify`, which sets
+the `failpoints.buggify` block of the cluster's servers (`Keys: testcore.StandardBuggifyKeys()` for
+the standard list). It gives the test a dedicated cluster, since BUGGIFY applies to the whole
+cluster. A suite that owns its clusters, such as an XDC suite, passes
+`testcore.WithClusterBuggify` to its setup instead.
 
 ### BUGGIFY trace
 

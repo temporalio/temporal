@@ -107,6 +107,8 @@ type (
 		EnableArchival            bool
 		SpanExporter              sdktrace.SpanExporter
 		AdditionalServerOptions   []temporal.ServerOption
+		// Buggify is the failpoints.buggify block of the static config of the servers.
+		Buggify config.FailpointsBuggify
 	}
 	TestClusterOption func(params *testClusterParams)
 )
@@ -324,6 +326,7 @@ func (s *functionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableReplicationRecorder: params.EnableReplicationRecorder,
 		EnableArchival:            params.EnableArchival,
 		AdditionalServerOptions:   params.AdditionalServerOptions,
+		Buggify:                   params.Buggify,
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 	if params.SpanExporter != nil {

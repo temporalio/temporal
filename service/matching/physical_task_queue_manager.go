@@ -645,14 +645,16 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	return c.matcher.Offer(ctx, task)
 }
 
-// skipSyncMatch reports whether a failpoint makes matching skip the sync match of a task that
-// history added. A failpoint matches the namespace by its ID.
-func skipSyncMatch(source *failpoint.Registry, nsID namespace.ID, _ namespace.Name) bool {
+// skipSyncMatch reports whether a failpoint (or the registry's policy, such as BUGGIFY) makes
+// matching skip the sync match of a task that history added. A registered failpoint matches the
+// namespace by its ID; the policy decides in the scope of the namespace name, so a namespace that
+// is recreated with the same name and the same seed gets the same decisions.
+func skipSyncMatch(source *failpoint.Registry, nsID namespace.ID, nsName namespace.Name) bool {
 	// The source is nil unless failpoints are enabled; without it no key is built.
 	if source == nil {
 		return false
 	}
-	return failpoint.ExecuteSwitch(source, SkipSyncMatchKey.ForScope(nsID.String()))
+	return failpoint.ExecuteSwitchWithPolicyScope(source, SkipSyncMatchKey.ForScope(nsID.String()), nsName.String())
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

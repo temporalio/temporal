@@ -2,18 +2,68 @@ package tests
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 )
+
+// TestBuggify runs a dedicated cluster with BUGGIFY enabled via the static config and verifies that
+// matching.SkipSyncMatchKey is activated and fires deterministically, and that an explicit
+// failpoint takes precedence over BUGGIFY.
+func TestBuggify(t *testing.T) {
+	t.Parallel()
+	probability := func(p float64) *float64 { return &p }
+	static := config.FailpointsBuggify{
+		Seed: 42,
+		Keys: []config.FailpointsBuggifyKey{
+			{Match: matching.SkipSyncMatchKey.Name(), ActivationProbability: probability(1), FireProbability: probability(1)},
+		},
+	}
+	env := testcore.NewEnv(t, testcore.WithBuggify(static))
+	registry := testcore.FailpointRegistry(env.GetTestCluster())
+	b, ok := registry.Policy().(*buggify.Buggify)
+	require.True(t, ok)
+
+	var mu sync.Mutex
+	activations := map[string]bool{}
+	fires := map[string]int{}
+	b.OnDecision(func(e buggify.Event) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch e.Kind {
+		case buggify.EventActivation:
+			activations[e.Name] = e.Activated
+		case buggify.EventFire:
+			fires[e.Name]++
+		default:
+		}
+	})
+	t.Cleanup(func() { b.OnDecision(nil) })
+
+	completeWorkflows(t, env)
+
+	await.Require(t.Context(), t, func(t *await.T) {
+		mu.Lock()
+		defer mu.Unlock()
+		require.True(t, activations[matching.SkipSyncMatchKey.Name()])
+		require.Positive(t, fires[matching.SkipSyncMatchKey.Name()])
+	}, 10*time.Second, 100*time.Millisecond)
+}
 
 // completeWorkflows runs a few workflows with timers and an activity on the SDK worker of env,
 // which polls sticky task queues, and waits for them to complete.
@@ -74,4 +124,28 @@ func TestSkipSyncMatch(t *testing.T) {
 	})
 
 	completeWorkflows(t, env)
+}
+
+// TestBuggifiableSettings completes workflows with each value that BUGGIFY picks for its settings,
+// to check that the values are legal in every deployment.
+func TestBuggifiableSettings(t *testing.T) {
+	t.Parallel()
+	buggifiable := serverbuggify.BuggifiableSettings()
+	settings := []dynamicconfig.GenericSetting{
+		dynamicconfig.MatchingMaxTaskBatchSize,
+		dynamicconfig.TimerTaskBatchSize,
+		dynamicconfig.TransferTaskBatchSize,
+	}
+	require.Len(t, buggifiable, len(settings), "add the new buggifiable setting to this test")
+	for _, setting := range settings {
+		values, ok := buggifiable[setting.Key()]
+		require.True(t, ok, setting.Key())
+		for _, value := range values {
+			t.Run(fmt.Sprintf("%s=%v", setting.Key(), value), func(t *testing.T) {
+				t.Parallel()
+				env := testcore.NewEnv(t, testcore.WithDynamicConfig(setting, value))
+				completeWorkflows(t, env)
+			})
+		}
+	}
 }

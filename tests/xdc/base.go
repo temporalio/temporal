@@ -151,6 +151,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			DCRedirectionPolicy:       params.DCRedirectionPolicy,
 			EnableArchival:            params.EnableArchival,
 			AdditionalServerOptions:   params.AdditionalServerOptions,
+			Buggify:                   params.Buggify,
 			EnableMetricsCapture:      true,
 			EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
 			EnableReplicationRecorder: params.EnableReplicationRecorder,

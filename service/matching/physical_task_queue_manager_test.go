@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/testx/failpoint"
+	"go.temporal.io/testx/failpoint/buggify"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1334,4 +1335,40 @@ func TestSkipSyncMatch(t *testing.T) {
 	require.True(t, skipSyncMatch(forced, "ns-id", "ns"))
 	require.False(t, skipSyncMatch(forced, "other-ns-id", "ns"))
 	require.False(t, skipSyncMatch(forced, "ns-id-of-another-name", "other"))
+}
+
+func TestSkipSyncMatch_BuggifyDecidesByNamespaceName(t *testing.T) {
+	t.Parallel()
+
+	// decisions returns whether each of 40 tasks skips the sync match, on a registry of its own with
+	// the same seed.
+	decisions := func(nsID namespace.ID, nsName namespace.Name) []bool {
+		registry := failpoint.NewRegistry()
+		b := buggify.New(registry)
+		require.NoError(t, b.Set(buggify.Config{Seed: 5, Keys: []buggify.Key{
+			{Match: SkipSyncMatchKey.Name(), ActivationProbability: 1, FireProbability: 0.5},
+		}}))
+		var skipped []bool
+		for range 40 {
+			skipped = append(skipped, skipSyncMatch(registry, nsID, nsName))
+		}
+		return skipped
+	}
+
+	byName := decisions("ns-id", "ns")
+	require.Contains(t, byName, true)
+	require.Contains(t, byName, false)
+	// A namespace that is recreated with the same name has another ID.
+	require.Equal(t, byName, decisions("recreated-ns-id", "ns"))
+	require.NotEqual(t, byName, decisions("ns-id", "other"))
+
+	// A failpoint of the namespace ID still decides instead of BUGGIFY.
+	registry := failpoint.NewRegistry()
+	b := buggify.New(registry)
+	require.NoError(t, b.Set(buggify.Config{Seed: 5, Keys: []buggify.Key{
+		{Match: SkipSyncMatchKey.Name(), ActivationProbability: 1, FireProbability: 1},
+	}}))
+	registry.Set(failpoint.NewFailpoint(SkipSyncMatchKey.ForScope("ns-id")))
+	require.False(t, skipSyncMatch(registry, "ns-id", "ns"), "a failpoint without an action suppresses BUGGIFY")
+	require.True(t, skipSyncMatch(registry, "recreated-ns-id", "ns"))
 }
