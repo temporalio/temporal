@@ -9,6 +9,8 @@ type (
 	FaultInjectionDataStoreFactory struct {
 		baseFactory persistence.DataStoreFactory
 		fiConfig    *config.FaultInjection
+		// injectors are the runtime injectors: the one of fiConfig, then those that the caller passed.
+		injectors []config.FaultInjector
 
 		taskStore          persistence.TaskStore
 		fairTaskStore      persistence.TaskStore
@@ -25,10 +27,15 @@ type (
 func NewFaultInjectionDatastoreFactory(
 	fiConfig *config.FaultInjection,
 	baseFactory persistence.DataStoreFactory,
+	injectors ...config.FaultInjector,
 ) *FaultInjectionDataStoreFactory {
+	if fiConfig == nil {
+		fiConfig = &config.FaultInjection{}
+	}
 	return &FaultInjectionDataStoreFactory{
 		baseFactory: baseFactory,
 		fiConfig:    fiConfig,
+		injectors:   append([]config.FaultInjector{fiConfig.Injector}, injectors...),
 	}
 }
 
@@ -202,5 +209,5 @@ func (d *FaultInjectionDataStoreFactory) storeFaultInjector(storeName config.Dat
 	if !ok {
 		storeConfig = config.FaultInjectionDataStoreConfig{}
 	}
-	return newStoreFaultInjector(storeName, &storeConfig, d.fiConfig.Injector)
+	return newStoreFaultInjector(storeName, &storeConfig, d.injectors...)
 }

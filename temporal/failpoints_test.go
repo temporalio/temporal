@@ -4,16 +4,52 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/failpointadapter"
 	"go.temporal.io/server/common/testing/grpcfailpoints"
 	"go.temporal.io/server/common/testing/httpfailpoints"
 	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
+
+// fakeDataStoreFactory is the data store factory of a custom data store.
+type fakeDataStoreFactory struct {
+	persistence.DataStoreFactory
+}
+
+type fakeAbstractDataStoreFactory struct {
+	created *fakeDataStoreFactory
+}
+
+func (f fakeAbstractDataStoreFactory) NewFactory(
+	config.CustomDatastoreConfig, resolver.ServiceResolver, string, log.Logger, metrics.Handler, serialization.Serializer,
+) persistence.DataStoreFactory {
+	return f.created
+}
+
+func newDataStoreFactory(registry *failpoint.Registry) (persistence.DataStoreFactory, *fakeDataStoreFactory) {
+	created := &fakeDataStoreFactory{}
+	cfg := &config.Persistence{
+		DefaultStore: "custom",
+		DataStores:   map[string]config.DataStore{"custom": {CustomDataStoreConfig: &config.CustomDatastoreConfig{Name: "custom"}}},
+	}
+	factory := persistenceclient.DataStoreFactoryProvider(
+		"cluster", resolver.NewNoopResolver(), cfg, fakeAbstractDataStoreFactory{created: created},
+		log.NewNoopLogger(), metrics.NoopMetricsHandler, telemetry.NoopTracerProvider, nil, registry,
+	)
+	return factory, created
+}
 
 // TestFailpointRegistryStartupSwitch checks that only the failpoints.enabled config setting enables failpoints,
 // that the server warns when it does, and that it says nothing otherwise.
@@ -53,8 +89,8 @@ func TestFailpointRegistryStartupSwitch(t *testing.T) {
 	}
 }
 
-// TestFailpointsGenerators checks that transport fault generators are only installed
-// when failpoints are enabled.
+// TestFailpointsGenerators checks that the gRPC fault interceptor, the HTTP fault wrapper and the
+// persistence failpoint injector are only installed if failpoints are enabled.
 func TestFailpointsGenerators(t *testing.T) {
 	t.Parallel()
 
@@ -72,6 +108,9 @@ func TestFailpointsGenerators(t *testing.T) {
 
 			require.Equal(t, tc.want, grpcfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}, false) != nil)
 			require.Equal(t, tc.want, httpfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}) != nil)
+			factory, created := newDataStoreFactory(registry)
+			require.Equal(t, tc.want, factory != created, "the persistence factory is wrapped for failpoints")
+
 		})
 	}
 }
