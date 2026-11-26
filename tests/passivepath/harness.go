@@ -27,12 +27,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication"
 	historytasks "go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 // BailReason records why a write was not diverted through the passive path.
@@ -45,8 +47,6 @@ const (
 	// BailNewRun is an incomplete or non-active update-with-new request. Supported
 	// active continue-as-new requests are diverted together with their successor run.
 	BailNewRun BailReason = "new-run"
-	// BailUpdateMode is an update mode other than UpdateCurrent (e.g. zombie workflows).
-	BailUpdateMode BailReason = "update-mode"
 	// BailNoTransitionHistory means transition history is empty, so there is nothing to
 	// anchor an artifact to. Requires dynamicconfig.EnableTransitionHistory.
 	BailNoTransitionHistory BailReason = "no-transition-history"
@@ -88,9 +88,16 @@ type Harness struct {
 
 	workflows         map[definition.WorkflowKey]struct{}
 	expectedTasks     map[definition.WorkflowKey]map[historytasks.Category][]historytasks.Task
+	expectedStates    map[definition.WorkflowKey]expectedMutableState
 	allowedExtraTasks map[string]struct{}
 	standbyExecutions int
 	compareTasks      bool
+	forceSnapshots    bool
+}
+
+type expectedMutableState struct {
+	state             *persistencespb.WorkflowMutableState
+	rebuiltFromEvents bool
 }
 
 // Intercepted is the number of workflow updates observed by the test hook.
@@ -121,9 +128,45 @@ func NewHarness(logger log.Logger) *Harness {
 		bailouts:          make(map[BailReason]int),
 		workflows:         make(map[definition.WorkflowKey]struct{}),
 		expectedTasks:     make(map[definition.WorkflowKey]map[historytasks.Category][]historytasks.Task),
+		expectedStates:    make(map[definition.WorkflowKey]expectedMutableState),
 		allowedExtraTasks: make(map[string]struct{}),
 		compareTasks:      true,
 	}
+}
+
+func (h *Harness) expectPassiveState(
+	workflowKey definition.WorkflowKey,
+	state *persistencespb.WorkflowMutableState,
+	rebuiltFromEvents bool,
+) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.expectedStates[workflowKey] = expectedMutableState{
+		state:             proto.Clone(state).(*persistencespb.WorkflowMutableState),
+		rebuiltFromEvents: rebuiltFromEvents,
+	}
+}
+
+func (h *Harness) comparePassiveState(
+	workflowKey definition.WorkflowKey,
+	state *persistencespb.WorkflowMutableState,
+) error {
+	h.mu.Lock()
+	expected, ok := h.expectedStates[workflowKey]
+	if ok {
+		delete(h.expectedStates, workflowKey)
+	}
+	h.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	if diff := mutableStateDiffWithOptions(expected.state, state, expected.rebuiltFromEvents); diff != "" {
+		return fmt.Errorf(
+			"passivepath: active/passive mutable state differs for %s (-active +passive):\n%s",
+			workflowKey.String(), diff,
+		)
+	}
+	return nil
 }
 
 func (h *Harness) AllowPassiveOnlyTaskTypes(taskTypes ...string) {
@@ -138,6 +181,25 @@ func (h *Harness) DisableTaskComparison() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.compareTasks = false
+}
+
+// ForceSnapshotReplication makes every diverted update replicate a full mutable-state
+// snapshot instead of the smallest mutation available from the transition history.
+func (h *Harness) ForceSnapshotReplication() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.forceSnapshots = true
+}
+
+func (h *Harness) artifactStartTransition(
+	exclusiveStart *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.forceSnapshots {
+		return nil
+	}
+	return exclusiveStart
 }
 
 func (h *Harness) expectPassiveTasks(
@@ -324,7 +386,7 @@ func (h *Harness) recordIntercepted() {
 // newRetriever builds a SyncStateRetriever for artifact construction.
 //
 // workflowCache, workflowConsistencyChecker and eventBlobCache are nil because the
-// mutation-only path neither takes another lease nor reads already-persisted events.
+// in-memory path neither takes another lease nor reads already-persisted events.
 func (h *Harness) newRetriever(shardContext historyi.ShardContext) replication.SyncStateRetriever {
 	return replication.NewSyncStateRetriever(shardContext, nil, nil, nil, h.logger)
 }

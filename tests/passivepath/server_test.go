@@ -26,6 +26,7 @@ import (
 //	PASSIVEPATH_SERVER    must be "1"
 //	PASSIVEPATH_DURATION  how long to stay up (default 10m)
 //	PASSIVEPATH_NAMESPACE global namespace to pre-create (default "default")
+//	PASSIVEPATH_FORCE_SNAPSHOT set to "1" to replicate a full snapshot on every update
 //	PASSIVEPATH_ADDR_FILE file to write the frontend address to (default
 //	                      /tmp/passivepath_frontend_addr)
 //
@@ -54,6 +55,9 @@ func TestPassivePathServer(t *testing.T) {
 	}
 	logger := log.NewNoopLogger() // server logs would drown the stats output
 	harness := NewHarness(logger)
+	if os.Getenv("PASSIVEPATH_FORCE_SNAPSHOT") == "1" {
+		harness.ForceSnapshotReplication()
+	}
 	// Active execution can return the next workflow task inline and deliberately skip
 	// persisting its transfer task. Passive apply cannot use that active-side delivery,
 	// so TaskRefresher must persist the transfer task instead.
