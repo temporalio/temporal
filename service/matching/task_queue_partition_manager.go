@@ -529,7 +529,14 @@ reredirectTask:
 	}
 
 	if spoolQueue == nil {
-		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
+		// This task was forwarded, so the child owns persistence. A missed sync match is reported
+		// as errRemoteSyncMatchFailed (a cancel). The child treats that as transient and puts the
+		// task back at the head of its matcher. Workflow-busy is not a miss: return it unchanged
+		// so the child respools the task at the tail and later tasks of the same priority can run.
+		if pm.shouldBacklogSyncMatchTaskOnError(err) {
+			syncMatchQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
+			return "", false, err
+		}
 		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
 		return "", false, errRemoteSyncMatchFailed
 	}
@@ -801,14 +808,15 @@ func taskAddErrResult(err error) string {
 	return metrics.TaskAddResultFailure
 }
 
+// isWorkflowBusy reports a workflow-busy resource exhaustion. AsType matches history's
+// error and the error reconstructed after an RPC; errors.Is against the sentinel does not.
+func isWorkflowBusy(err error) bool {
+	exhausted, ok := errors.AsType[*serviceerror.ResourceExhausted](err)
+	return ok && exhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW
+}
+
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if err != nil && errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			return true
-		}
-	}
-	return false
+	return isWorkflowBusy(err)
 }
 
 func (pm *taskQueuePartitionManagerImpl) isActiveInCluster() (bool, error) {
