@@ -1,8 +1,7 @@
 # Failpoints
 
 Failpoints let tests and tools make server code fail, take alternate branches, or return values
-from outside that code. The server provides a `failpoint.Registry` (as a `failpoint.Source`) only
-when enabled at startup.
+from outside that code. The server provides a `*failpoint.Registry` only when enabled at startup.
 
 ## Enabling failpoints
 

@@ -6,9 +6,8 @@ import "fmt"
 type Action int32
 
 const (
-	ActionUnspecified Action = iota
 	// ActionOff disables the failpoint so executions do not fire.
-	ActionOff
+	ActionOff Action = iota
 	// ActionReturn fires and returns a configured value of type T (typically an error).
 	// Call sites retrieve it with Execute or CheckError.
 	ActionReturn
@@ -19,8 +18,6 @@ const (
 
 func (a Action) String() string {
 	switch a {
-	case ActionUnspecified:
-		return "Unspecified"
 	case ActionOff:
 		return "Off"
 	case ActionReturn:

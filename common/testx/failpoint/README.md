@@ -1,7 +1,7 @@
 # failpoint
 
 Package `failpoint` provides typed, zero-cost-when-off fault injection points for Go code under
-test. Call sites look up a key in a `Source` registry; without a registry they cost a nil check,
+test. Call sites look up a key in a `*Registry`; without a registry they cost a nil check,
 and with an empty registry they cost one atomic load and zero allocations.
 
 This package is the core substrate for both seeded random fault injection (BUGGIFY, added in the
@@ -22,7 +22,7 @@ the unscoped key when no scoped failpoint is registered.
 
 ```go
 func (s *Service) Charge(ctx context.Context) error {
-	// s.failpoints implements failpoint.Source: Failpoints() returns the registry, or nil.
+	// s.failpoints is a *failpoint.Registry, or nil when failpoints are disabled.
 	if err := failpoint.CheckError(s.failpoints, ChargeCard); err != nil {
 		return err
 	}
@@ -43,7 +43,6 @@ if failpoint.ExecuteSwitch(s.failpoints, SkipCache) {
 ## Inject it in a test
 
 ```go
-// A *Registry implements failpoint.Source.
 registry := failpoint.NewRegistry()
 svc := NewService(registry)
 

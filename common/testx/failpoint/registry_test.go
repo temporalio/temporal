@@ -17,21 +17,17 @@ func TestRegistrySuite(t *testing.T) {
 
 func (s *registrySuite) TestSetGetDelete() {
 	registry := failpoint.NewRegistry()
-	s.Zero(registry.Len())
 	s.Nil(registry.Get(key1))
 
 	fp1 := failpoint.NewFailpoint[error](key1)
 	fp2 := failpoint.NewFailpoint[error](key1)
 	registry.Set(fp1)
-	s.Equal(1, registry.Len())
 	s.Same(fp1, registry.Get(key1))
 
 	registry.Set(fp2)
-	s.Equal(1, registry.Len())
 	s.Same(fp2, registry.Get(key1))
 
 	registry.Delete(key1)
-	s.Zero(registry.Len())
 	s.Nil(registry.Get(key1))
 }
 
@@ -51,6 +47,5 @@ func (s *registrySuite) TestSetRejectsNilAndEmptyKey() {
 	registry.Delete(nil)
 	s.Nil(registry.Get(failpoint.Key[int]{}))
 	s.Nil(registry.Get(nil))
-	s.Equal(1, registry.Len())
 	s.Same(fp, registry.Get(intKey))
 }

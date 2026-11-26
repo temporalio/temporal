@@ -34,18 +34,6 @@ type Registry struct {
 	count atomic.Int64
 }
 
-// Source provides the registry that Execute uses. Each component that provides its own Source,
-// such as each process under test, can have its own registry.
-type Source interface {
-	Failpoints() *Registry
-}
-
-// Failpoints returns r, so a registry is a Source for code that has no source of its own. It is
-// nil for a nil registry.
-func (r *Registry) Failpoints() *Registry {
-	return r
-}
-
 // NewRegistry creates a new failpoint registry for testing.
 func NewRegistry() *Registry {
 	return &Registry{
@@ -61,13 +49,6 @@ func (r *Registry) Get(key AnyKey) entry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.failpoints[key.id()]
-}
-
-// Len returns the number of registered failpoints. It doesn't take the registry's lock, so call
-// sites that do work before they execute a failpoint, such as building its key, can skip it
-// cheaply while no failpoint is registered.
-func (r *Registry) Len() int {
-	return int(r.count.Load())
 }
 
 // setCountLocked updates count after a change of the failpoints. The caller must hold r.mu.

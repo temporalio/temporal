@@ -20,7 +20,7 @@ func TestExecuteSuite(t *testing.T) {
 func (s *executeSuite) TestExecute() {
 	fromUnscoped := errors.New("unscoped")
 	fromScoped := errors.New("scoped")
-	newSource := func(keys map[failpoint.Key[error]]error) failpoint.Source {
+	newRegistry := func(keys map[failpoint.Key[error]]error) *failpoint.Registry {
 		registry := failpoint.NewRegistry()
 		for key, err := range keys {
 			fp := failpoint.NewFailpoint[error](key)
@@ -77,7 +77,7 @@ func (s *executeSuite) TestExecute() {
 	}
 	for _, tc := range tests {
 		s.Run(tc.name, func(s *executeSuite) {
-			got, fired := failpoint.Execute[error](newSource(tc.registered), tc.key)
+			got, fired := failpoint.Execute[error](newRegistry(tc.registered), tc.key)
 			s.Equal(tc.want, got)
 			s.Equal(tc.wantFired, fired)
 		})
@@ -119,23 +119,12 @@ func (s *executeSuite) TestCheckError() {
 	}
 }
 
-func (s *executeSuite) TestExecuteSourceWithoutRegistry() {
-	tests := []struct {
-		name string
-		src  failpoint.Source
-	}{
-		{name: "nil source", src: nil},
-		{name: "nil registry", src: (*failpoint.Registry)(nil)},
-	}
-	for _, tc := range tests {
-		s.Run(tc.name, func(s *executeSuite) {
-			got, fired := failpoint.Execute[error](tc.src, key1)
-			s.False(fired)
-			s.NoError(got)
-			s.NoError(failpoint.CheckError(tc.src, key1))
-			s.False(failpoint.ExecuteSwitch(tc.src, key1))
-		})
-	}
+func (s *executeSuite) TestExecuteNilRegistry() {
+	got, fired := failpoint.Execute[error](nil, key1)
+	s.False(fired)
+	s.NoError(got)
+	s.NoError(failpoint.CheckError(nil, key1))
+	s.False(failpoint.ExecuteSwitch(nil, key1))
 }
 
 func (s *executeSuite) TestExecuteSwitch() {
@@ -168,17 +157,16 @@ func (s *executeSuite) TestExecuteSwitch() {
 func TestExecuteInertDoesNotAllocate(t *testing.T) {
 	key := key1.ForScope("ns")
 	for _, tc := range []struct {
-		name string
-		src  failpoint.Source
+		name     string
+		registry *failpoint.Registry
 	}{
-		{name: "nil source", src: nil},
-		{name: "nil registry", src: (*failpoint.Registry)(nil)},
-		{name: "empty registry", src: failpoint.NewRegistry()},
+		{name: "nil registry", registry: nil},
+		{name: "empty registry", registry: failpoint.NewRegistry()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			allocs := testing.AllocsPerRun(100, func() {
-				_ = failpoint.CheckError(tc.src, key)
-				_, _ = failpoint.Execute(tc.src, key)
+				_ = failpoint.CheckError(tc.registry, key)
+				_, _ = failpoint.Execute(tc.registry, key)
 			})
 			require.Zero(t, allocs)
 		})

@@ -49,7 +49,6 @@ func (s *failpointSuite) TestDisable() {
 }
 
 func (s *failpointSuite) TestActionString() {
-	s.Equal("Unspecified", failpoint.ActionUnspecified.String())
 	s.Equal("Off", failpoint.ActionOff.String())
 	s.Equal("Return", failpoint.ActionReturn.String())
 	s.Equal("On", failpoint.ActionOn.String())
