@@ -928,7 +928,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		attr.GetResult().Size(),
 		"CompleteWorkflowExecutionCommandAttributes.Result exceeds size limit.",
 	); err != nil {
-		return nil, handler.terminateWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+		return nil, handler.terminateWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES, err)
 	}
 
 	// If the workflow task has more than one completion event then just pick the first one
