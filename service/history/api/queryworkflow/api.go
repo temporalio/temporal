@@ -368,13 +368,12 @@ func queryDirectlyThroughMatching(
 		false,
 	)
 
+	// A workflow bound to a worker servicing sessions always has its worker's sticky queue set. Its query does not fall
+	// back to the normal task queue: never for an exclusive worker, and for now not for a multi-session one (MTC-919).
 	sessionBound := msResp.GetSessionState() != nil
-	exclusiveWorker := msResp.GetSessionState().GetExclusiveWorker()
-	// Queries for exclusive workers must not fall back to the normal task queue. For now, a query on a workflow bound to
-	// a multi-session worker does not fall back either (MTC-919).
-	if exclusiveWorker || (msResp.GetIsStickyTaskQueueEnabled() &&
+	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
-		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace())) {
+		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
 			NamespaceId:      namespaceID,

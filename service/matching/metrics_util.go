@@ -17,9 +17,9 @@ const (
 	dropReasonExpiredMemory
 	dropReasonStickyWorkerUnavailable
 	dropReasonInvalid
-	// History moved the task's workflow off a drained worker queue, rescheduling its tasks on the normal queue, so this
+	// History moved the task's workflow off a draining worker queue, rescheduling its tasks on the normal queue, so this
 	// copy is obsolete.
-	dropReasonSessionWorkerQueueDrained
+	dropReasonSessionWorkerQueueDraining
 )
 
 // tag maps the drop reason to its tasks_dropped `reason` metric tag.
@@ -37,8 +37,8 @@ func (r dropReason) tag() metrics.Tag {
 		return metrics.ReasonTag(metrics.DroppedTaskReasonExpiredMemory)
 	case dropReasonStickyWorkerUnavailable:
 		return metrics.ReasonTag(metrics.DroppedTaskReasonStickyWorkerUnavailable)
-	case dropReasonSessionWorkerQueueDrained:
-		return metrics.ReasonTag(metrics.DroppedTaskReasonSessionWorkerQueueDrained)
+	case dropReasonSessionWorkerQueueDraining:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonSessionWorkerQueueDraining)
 	default:
 		return metrics.ReasonTag(metrics.DroppedTaskReasonInvalid)
 	}

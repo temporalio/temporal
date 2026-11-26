@@ -48,7 +48,10 @@ func newSessionMoveEnv(t *testing.T, workflowTaskTimeout time.Duration, opts ...
 // newSessionMoveEnvForNextRun is newSessionMoveEnv for a workflow started with the retry policy or cron schedule that
 // nextRun needs.
 func newSessionMoveEnvForNextRun(t *testing.T, workflowTaskTimeout time.Duration, nextRun nextRunCase, opts ...testcore.TestOption) *sessionMoveEnv {
-	env := testcore.NewEnv(t, append([]testcore.TestOption{testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true)}, opts...)...)
+	env := testcore.NewEnv(t, append([]testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true),
+	}, opts...)...)
 	tv := env.Tv()
 	started, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),

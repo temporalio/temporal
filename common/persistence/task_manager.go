@@ -49,8 +49,6 @@ func (m *taskManagerImpl) CreateTaskQueue(
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("CreateTaskQueue encountered LastUpdateTime not set")
 	}
-	// TODO (Shivam): Revisit this if and when we add a Placement concept on Workflow Start requests
-	// and if that requires assignment before queue creation.
 	if taskQueueInfo.GetExpiryTime() == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}

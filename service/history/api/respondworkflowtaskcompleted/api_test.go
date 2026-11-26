@@ -18,6 +18,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -1579,6 +1580,86 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 			}
 			s.True(ms.GetExecutionInfo().GetSessionState().GetExclusiveWorker())
 			s.Equal("S", ms.GetExecutionInfo().GetStickyTaskQueue())
+		})
+	}
+}
+
+/*
+TestSingleSessionAutoUpgradeCompletionFails tests the versioning behaviors a workflow bound to a single-session worker
+can complete with:
+ 1. Start a workflow task, optionally bind the workflow to the single-session worker S, and give it a versioning
+    override.
+ 2. Complete the task with the behavior and worker versioning mode of the case.
+ 3. Fail it with FEATURE_DISABLED only when the bound workflow runs as auto-upgrade: declared by a versioned worker, or
+    from an auto-upgrade override on any worker. Accept everything else.
+*/
+func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionAutoUpgradeCompletionFails() {
+	versioned := &deploymentpb.WorkerDeploymentOptions{
+		DeploymentName: "deployment", BuildId: "build-id", WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+	}
+	unversioned := &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED}
+	autoUpgradeOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}}
+	pinnedOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+		Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+		Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "build-id"},
+	}}}
+	for _, tc := range []struct {
+		name              string
+		unbound           bool
+		override          *workflowpb.VersioningOverride
+		behavior          enumspb.VersioningBehavior
+		deploymentOptions *deploymentpb.WorkerDeploymentOptions
+		failed            bool
+	}{
+		{name: "pinned", behavior: enumspb.VERSIONING_BEHAVIOR_PINNED, deploymentOptions: versioned},
+		{name: "unversioned", behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deploymentOptions: unversioned},
+		{name: "auto-upgrade", behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deploymentOptions: versioned, failed: true},
+		{name: "unbound auto-upgrade", unbound: true, behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deploymentOptions: versioned},
+		{name: "auto-upgrade override", override: autoUpgradeOverride,
+			behavior: enumspb.VERSIONING_BEHAVIOR_PINNED, deploymentOptions: versioned, failed: true},
+		{name: "pinned override over auto-upgrade", override: pinnedOverride,
+			behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deploymentOptions: versioned},
+		{name: "auto-upgrade override on an unversioned worker", override: autoUpgradeOverride,
+			behavior: enumspb.VERSIONING_BEHAVIOR_PINNED, deploymentOptions: unversioned, failed: true},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+			wfContext, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+			s.Require().NoError(err)
+			if !tc.unbound {
+				ms.BindExclusiveWorker("S")
+			}
+			if tc.override != nil {
+				ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: tc.override}
+			}
+			writtenHistoryCh := s.captureWrittenHistory(1)
+
+			_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:          serializedTaskToken,
+					Identity:           tv.Any().String(),
+					VersioningBehavior: tc.behavior,
+					DeploymentOptions:  tc.deploymentOptions,
+				},
+			})
+
+			historyEvents := await.Rcv(s.T(), writtenHistoryCh)
+			if !tc.failed {
+				s.Require().NoError(err)
+				s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, historyEvents[0].GetEventType())
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, historyEvents[0].GetEventType())
+			s.Require().Equal(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
+				historyEvents[0].GetWorkflowTaskFailedEventAttributes().GetCause(),
+			)
 		})
 	}
 }

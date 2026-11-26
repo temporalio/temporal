@@ -73,7 +73,10 @@ func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
 
 func TestWorkflowSessionActivityRouting(t *testing.T) {
 	t.Parallel()
-	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
+	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true),
+	)
 	tv := env.Tv()
 	_, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),

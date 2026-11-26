@@ -7049,7 +7049,9 @@ func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 }
 
 func (s *WorkflowHandlerSuite) TestStickyActivityPollForwardedToMatching() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.EnableMultiSessionWorkers = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 	request := &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.testNamespace.String(),
@@ -7072,12 +7074,12 @@ func (s *WorkflowHandlerSuite) TestStickyActivityPollForwardedToMatching() {
 }
 
 /*
-TestExclusiveWorkerSessionPolls tests the namespace gate for workflow and activity polls:
-1. Ordinary and nonexclusive polls continue while exclusive sessions are disabled.
-2. Exclusive polls are rejected before Matching when the namespace flag is off.
-3. Enabling the flag admits exclusive polls and leaves the original requests unchanged.
+TestWorkerSessionPolls tests the namespace gates for workflow and activity polls:
+1. Ordinary polls continue while both session worker modes are disabled.
+2. Single-session and multi-session polls are each rejected before Matching when their namespace flag is off.
+3. Enabling a flag admits that mode's polls and leaves the original requests unchanged.
 */
-func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
+func (s *WorkflowHandlerSuite) TestWorkerSessionPolls() {
 	singleSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
 		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "sticky-worker"},
 	}}
@@ -7091,17 +7093,21 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 				namespace string
 				kind      enumspb.TaskQueueKind
 				options   *sessionpb.WorkerSessionOptions
-				disabled  bool
+				disabled  string // the error a rejected poll returns
 			}{
 				{name: "ordinary normal poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				{name: "ordinary sticky poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY},
-				{name: "nonexclusive session poll", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: multiSession},
-				{name: "exclusive session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession, disabled: true},
+				{name: "multi session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: multiSession, disabled: "Multi-session workers are disabled for this namespace"},
+				{name: "multi session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: multiSession},
+				{name: "exclusive session disabled by default", namespace: "disabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession, disabled: "Exclusive-worker sessions are disabled for this namespace"},
 				{name: "exclusive session enabled for namespace", namespace: "enabled-namespace", kind: enumspb.TASK_QUEUE_KIND_STICKY, options: singleSession},
 			} {
 				s.Run(tc.name, func() {
 					client := dc.NewMemoryClient()
 					client.OverrideSetting(dc.EnableExclusiveWorkerSessions, []dc.ConstrainedValue{{
+						Constraints: dc.Constraints{Namespace: "enabled-namespace"}, Value: true,
+					}})
+					client.OverrideSetting(dc.EnableMultiSessionWorkers, []dc.ConstrainedValue{{
 						Constraints: dc.Constraints{Namespace: "enabled-namespace"}, Value: true,
 					}})
 					config := NewConfig(dc.NewCollection(client, log.NewNoopLogger()), numHistoryShards)
@@ -7118,7 +7124,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "sticky-worker",
 						}
 						original := common.CloneProto(request)
-						if !tc.disabled {
+						if tc.disabled == "" {
 							ns := namespace.NewLocalNamespaceForTest(
 								&persistencespb.NamespaceInfo{Id: s.testNamespaceID.String(), Name: tc.namespace},
 								&persistencespb.NamespaceConfig{}, cluster.TestCurrentClusterName,
@@ -7137,7 +7143,7 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 							Namespace: tc.namespace, TaskQueue: taskQueue, SessionOptions: common.CloneProto(tc.options), WorkerInstanceKey: "sticky-worker",
 						}
 						original := common.CloneProto(request)
-						if !tc.disabled {
+						if tc.disabled == "" {
 							s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(tc.namespace)).Return(s.testNamespaceID, nil)
 							s.mockMatchingClient.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 								func(_ context.Context, requestToMatching *matchingservice.PollActivityTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
@@ -7148,10 +7154,10 @@ func (s *WorkflowHandlerSuite) TestExclusiveWorkerSessionPolls() {
 						_, err = wh.PollActivityTaskQueue(ctx, request)
 						s.ProtoEqual(original, request)
 					}
-					if tc.disabled {
+					if tc.disabled != "" {
 						var disabled *serviceerror.FailedPrecondition
 						s.Require().ErrorAs(err, &disabled)
-						s.Require().ErrorContains(err, "Exclusive-worker sessions are disabled for this namespace")
+						s.Require().ErrorContains(err, tc.disabled)
 					} else {
 						s.Require().NoError(err)
 					}

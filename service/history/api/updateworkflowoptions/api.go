@@ -59,7 +59,7 @@ func Invoke(
 				// to prevent clearing and reloading mutable state while releasing the lock
 				return nil, consts.ErrWorkflowCompleted
 			}
-			if err := rejectVersioningOverrideForSessionBinding(mutableState, req.GetUpdateMask()); err != nil {
+			if err := rejectVersioningOverrideForSessionBinding(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask()); err != nil {
 				return nil, err
 			}
 
@@ -148,7 +148,7 @@ func MergeAndApply(
 	updateMask *fieldmaskpb.FieldMask,
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
-	if err := rejectVersioningOverrideForSessionBinding(ms, updateMask); err != nil {
+	if err := rejectVersioningOverrideForSessionBinding(ms, opts, updateMask); err != nil {
 		return nil, false, err
 	}
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
@@ -179,8 +179,13 @@ func MergeAndApply(
 
 // rejectVersioningOverrideForSessionBinding fails an update that sets or unsets the versioning override of a workflow
 // bound to a worker servicing sessions: the binding would keep sending its tasks to a worker on another version.
-func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, updateMask *fieldmaskpb.FieldMask) error {
+// A workflow bound to a single-session worker may unset its override: its tasks stay on its worker either way, and it
+// is how an auto-upgrade override, which fails every workflow task of such a workflow, is removed.
+func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, opts *workflowpb.WorkflowExecutionOptions, updateMask *fieldmaskpb.FieldMask) error {
 	if ms.GetExecutionInfo().GetSessionState() == nil {
+		return nil
+	}
+	if ms.HasExclusiveBinding() && opts.GetVersioningOverride() == nil {
 		return nil
 	}
 	for path := range util.ParseFieldMask(updateMask) {

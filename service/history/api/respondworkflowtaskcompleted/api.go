@@ -430,6 +430,18 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				//nolint:staticcheck // SA1019 deprecated stamp will clean up later
 				request.GetBinaryChecksum()),
 			false)
+	} else if !wtHeartbeatTimedOut && ms.HasExclusiveBinding() &&
+		ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		// A workflow bound to a single-session worker cannot leave it to follow a new current version, so only pinned
+		// (or unversioned) bound workflows are supported. The task keeps failing on the bound worker until the workflow
+		// is declared pinned, or its auto-upgrade versioning override is removed. A task already timed out by
+		// heartbeating is not failed again.
+		wtFailedCause = newWorkflowTaskFailedCause(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
+			serviceerror.NewInvalidArgument(
+				"auto-upgrade versioning behavior is not supported on single-session workers: set the pinned behavior on "+
+					"the workflow or the worker's default, or remove the workflow's auto-upgrade versioning override"),
+			false)
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(

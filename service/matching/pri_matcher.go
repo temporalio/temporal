@@ -365,7 +365,7 @@ func (tm *priTaskMatcher) drainSessionWorkerQueue(
 		_, namespaceGone := errors.AsType[*serviceerror.NamespaceNotFound](err)
 		if err == nil || common.IsNotFoundError(err) || namespaceGone {
 			// History moved the workflow's tasks to the normal queue, or the workflow or its namespace is gone.
-			task.finish(dropReasonSessionWorkerQueueDrained)
+			task.finish(dropReasonSessionWorkerQueueDraining)
 			retrier.Reset()
 			continue
 		}

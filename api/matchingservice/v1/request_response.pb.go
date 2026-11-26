@@ -1324,8 +1324,9 @@ type QueryWorkflowRequest struct {
 	VersionDirective *v19.TaskVersionDirective `protobuf:"bytes,5,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	ForwardInfo      *v19.TaskForwardInfo      `protobuf:"bytes,6,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,7,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Session placement associated with this query, if any. History sets it only for queries to a bound
-	// single-session sticky queue, so Matching can report the session and its pinned version to task-add hooks.
+	// Session placement associated with this query, if any. History sets it for every query to the sticky queue of a
+	// workflow bound to a worker servicing sessions. Matching waits for an exclusive worker and reports the session to
+	// task-add hooks; for a non-exclusive binding it treats the query like any other sticky query.
 	// Unset means no session (or an older History), and hooks see no session.
 	SessionDirective *v19.TaskSessionDirective `protobuf:"bytes,8,opt,name=session_directive,json=sessionDirective,proto3" json:"session_directive,omitempty"`
 	unknownFields    protoimpl.UnknownFields

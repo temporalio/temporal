@@ -973,6 +973,8 @@ type singleSessionEnv struct {
 	tv      *testvars.TestVars
 	poller  *taskpoller.TaskPoller
 	session *sessionpb.WorkerSessionOptions
+	// deploymentOptions are S's worker versioning options on its polls; nil for an unversioned S.
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions
 	// runID is the started workflow's run, and acquiredEventID the completed event of the workflow task that bound S.
 	runID           string
 	acquiredEventID int64
@@ -1020,6 +1022,7 @@ func (e *singleSessionEnv) pollWorkflowTaskOnS(
 ) error {
 	_, err := e.poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: e.tv.StickyTaskQueue(), SessionOptions: e.session, WorkerInstanceKey: e.tv.WorkerInstanceKey(),
+		DeploymentOptions: e.deploymentOptions,
 	}).HandleTask(e.tv, handler, taskpoller.WithTimeout(timeout))
 	return err
 }
@@ -1207,4 +1210,110 @@ func TestSingleSessionRejectsVersioningOverride(t *testing.T) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	})
 	require.NoError(t, err)
+}
+
+/*
+TestSingleSessionVersionedWorkerBehaviors tests which versioning behaviors a workflow bound to a versioned single-session
+worker can run with:
+ 1. S, a versioned single-session worker on the task queue's current version, acquires the workflow.
+ 2. pinned: S completes the workflow task as pinned, and its next workflow task is also delivered on S.
+ 3. auto-upgrade: S completes as auto-upgrade, which fails the task with FEATURE_DISABLED. S is then redeployed as
+    pinned, and the retry, still delivered on S, completes.
+ 4. auto-upgrade override: the workflow starts with an auto-upgrade versioning override, so S's pinned completion
+    fails too. Removing the override lets the retry, still delivered on S, complete.
+*/
+func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// firstBehavior is the behavior S declares when completing the acquired workflow task.
+		firstBehavior       enumspb.VersioningBehavior
+		autoUpgradeOverride bool
+		rejected            bool
+	}{
+		{name: "pinned", firstBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED},
+		{name: "auto-upgrade", firstBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, rejected: true},
+		{name: "auto-upgrade override", firstBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, autoUpgradeOverride: true, rejected: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newVersioning3TestEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.EnableExclusiveWorkerSessions, true),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+			)
+			tv := env.Tv()
+			client := env.FrontendClient()
+			_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(t.Context(), &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId: env.NamespaceID().String(), TaskQueue: tv.TaskQueue().GetName(),
+				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+				DeploymentName: tv.DeploymentSeries(),
+				UpdateRoutingConfig: &deploymentpb.RoutingConfig{
+					CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
+					CurrentVersionChangedTime: timestamppb.Now(), RevisionNumber: 1,
+				},
+				UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+					tv.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+				},
+			})
+			require.NoError(t, err)
+
+			startRequest := &workflowservice.StartWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
+			}
+			if tc.autoUpgradeOverride {
+				startRequest.VersioningOverride = &workflowpb.VersioningOverride{
+					Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+				}
+			}
+			_, err = client.StartWorkflowExecution(t.Context(), startRequest)
+			require.NoError(t, err)
+
+			e := &singleSessionEnv{
+				t: t, env: env.TestEnv, tv: tv, poller: taskpoller.New(t, client, env.Namespace().String()),
+				session: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+				}},
+				deploymentOptions: tv.WorkerDeploymentOptions(true),
+			}
+			complete := func(behavior enumspb.VersioningBehavior) error {
+				return e.pollWorkflowTaskOnS(10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						VersioningBehavior: behavior, DeploymentOptions: tv.WorkerDeploymentOptions(true),
+					}, nil
+				})
+			}
+
+			err = complete(tc.firstBehavior)
+			if !tc.rejected {
+				require.NoError(t, err)
+				e.signal()
+				require.NoError(t, complete(enumspb.VERSIONING_BEHAVIOR_PINNED), "the next workflow task is delivered on S")
+				return
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			var failedCause enumspb.WorkflowTaskFailedCause
+			for _, event := range env.GetHistory(env.Namespace().String(), tv.WorkflowExecution()) {
+				if attributes := event.GetWorkflowTaskFailedEventAttributes(); attributes != nil {
+					failedCause = attributes.GetCause()
+				}
+			}
+			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failedCause)
+
+			if tc.autoUpgradeOverride {
+				_, err = client.UpdateWorkflowExecutionOptions(t.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+					Namespace: env.Namespace().String(), WorkflowExecution: tv.WorkflowExecution(),
+					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+				})
+				require.NoError(t, err, "a single-session workflow's override can be removed")
+			}
+			require.NoError(t, complete(enumspb.VERSIONING_BEHAVIOR_PINNED), "the retry is delivered on S and completes as pinned")
+		})
+	}
 }

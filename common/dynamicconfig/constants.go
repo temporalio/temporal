@@ -1260,6 +1260,11 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		false,
 		`EnableExclusiveWorkerSessions allows workflow and activity polls with single-session worker options.`,
 	)
+	EnableMultiSessionWorkers = NewNamespaceBoolSetting(
+		"frontend.enableMultiSessionWorkers",
+		false,
+		`EnableMultiSessionWorkers allows workflow and activity polls with multi-session worker options.`,
+	)
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
 		"frontend.workerVersioningDataAPIs",
 		false,

@@ -609,7 +609,8 @@ func TestMergeAndApply(t *testing.T) {
 }
 
 // TestMergeAndApplyRejectsVersioningOverrideForSessionBinding tests that the versioning override of a workflow bound to
-// a worker servicing sessions cannot be set or unset, while its other options can still be updated.
+// a worker servicing sessions cannot be set, nor unset unless the worker is single-session, while its other options can
+// still be updated.
 func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 	pinned := &workflowpb.VersioningOverride{
 		Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -617,12 +618,14 @@ func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 			Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "d", BuildId: "b"},
 		}},
 	}
+	autoUpgrade := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}}
 	priority := &commonpb.Priority{PriorityKey: 2}
 	versioningMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
 
 	tcs := []struct {
 		name         string
 		sessionState *persistencespb.SessionState
+		override     *workflowpb.VersioningOverride // the workflow's current versioning override
 		options      *workflowpb.WorkflowExecutionOptions
 		mask         *fieldmaskpb.FieldMask
 		rejected     bool
@@ -633,6 +636,9 @@ func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask, rejected: true},
 		{name: "multi-session binding, unset override", sessionState: &persistencespb.SessionState{},
 			options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask, rejected: true},
+		// Unsetting is allowed for single-session bindings, e.g. to remove an auto-upgrade override.
+		{name: "single-session binding, unset override", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			override: autoUpgrade, options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask},
 		{name: "binding, override mixed with priority", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
 			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned, Priority: priority},
 			mask:    &fieldmaskpb.FieldMask{Paths: []string{"versioning_override", "priority"}}, rejected: true},
@@ -644,7 +650,11 @@ func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			ms := historyi.NewMockMutableState(gomock.NewController(t))
-			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{SessionState: tc.sessionState}).AnyTimes()
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				SessionState:   tc.sessionState,
+				VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: tc.override},
+			}).AnyTimes()
+			ms.EXPECT().HasExclusiveBinding().Return(tc.sessionState.GetExclusiveWorker()).AnyTimes()
 			if !tc.rejected {
 				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),

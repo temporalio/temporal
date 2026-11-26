@@ -1164,7 +1164,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
-	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
+	if err := wh.checkWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
 		return nil, err
 	}
 
@@ -1427,7 +1427,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
-	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
+	if err := wh.checkWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
 		return nil, err
 	}
 
@@ -3172,7 +3172,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 		})
 	}
 
-	// A multi-session worker's queue, named after its instance key, is drained instead, so its workflows move to other
+	// A multi-session worker's queue, named after its instance key, is drained instead, so its sessions move to other
 	// workers; the drain unloads the queue once it is empty. The final heartbeat has removed the worker first.
 	// DrainSessionWorkerQueue returns once the drain has started, so a failure to start fails the shutdown like the
 	// unload below; the drain itself runs in Matching and is best effort.
@@ -8066,9 +8066,16 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 	return histResp.GetResponse(), nil
 }
 
-func (wh *WorkflowHandler) checkExclusiveWorkerSessionsEnabled(namespaceName string, options *sessionpb.WorkerSessionOptions) error {
-	if options.GetSingleSession() != nil && !wh.config.EnableExclusiveWorkerSessions(namespaceName) {
-		return errExclusiveWorkerSessionsDisabled
+func (wh *WorkflowHandler) checkWorkerSessionsEnabled(namespaceName string, options *sessionpb.WorkerSessionOptions) error {
+	switch options.GetAdmission().(type) {
+	case *sessionpb.WorkerSessionOptions_SingleSession:
+		if !wh.config.EnableExclusiveWorkerSessions(namespaceName) {
+			return errExclusiveWorkerSessionsDisabled
+		}
+	case *sessionpb.WorkerSessionOptions_MultiSession:
+		if !wh.config.EnableMultiSessionWorkers(namespaceName) {
+			return errMultiSessionWorkersDisabled
+		}
 	}
 	return nil
 }
@@ -8107,7 +8114,9 @@ func validateWorkerSessionOptions(
 		if options.GetSingleSession().GetStableIdentity() == "" {
 			return serviceerror.NewInvalidArgument("single-session stable identity is required")
 		}
-		if versionCapabilities.GetUseVersioning() {
+		// Only Worker Deployment versioning is supported. Go SDK workers using it also set the old use_versioning bit,
+		// so they are told apart by their versioning mode.
+		if _, deprecated := classifyDeprecatedWorkerVersioningPoll(versionCapabilities, deploymentOptions); deprecated {
 			// TODO (Shivam): Bindings of single-session workers do not follow build-ID or deployment-series versioning
 			// (MTC-934).
 			return serviceerror.NewInvalidArgument("single-session workers do not support this worker versioning mode yet")

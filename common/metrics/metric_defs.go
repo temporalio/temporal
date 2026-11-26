@@ -667,14 +667,14 @@ const scheduleSDKNoneValue = "none"
 
 // Matching task dropped reason tag values
 const (
-	DroppedTaskReasonNotFound                  = "not_found"
-	DroppedTaskReasonInternalError             = "internal_error"
-	DroppedTaskReasonDataLoss                  = "data_loss"
-	DroppedTaskReasonExpiredRead               = "expired_read"
-	DroppedTaskReasonExpiredMemory             = "expired_memory"
-	DroppedTaskReasonStickyWorkerUnavailable   = "sticky_worker_unavailable"
-	DroppedTaskReasonSessionWorkerQueueDrained = "session_worker_queue_drained"
-	DroppedTaskReasonInvalid                   = "invalid"
+	DroppedTaskReasonNotFound                   = "not_found"
+	DroppedTaskReasonInternalError              = "internal_error"
+	DroppedTaskReasonDataLoss                   = "data_loss"
+	DroppedTaskReasonExpiredRead                = "expired_read"
+	DroppedTaskReasonExpiredMemory              = "expired_memory"
+	DroppedTaskReasonStickyWorkerUnavailable    = "sticky_worker_unavailable"
+	DroppedTaskReasonSessionWorkerQueueDraining = "session_worker_queue_draining"
+	DroppedTaskReasonInvalid                    = "invalid"
 )
 
 var (

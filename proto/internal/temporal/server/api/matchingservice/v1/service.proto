@@ -202,7 +202,7 @@ service MatchingService {
   }
 
   // DrainSessionWorkerQueue moves a dead multi-session worker's queued tasks to the normal task queue by unbinding their
-  // workflows in History.
+  // sessions in History.
   rpc DrainSessionWorkerQueue(DrainSessionWorkerQueueRequest) returns (DrainSessionWorkerQueueResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }

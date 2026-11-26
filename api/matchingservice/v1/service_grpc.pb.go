@@ -173,7 +173,7 @@ type MatchingServiceClient interface {
 	// Force unloading a task queue partition.
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
 	// DrainSessionWorkerQueue moves a dead multi-session worker's queued tasks to the normal task queue by unbinding their
-	// workflows in History.
+	// sessions in History.
 	DrainSessionWorkerQueue(ctx context.Context, in *DrainSessionWorkerQueueRequest, opts ...grpc.CallOption) (*DrainSessionWorkerQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
@@ -755,7 +755,7 @@ type MatchingServiceServer interface {
 	// Force unloading a task queue partition.
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
 	// DrainSessionWorkerQueue moves a dead multi-session worker's queued tasks to the normal task queue by unbinding their
-	// workflows in History.
+	// sessions in History.
 	DrainSessionWorkerQueue(context.Context, *DrainSessionWorkerQueueRequest) (*DrainSessionWorkerQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`

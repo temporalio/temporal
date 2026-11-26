@@ -9,11 +9,11 @@ import (
 )
 
 /*
-TestTaskQueueMetadataTTL tests how metadata expiry becomes a Cassandra TTL:
+TestStickyTaskQueueMetadataTTL tests how metadata expiry becomes a Cassandra TTL:
 1. Verify omitted expiry produces no TTL and a future expiry preserves its remaining seconds.
 2. Verify fractional seconds round up and oversized TTL values are capped.
 */
-func TestTaskQueueMetadataTTL(t *testing.T) {
+func TestStickyTaskQueueMetadataTTL(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1000, 0)
 	for _, tc := range []struct {
@@ -28,7 +28,7 @@ func TestTaskQueueMetadataTTL(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.ttl, taskQueueMetadataTTL(tc.expiry, now))
+			require.Equal(t, tc.ttl, stickyTaskQueueMetadataTTL(tc.expiry, now))
 		})
 	}
 }

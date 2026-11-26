@@ -249,6 +249,7 @@ type Config struct {
 
 	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableExclusiveWorkerSessions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableMultiSessionWorkers     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -451,6 +452,7 @@ func NewConfig(
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		EnableExclusiveWorkerSessions:           dynamicconfig.EnableExclusiveWorkerSessions.Get(dc),
+		EnableMultiSessionWorkers:               dynamicconfig.EnableMultiSessionWorkers.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
 		MaxWorkflowRulesPerNamespace:            dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
 		WorkerHeartbeatsEnabled:                 dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
