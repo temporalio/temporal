@@ -47,11 +47,16 @@ registry := failpoint.NewRegistry()
 svc := NewService(registry)
 
 fp := failpoint.NewFailpoint[error](ChargeCard)
-fp.Return(errors.New("card declined"))
+fp.Return(errors.New("card declined"), failpoint.Trigger{MaxFires: 1})
 registry.Set(fp)
 
 require.EqualError(t, svc.Charge(ctx), "card declined")
 ```
+
+Each action setter accepts an optional `Trigger` (`SkipFirst`, `MaxFires`) to limit which
+executions fire. Without one, the failpoint fires on every execution. `fp.SetTrigger(t)` replaces
+the trigger without changing the action, and `fp.Stats()` / `fp.TotalFires()` inspect execution
+and fire counts.
 
 Use `fp.On()` for switch-style failpoints, `fp.Disable()` to turn a failpoint off, and
 `registry.Delete(key)` to detach it from the registry.
