@@ -716,6 +716,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		newRunID = uuid.NewString()
 	}
 
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
+	// starts unbound.
+	sessionInfo := mutableState.SessionInfo()
+
 	// First add timeout workflow event, no matter what we're doing next.
 	if err := workflow.TimeoutWorkflow(
 		mutableState,
@@ -761,6 +765,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		ctx,
 		mutableState,
 		newMutableState,
+		sessionInfo,
 		newRunID,
 		startAttr,
 		startEvent.Links,

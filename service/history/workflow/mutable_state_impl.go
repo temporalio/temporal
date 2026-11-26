@@ -3086,6 +3086,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
+	var inheritedSessionInfo *sessionpb.SessionInfo
+	// The new run keeps the binding only if it stays on the same task queue: the bound worker polls this task queue,
+	// not the one the new run moved to. A cron run starts unbound.
+	if taskQueue == previousExecutionInfo.GetTaskQueue() && command.GetInitiator() != enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+		inheritedSessionInfo = previousExecutionState.SessionInfo()
+	}
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            ms.namespaceEntry.ID().String(),
 		StartRequest:           createRequest,
@@ -3102,6 +3108,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		VersioningOverride:           pinnedOverride,
 		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		TimeSkippingStatePropagation: stateProp,
+		InheritedSessionInfo:         inheritedSessionInfo,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -3494,6 +3501,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 		ms.executionInfo.VersioningInfo.ContinueAsNewInitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior()
+	}
+
+	// A new run of a bound workflow (continue-as-new or retry) stays on the previous run's worker.
+	if inheritedSessionInfo := event.GetInheritedSessionInfo(); inheritedSessionInfo != nil {
+		ms.ApplySessionInfo(inheritedSessionInfo)
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {

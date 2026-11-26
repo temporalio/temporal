@@ -11,6 +11,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -113,10 +114,13 @@ func nextBackoffInterval(
 
 // Helpers for creating new retry/cron workflows:
 
+// SetupNewWorkflowForRetryOrCron builds the next run of a retried or cron workflow. previousSessionInfo is read before
+// the previous run closed, because closing clears a non-exclusive binding. Only a retry inherits it.
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
 	previousMutableState historyi.MutableState,
 	newMutableState historyi.MutableState,
+	previousSessionInfo *sessionpb.SessionInfo,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	startLinks []*commonpb.Link,
@@ -306,6 +310,11 @@ func SetupNewWorkflowForRetryOrCron(
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
+	}
+	// The new run keeps the binding only if it stays on the same task queue: the bound worker polls this task queue,
+	// not the one the new run moved to. A cron run starts unbound.
+	if taskQueue == previousExecutionInfo.GetTaskQueue() && initiator != enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+		req.InheritedSessionInfo = previousSessionInfo
 	}
 
 	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(

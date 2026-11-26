@@ -11397,6 +11397,65 @@ func (s *mutableStateSuite) TestApplySessionInfo() {
 }
 
 /*
+TestApplyWorkflowExecutionStartedEventInheritsSessionInfo tests the binding a new run (continue-as-new, retry) takes
+from its started event:
+ 1. An inherited binding binds the new run to the same worker's sticky queue.
+ 2. Without an inherited binding, the workflow's ordinary stickiness is left alone.
+*/
+func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEventInheritsSessionInfo() {
+	for _, tc := range []struct {
+		name              string
+		inherited         *sessionpb.SessionInfo
+		stickyTaskQueue   string
+		wantSessionState  *persistencespb.SessionState
+		wantSticky        string
+		wantStickyTimeout time.Duration
+	}{
+		{
+			name:             "exclusive",
+			inherited:        &sessionpb.SessionInfo{ExclusiveWorker: true, WorkerQueue: "S"},
+			wantSessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			wantSticky:       "S",
+		},
+		{
+			name:             "non-exclusive",
+			inherited:        &sessionpb.SessionInfo{WorkerQueue: "X"},
+			wantSessionState: &persistencespb.SessionState{},
+			wantSticky:       "X",
+		},
+		{
+			name:            "nothing inherited keeps ordinary stickiness",
+			stickyTaskQueue: "ordinary-sticky",
+			wantSticky:      "ordinary-sticky",
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+			s.mutableState.executionInfo.StickyTaskQueue = tc.stickyTaskQueue
+
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:       &commonpb.WorkflowType{Name: "workflow"},
+						TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+						WorkflowRunTimeout: durationpb.New(time.Hour),
+					},
+					InheritedSessionInfo: tc.inherited,
+				},
+			)
+
+			s.Require().NoError(err)
+			protorequire.ProtoEqual(s.T(), tc.wantSessionState, s.mutableState.executionInfo.GetSessionState())
+			s.Require().Equal(tc.wantSticky, s.mutableState.executionInfo.GetStickyTaskQueue())
+			s.Require().Equal(tc.wantStickyTimeout, s.mutableState.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+		})
+	}
+}
+
+/*
 TestStickyScheduleToStartTimeoutForBoundWorkflow tests the sticky timeout used for a workflow task's timer:
  1. A workflow bound to a worker whose reported sticky timeout is missing or 0 gets the default, since its
     timed-out task is re-offered to the same worker and a 0 timer would loop.
@@ -11425,6 +11484,53 @@ func (s *mutableStateSuite) TestStickyScheduleToStartTimeoutForBoundWorkflow() {
 			_, timeout := s.mutableState.TaskQueueScheduleToStartTimeout("X")
 
 			s.Equal(tc.wantTimeout, timeout.AsDuration())
+		})
+	}
+}
+
+/*
+TestAddContinueAsNewEventInheritsSessionInfo tests the binding the next run of a workflow bound to a multi-session
+worker takes:
+ 1. Continue-as-new on the same task queue records the binding on the new run's started event and binds the new run.
+ 2. A cron run starts unbound: nothing is recorded and the new run is not bound.
+*/
+func (s *mutableStateSuite) TestAddContinueAsNewEventInheritsSessionInfo() {
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+	var newRunStartEvent *historypb.HistoryEvent
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Do(func(_ events.EventKey, event *historypb.HistoryEvent) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			newRunStartEvent = event
+		}
+	}).AnyTimes()
+	for _, tc := range []struct {
+		name      string
+		initiator enumspb.ContinueAsNewInitiator
+		inherited *sessionpb.SessionInfo
+	}{
+		{name: "continue-as-new", initiator: enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW, inherited: &sessionpb.SessionInfo{WorkerQueue: "X"}},
+		{name: "cron", initiator: enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE},
+	} {
+		s.Run(tc.name, func() {
+			dbState := s.buildWorkflowMutableState()
+			dbState.BufferedEvents = nil
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.Require().NoError(err)
+			ms.setStickyTaskQueueAndBinding("X", nil, &persistencespb.SessionState{})
+			completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
+				ms.GetStartedWorkflowTask(), &workflowservice.RespondWorkflowTaskCompletedRequest{}, workflowTaskCompletionLimits)
+			s.Require().NoError(err)
+
+			newRunStartEvent = nil
+			_, newRun, err := ms.AddContinueAsNewEvent(context.Background(), completedEvent.GetEventId(), "",
+				&commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowRunTimeout: ms.GetExecutionInfo().WorkflowRunTimeout,
+					Initiator:          tc.initiator,
+				}, nil)
+			s.Require().NoError(err)
+
+			s.Require().NotNil(newRunStartEvent)
+			protorequire.ProtoEqual(s.T(), tc.inherited, newRunStartEvent.GetWorkflowExecutionStartedEventAttributes().GetInheritedSessionInfo())
+			s.Equal(tc.inherited.GetWorkerQueue(), newRun.SessionWorkerQueue())
 		})
 	}
 }

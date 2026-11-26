@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	pm "go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
@@ -1156,8 +1157,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 					if bound {
 						info := request.UpdateWorkflowMutation.ExecutionInfo
 						s.True(info.GetSessionState().GetExclusiveWorker())
-						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal("S", info.GetStickyTaskQueue())
+						s.Equal(int32(1), info.GetWorkflowTaskAttemptsSinceLastSuccess())
 						s.Equal(taskQueueName, info.GetTaskQueue())
 					}
 					return tests.UpdateWorkflowExecutionResponse, nil
@@ -1710,10 +1711,18 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 		VisibilityTimestamp: s.now,
 	}
 
+	executionInfo.SessionState = &persistencespb.SessionState{}
+	executionInfo.StickyTaskQueue = "X"
+	executionInfo.StickyScheduleToStartTimeout = durationpb.New(7 * time.Second)
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completionEvent.GetEventId(), completionEvent.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	// one for current workflow, one for new
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	var update *persistence.UpdateWorkflowExecutionRequest
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			update = request
+			return tests.UpdateWorkflowExecutionResponse, nil
+		})
 
 	// move
 	s.timeSource.Advance(workflowRunTimeout + 1*time.Second)
@@ -1723,6 +1732,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 	state, status := s.getMutableStateFromCache(workflowKey).GetWorkflowStateStatus()
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
 	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+	newExecutionInfo := update.NewWorkflowSnapshot.ExecutionInfo
+	protorequire.ProtoEqual(s.T(), &persistencespb.SessionState{},
+		newExecutionInfo.GetSessionState())
+	s.Equal("X", newExecutionInfo.GetStickyTaskQueue())
+	s.Nil(newExecutionInfo.GetStickyScheduleToStartTimeout())
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Cron() {
