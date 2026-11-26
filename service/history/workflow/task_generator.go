@@ -460,7 +460,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 
 	// Bound tasks wait for a replacement worker on the same queue, so an S2S timer would only recreate them which is
 	// why this timer is created only for non-exclusive workflow tasks.
-	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
+	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.HasExclusiveBinding() {
 		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
 		scheduleToStartTimeout := timeout.AsDuration()
 		wttt := &tasks.WorkflowTaskTimeoutTask{
@@ -502,7 +502,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 ) error {
 
 	var scheduleToStartTimeout time.Duration
-	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.GetExecutionInfo().GetSessionState().GetExclusiveWorker() {
+	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.HasExclusiveBinding() {
 		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
 		scheduleToStartTimeout = timeout.AsDuration()
 	} else {

@@ -819,7 +819,8 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(
 ) {
 	var singleSessionOptions hooks.SingleSessionOptions
 	if sessionDirective.GetIsExclusiveWorkerAssigned() {
-		singleSessionOptions.WorkerStableIdentity = sessionDirective.GetBoundWorkerInfo().GetWorkerQueue()
+		// A single-session worker's sticky queue is named after its stable identity.
+		singleSessionOptions.WorkerStableIdentity = pm.Partition().RpcName()
 	}
 	for _, l := range pm.taskHooks {
 		hookOutcome := syncMatchOutcomeToHook(outcome)

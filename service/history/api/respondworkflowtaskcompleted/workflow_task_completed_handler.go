@@ -500,10 +500,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
-	// Only a workflow task started by a multi-session worker may schedule workflow-session activities. Core
-	// enforces this in the SDK; the server mirrors it for other clients.
+	// Only a workflow bound to a worker servicing sessions may schedule workflow-session activities. Core enforces this
+	// in the SDK; the server mirrors it for other clients. If the workflow was unbound while the task ran, the task fails
+	// and is retried from the normal queue.
 	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetSessionState() == nil {
-		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to have been started by a multi-session worker")
+		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to be bound to a worker servicing sessions")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
 
@@ -956,7 +957,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so a retry or cron run inherits a copy.
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
+	// starts unbound.
 	sessionInfo := handler.mutableState.SessionInfo()
 
 	// Always add workflow completed event to this one
@@ -1021,7 +1023,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so a retry or cron run inherits a copy.
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
+	// starts unbound.
 	sessionInfo := handler.mutableState.SessionInfo()
 
 	// Always add workflow failed event

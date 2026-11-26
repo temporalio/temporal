@@ -149,7 +149,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 	// Need to clear the sticky task queue because workflow turned to passive. A worker binding is kept though: it is rebuilt
 	// from history.
-	b.mutableState.ClearStickyTaskQueueUnlessPartOfSession()
+	b.mutableState.ClearStickyTaskQueue(historyi.StickyClearForStateRebuild)
 	executionInfo := b.mutableState.GetExecutionInfo()
 	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 
