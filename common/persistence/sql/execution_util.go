@@ -678,7 +678,7 @@ func createImmediateTasks(
 	categoryID int,
 	immedidateTasks []p.InternalHistoryTask,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_immediate_tasks table is created,
 	// so they have their own tables.
 	switch categoryID {
@@ -728,7 +728,7 @@ func createScheduledTasks(
 	categoryID int,
 	scheduledTasks []p.InternalHistoryTask,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exists before the general history_scheduled_tasks table is created,
 	// so they have their own tables.
 	if categoryID == tasks.CategoryIDTimer {
