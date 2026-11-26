@@ -47,15 +47,17 @@ func executePolicyError[T any](policy Policy, key Key[T]) (value T, set bool) {
 
 // ExecuteError executes an error failpoint for key in registry and returns its error.
 // It returns nil if registry is nil, the failpoint is not registered (and the registry's Policy
-// returns nil), off, or configured to return a nil error, so the caller continues as normal.
+// returns nil), paused or blocked and then released, or returned or called back with a nil error,
+// so the caller continues as normal.
 func ExecuteError(registry *Registry, key Key[error]) error {
 	err, _ := Execute[error](registry, key)
 	return err
 }
 
 // ExecuteSwitch executes the failpoint for key in registry, as Execute does, and
-// reports whether it fired. Switch-style call sites use it with failpoints configured with On.
-// When no failpoint is registered, ExecuteSwitch consults the registry's Policy with key.Scope().
+// reports whether it fired with a value. Switch-style call sites use it with failpoints configured
+// with On; a failpoint that pauses, or blocks and is released, returns false. When no failpoint is
+// registered, ExecuteSwitch consults the registry's Policy with key.Scope().
 func ExecuteSwitch[T any](registry *Registry, key Key[T]) bool {
 	return ExecuteSwitchWithPolicyScope(registry, key, key.Scope())
 }

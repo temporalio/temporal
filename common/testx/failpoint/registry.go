@@ -27,6 +27,9 @@ func validateEntry(fp entry) {
 // Registry manages failpoint instances.
 // It provides thread-safe operations to register and query failpoints.
 type Registry struct {
+	// configMu serializes Atomically calls. It is separate from mu, so configuring a failpoint
+	// that is busy, such as one that pauses, doesn't block the lookups of executions.
+	configMu   sync.Mutex
 	mu         sync.Mutex
 	failpoints map[keyID]entry
 	// count is the number of failpoints. It is updated under mu, and read without it by Get and
@@ -119,16 +122,69 @@ func (r *Registry) lookupLocked(key keyID) (entry, bool) {
 }
 
 // Set registers fp for its key, replacing the failpoint registered for the key, if any. It panics
-// if fp is nil or its key has an empty name.
+// if fp is nil or its key has an empty name. Callers replacing a failpoint that may hold blocked
+// executions should use Swap and call Disable on the displaced entry so those executions are not
+// stranded.
 func (r *Registry) Set(fp entry) {
+	r.Swap(fp)
+}
+
+// Swap registers fp for its key and returns the displaced failpoint, or nil if none was
+// registered. It panics if fp is nil or its key has an empty name. If the displaced failpoint may
+// hold blocked or paused executions, the caller must call Disable on it to release them.
+func (r *Registry) Swap(fp entry) entry {
 	validateEntry(fp)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	prev := r.failpoints[fp.id()]
 	r.failpoints[fp.id()] = fp
 	r.setCountLocked()
+	return prev
 }
 
-// Delete removes a failpoint from the registry.
+// GetOrSet returns the failpoint registered for the key of fp, registering fp first if there is
+// none. Callers that share a registry use it to create a failpoint without racing each other. It
+// panics if fp is nil or its key has an empty name.
+func (r *Registry) GetOrSet(fp entry) entry {
+	validateEntry(fp)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.failpoints[fp.id()]; ok {
+		return existing
+	}
+	r.failpoints[fp.id()] = fp
+	r.setCountLocked()
+	return fp
+}
+
+// CompareAndDelete removes fp from the registry if it is registered for its key, and reports
+// whether it did. It only detaches fp: it doesn't disable it, so call fp.Disable to release the
+// executions it holds.
+func (r *Registry) CompareAndDelete(fp entry) bool {
+	if fp == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.failpoints[fp.id()]; !ok || existing != fp {
+		return false
+	}
+	delete(r.failpoints, fp.id())
+	r.setCountLocked()
+	return true
+}
+
+// Atomically runs fn while no other Atomically call of the registry runs. Code that configures
+// or removes failpoints with several calls, such as a lookup followed by a change, runs them
+// in Atomically, so they are atomic with respect to each other. It does not block executions.
+func (r *Registry) Atomically(fn func()) {
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
+	fn()
+}
+
+// Delete removes a failpoint from the registry. It only detaches the failpoint: it doesn't disable
+// it, so call Disable on the failpoint to release the executions it holds.
 func (r *Registry) Delete(key AnyKey) {
 	if key == nil {
 		return

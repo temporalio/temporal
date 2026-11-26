@@ -12,21 +12,24 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+// ForwardTaskKey fires before matching forwards a workflow, activity, query or Nexus task to the
+// parent partition. Tests use Pause to make forwarding latency observable.
+var ForwardTaskKey = failpoint.NewKey[error]("matching.forwardTask")
 
 type (
 	// priForwarder is the type that contains state pertaining to
 	// the api call forwarder component
 	priForwarder struct {
-		cfg       *forwarderConfig
-		queue     *PhysicalTaskQueueKey
-		partition *tqid.NormalPartition
-		client    matchingservice.MatchingServiceClient
-		testHooks testhooks.TestHooks
+		cfg               *forwarderConfig
+		queue             *PhysicalTaskQueueKey
+		partition         *tqid.NormalPartition
+		client            matchingservice.MatchingServiceClient
+		failpointRegistry *failpoint.Registry
 	}
 )
 
@@ -43,25 +46,28 @@ func newPriForwarder(
 	cfg *forwarderConfig,
 	queue *PhysicalTaskQueueKey,
 	client matchingservice.MatchingServiceClient,
-	testHooks testhooks.TestHooks,
+	failpointRegistry *failpoint.Registry,
 ) (*priForwarder, error) {
 	partition, ok := queue.Partition().(*tqid.NormalPartition)
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("physical queue of normal partition expected")
 	}
 	return &priForwarder{
-		cfg:       cfg,
-		client:    client,
-		partition: partition,
-		queue:     queue,
-		testHooks: testHooks,
+		cfg:               cfg,
+		client:            client,
+		partition:         partition,
+		queue:             queue,
+		failpointRegistry: failpointRegistry,
 	}, nil
 }
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
 func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if delay, ok := testhooks.Get(f.testHooks, testhooks.MatchingForwardTaskDelay, namespace.ID(task.event.Data.GetNamespaceId())); ok {
-		time.Sleep(delay)
+	// The registry is nil unless failpoints are enabled; without it the request fields stay unread.
+	if f.failpointRegistry != nil {
+		if err := failpoint.ExecuteError(f.failpointRegistry, ForwardTaskKey.ForScope(task.event.Data.GetNamespaceId())); err != nil {
+			return err
+		}
 	}
 
 	degree := f.cfg.ForwarderMaxChildrenPerNode()
@@ -151,8 +157,10 @@ func (f *priForwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	if delay, ok := testhooks.Get(f.testHooks, testhooks.MatchingForwardTaskDelay, namespace.ID(task.query.request.GetNamespaceId())); ok {
-		time.Sleep(delay)
+	if f.failpointRegistry != nil {
+		if err := failpoint.ExecuteError(f.failpointRegistry, ForwardTaskKey.ForScope(task.query.request.GetNamespaceId())); err != nil {
+			return nil, err
+		}
 	}
 
 	degree := f.cfg.ForwarderMaxChildrenPerNode()
@@ -178,8 +186,10 @@ func (f *priForwarder) ForwardQueryTask(
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
 func (f *priForwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	if delay, ok := testhooks.Get(f.testHooks, testhooks.MatchingForwardTaskDelay, namespace.ID(task.nexus.request.GetNamespaceId())); ok {
-		time.Sleep(delay)
+	if f.failpointRegistry != nil {
+		if err := failpoint.ExecuteError(f.failpointRegistry, ForwardTaskKey.ForScope(task.nexus.request.GetNamespaceId())); err != nil {
+			return nil, err
+		}
 	}
 
 	degree := f.cfg.ForwarderMaxChildrenPerNode()

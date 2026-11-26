@@ -1,9 +1,11 @@
 package testcore
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -83,4 +85,40 @@ func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 			Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
 		},
 	}, capture.Snapshot())
+}
+
+type recordingT struct {
+	fatals []string
+}
+
+func (*recordingT) Helper() {}
+
+func (r *recordingT) Fatalf(format string, args ...any) {
+	r.fatals = append(r.fatals, fmt.Sprintf(format, args...))
+}
+
+func (s *TestEnvSuite) TestRequireValidDynamicConfig() {
+	for name, tc := range map[string]struct {
+		setting dynamicconfig.GenericSetting
+		value   any
+		valid   bool
+	}{
+		"valid value":                   {setting: dynamicconfig.EnableChasm, value: true, valid: true},
+		"invalid value":                 {setting: dynamicconfig.EnableChasm, value: "not a bool"},
+		"valid constrained value":       {setting: dynamicconfig.EnableChasm, value: []dynamicconfig.ConstrainedValue{{Value: true}}, valid: true},
+		"invalid constrained value":     {setting: dynamicconfig.EnableChasm, value: []dynamicconfig.ConstrainedValue{{Value: true}, {Value: "not a bool"}}},
+		"valid string duration":         {setting: dynamicconfig.FrontendResourceExhaustedRetryDelayFloor, value: "1s", valid: true},
+		"invalid string for an integer": {setting: dynamicconfig.MatchingNumTaskqueueReadPartitions, value: "x"},
+	} {
+		s.Run(name, func(s *TestEnvSuite) {
+			t := &recordingT{}
+			requireValidDynamicConfig(t, tc.setting, tc.value)
+			if tc.valid {
+				s.Empty(t.fatals)
+				return
+			}
+			s.Len(t.fatals, 1)
+			s.Contains(t.fatals[0], "invalid value for setting "+tc.setting.Key().String())
+		})
+	}
 }

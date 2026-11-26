@@ -12,6 +12,9 @@ const (
 	// ActionReturn fires and returns a configured value of type T (typically an error).
 	// Call sites retrieve it with Execute or ExecuteError.
 	ActionReturn
+	ActionBlock
+	ActionPause
+	ActionCall
 	// ActionOn activates a boolean switch failpoint (e.g. "skip cache" or "use smaller batch")
 	// without returning a specific value or error. Call sites check it with ExecuteSwitch.
 	ActionOn
@@ -23,6 +26,12 @@ func (a Action) String() string {
 		return "None"
 	case ActionReturn:
 		return "Return"
+	case ActionBlock:
+		return "Block"
+	case ActionPause:
+		return "Pause"
+	case ActionCall:
+		return "Call"
 	case ActionOn:
 		return "On"
 	default:
