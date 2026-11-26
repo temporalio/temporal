@@ -1048,7 +1048,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	// Ordinary sticky failures get one retry on the normal queue before creating a transient task.
 	// Bound workflows keep their binding and increment attempts: an exclusive binding never changes, and a
 	// non-exclusive binding moves only when its worker is gone.
-	if m.ms.ClearStickyTaskQueueUnlessPartOfSession() {
+	if m.ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure) {
 		incrementAttempt = false
 	}
 

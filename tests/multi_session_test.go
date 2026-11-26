@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -49,9 +50,10 @@ func (e *sessionMoveEnv) stickyQueue(worker string) *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{Name: e.tv.TaskQueue().GetName() + "-sticky-" + worker, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: e.tv.TaskQueue().GetName()}
 }
 
-// instanceKey is the worker process's instance key, which Matching uses to look up its heartbeats.
+// instanceKey is the worker process's instance key, which Matching uses to look up its heartbeats. A multi-session
+// worker's sticky queue is named after it.
 func (e *sessionMoveEnv) instanceKey(worker string) string {
-	return e.tv.WorkerInstanceKey() + "-" + worker
+	return e.stickyQueue(worker).GetName()
 }
 
 func (e *sessionMoveEnv) stickyAttributes(worker string, scheduleToStart time.Duration) *taskqueuepb.StickyExecutionAttributes {
@@ -67,7 +69,7 @@ func (e *sessionMoveEnv) pollWorkflowTask(
 ) error {
 	request := &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: queue, Identity: "worker-" + worker}
 	if worker != "" {
-		request.SessionOptions = multiSessionWorkerOptions(e.stickyQueue(worker).GetName())
+		request.SessionOptions = multiSessionWorkerOptions()
 		request.WorkerInstanceKey = e.instanceKey(worker)
 	}
 	_, err := e.poller.PollWorkflowTask(request).HandleTask(e.tv, handler, taskpoller.WithTimeout(timeout))
@@ -232,8 +234,8 @@ func TestWorkflowSessionMovesWithWorkflowTask(t *testing.T) {
 /*
 TestWorkflowSessionStaysOnBusyWorker tests hard stickiness while the worker is alive:
  1. Worker A binds the session and polls its sticky queue once, so Matching sees it as alive.
- 2. A workflow task waits in A's backlog past its schedule-to-start timeout while B polls the normal queue.
- 3. The timeout re-offers the task to A instead of the normal queue: B gets nothing and A completes it.
+ 2. A workflow task waits in A's backlog while B polls the normal queue.
+ 3. The task never times out to the normal queue: B gets nothing and A completes it.
 */
 func TestWorkflowSessionStaysOnBusyWorker(t *testing.T) {
 	t.Parallel()
@@ -255,7 +257,7 @@ func TestWorkflowSessionStaysOnBusyWorker(t *testing.T) {
 			timedOut = true
 		}
 	}
-	require.True(t, timedOut, "the busy worker's task should have timed out at least once without moving")
+	require.False(t, timedOut, "a bound workflow task has no schedule-to-start timeout")
 }
 
 /*
@@ -523,6 +525,28 @@ func TestWorkflowSessionActivityMoveReschedulesPendingWorkflowTask(t *testing.T)
 
 func multiSessionWorkerOptions(workerAddress string) *sessionpb.WorkerSessionOptions {
 	return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
-		MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: workerAddress},
+		MultiSession: &sessionpb.MultiSessionOptions{},
 	}}
+}
+
+/*
+TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
+versioning override:
+ 1. Worker A binds the session and is alive on its sticky queue.
+ 2. UpdateWorkflowExecutionOptions pinning the workflow to a version is rejected.
+ 3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
+*/
+func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToA(time.Second)
+	e.registerStickyPoller("A")
+
+	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	require.ErrorContains(t, err, "bound to a worker servicing sessions")
+
+	e.signal()
+	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
 }

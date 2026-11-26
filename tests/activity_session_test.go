@@ -1,26 +1,20 @@
 package tests
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/primitives/timestamp"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -58,7 +52,7 @@ func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
 	})
 	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-	require.ErrorContains(t, err, "require the workflow to have been started by a multi-session worker")
+	require.ErrorContains(t, err, "require the workflow to be bound to a worker servicing sessions")
 	execution := tv.WithRunID(started.RunId).WorkflowExecution()
 	failed := false
 	for _, event := range env.GetHistory(env.Namespace().String(), execution) {
@@ -98,7 +92,7 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	}, taskpoller.WithTimeout(stickyPollTimeout))
 	require.Error(t, err)
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()), WorkerInstanceKey: tv.WorkerInstanceKey(),
+		SessionOptions: multiSessionWorkerOptions(), WorkerInstanceKey: tv.StickyTaskQueue().GetName(),
 	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		var commands []*commandpb.Command
 		for _, useSession := range []bool{false, true} {
@@ -150,24 +144,9 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	require.Empty(t, description.GetPendingActivities())
 }
 
-func (s *Versioning3Suite) TestWorkflowSessionActivityUsesStickyQueue() {
-	s.testWorkflowSessionActivityRouting(vbPinned, false)
-}
-
-func (s *Versioning3Suite) TestPinnedWorkflowSessionActivityIgnoresIndependentDeployment() {
-	s.testWorkflowSessionActivityRouting(vbPinned, true)
-}
-
-func (s *Versioning3Suite) TestWorkflowSessionActivityUsesCurrentDeployment() {
-	s.testWorkflowSessionActivityRouting(vbUnpinned, false)
-}
-
-func (s *Versioning3Suite) TestWorkflowSessionActivityRejectsMismatchedDeployment() {
-	s.testWorkflowSessionActivityRouting(vbUnpinned, true)
-}
-
-func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.VersioningBehavior, independentDeployment bool) {
-	s.T().Helper()
+// TestMultiSessionWorkerRejectedWithVersioning tests that a multi-session worker cannot poll with worker versioning:
+// its bindings do not follow versioning transitions yet.
+func (s *Versioning3Suite) TestMultiSessionWorkerRejectedWithVersioning() {
 	env := s.setupEnv(testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
 	tv := env.Tv()
 	env.updateTaskQueueDeploymentDataWithRoutingConfig(s, tv, &deploymentpb.RoutingConfig{
@@ -252,6 +231,6 @@ func (s *Versioning3Suite) testWorkflowSessionActivityRouting(behavior enumspb.V
 	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
 	})
-	s.Require().NoError(err)
-	s.Require().Empty(description.GetPendingActivities())
+	s.Require().ErrorAs(err, new(*serviceerror.InvalidArgument))
+	s.Require().ErrorContains(err, "multi-session workers do not support worker versioning")
 }
