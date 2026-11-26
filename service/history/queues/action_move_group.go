@@ -3,6 +3,9 @@ package queues
 import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type actionMoveGroup struct {
@@ -10,6 +13,9 @@ type actionMoveGroup struct {
 	grouper                      Grouper
 	moveGroupTaskCountBase       int
 	moveGroupTaskCountMultiplier float64
+	taskCategoryTag              metrics.Tag
+	namespaceRegistry            namespace.Registry
+	metricsHandler               metrics.Handler
 	logger                       log.Logger
 }
 
@@ -18,6 +24,9 @@ func newMoveGroupAction(
 	grouper Grouper,
 	moveGroupTaskCountBase int,
 	moveGroupTaskCountMultiplier float64,
+	categoryName string,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *actionMoveGroup {
 	return &actionMoveGroup{
@@ -25,6 +34,9 @@ func newMoveGroupAction(
 		grouper:                      grouper,
 		moveGroupTaskCountBase:       moveGroupTaskCountBase,
 		moveGroupTaskCountMultiplier: moveGroupTaskCountMultiplier,
+		taskCategoryTag:              metrics.TaskCategoryTag(categoryName),
+		namespaceRegistry:            namespaceRegistry,
+		metricsHandler:               metricsHandler,
 		logger:                       logger,
 	}
 }
@@ -66,6 +78,16 @@ func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 
 		groupsToMove := make([]any, 0, len(pendingTaskPerGroup))
 		for key, pendingTaskCount := range pendingTaskPerGroup {
+			if a.metricsHandler != nil && pendingTaskCount > 0 {
+				metrics.QueuePendingTasksPerNamespace.
+					With(a.metricsHandler).
+					Record(
+						int64(pendingTaskCount),
+						a.namespaceTag(key),
+						a.taskCategoryTag,
+					)
+			}
+
 			if pendingTaskCount >= moveGroupMinTaskCount {
 				groupsToMove = append(groupsToMove, key)
 				a.logger.Info("Too many pending tasks, moving group to next reader",
@@ -103,4 +125,33 @@ func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 	}
 
 	return moved
+}
+
+func (a *actionMoveGroup) namespaceTag(key any) metrics.Tag {
+	nsID := getNamespaceIDFromGroupKey(key)
+	if len(nsID) == 0 {
+		return metrics.NamespaceUnknownTag()
+	}
+
+	if a.namespaceRegistry != nil {
+		nsName, err := a.namespaceRegistry.GetNamespaceName(namespace.ID(nsID))
+		if err == nil {
+			return metrics.NamespaceTag(nsName.String())
+		}
+	}
+
+	return metrics.NamespaceTag(nsID)
+}
+
+func getNamespaceIDFromGroupKey(key any) string {
+	switch k := key.(type) {
+	case string:
+		return k
+	case tasks.TaskGroupNamespaceIDAndDestination:
+		return k.NamespaceID
+	case interface{ GetNamespaceID() string }:
+		return k.GetNamespaceID()
+	default:
+		return ""
+	}
 }
