@@ -16,10 +16,12 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -585,4 +587,148 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PausedWorkflow_NoWorkflow
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
 	s.Len(appliedEvent, 1)
+}
+
+func TestReapplyChildEvents(t *testing.T) {
+	t.Parallel()
+
+	eventTypes := []struct {
+		name      string
+		eventType enumspb.EventType
+		event     *historypb.HistoryEvent
+		expectAdd func(*historyi.MockMutableState, *historypb.HistoryEvent, error)
+	}{
+		{
+			name:      "StartChildWorkflowExecutionFailed",
+			eventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{
+					StartChildWorkflowExecutionFailedEventAttributes: &historypb.StartChildWorkflowExecutionFailedEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddStartChildWorkflowExecutionFailedEvent(gomock.Any(), gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+		{
+			name:      "ChildWorkflowExecutionStarted",
+			eventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{
+					ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddChildWorkflowExecutionStartedEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+		{
+			name:      "ChildWorkflowExecutionCompleted",
+			eventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{
+					ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddChildWorkflowExecutionCompletedEvent(gomock.Any(), gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+		{
+			name:      "ChildWorkflowExecutionFailed",
+			eventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{
+					ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddChildWorkflowExecutionFailedEvent(gomock.Any(), gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+		{
+			name:      "ChildWorkflowExecutionCanceled",
+			eventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{
+					ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddChildWorkflowExecutionCanceledEvent(gomock.Any(), gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+		{
+			name:      "ChildWorkflowExecutionTimedOut",
+			eventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{
+					ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddChildWorkflowExecutionTimedOutEvent(gomock.Any(), gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+		{
+			name:      "ChildWorkflowExecutionTerminated",
+			eventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{
+					ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{InitiatedEventId: 1},
+				},
+			},
+			expectAdd: func(ms *historyi.MockMutableState, event *historypb.HistoryEvent, err error) {
+				ms.EXPECT().AddChildWorkflowExecutionTerminatedEvent(gomock.Any(), gomock.Any()).Return(event, err)
+			},
+		},
+	}
+	for _, eventType := range eventTypes {
+		t.Run(eventType.name, func(t *testing.T) {
+			t.Parallel()
+			for _, scenario := range []string{"applied", "missing child", "duplicate", "error", "already started"} {
+				if scenario == "already started" && eventType.eventType != enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
+					continue
+				}
+				t.Run(scenario, func(t *testing.T) {
+					t.Parallel()
+					ms := historyi.NewMockMutableState(gomock.NewController(t))
+					event := common.CloneProto(eventType.event)
+					event.EventType = eventType.eventType
+					event.EventId = 10
+					events := []*historypb.HistoryEvent{event}
+					const runID = "source-run"
+					resource := definition.NewEventReappliedID(runID, event.EventId, event.Version)
+					ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+					ms.EXPECT().IsResourceDuplicated(resource).Return(scenario == "duplicate")
+					if scenario != "duplicate" {
+						child := &persistencespb.ChildExecutionInfo{StartedEventId: common.EmptyEventID}
+						if scenario == "already started" {
+							child.StartedEventId = 2
+						}
+						ms.EXPECT().GetChildExecutionInfo(int64(1)).Return(child, scenario != "missing child")
+					}
+					var expectedEvents []*historypb.HistoryEvent
+					var expectedErr error
+					if scenario == "error" {
+						expectedErr = serviceerror.NewInternal("cannot apply child event")
+						eventType.expectAdd(ms, nil, expectedErr)
+					}
+					if scenario == "applied" {
+						eventType.expectAdd(ms, event, nil)
+						ms.EXPECT().UpdateDuplicatedResource(resource)
+						ms.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(false)
+						ms.EXPECT().HasPendingWorkflowTask().Return(false)
+						ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
+						ms.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(nil, nil)
+						expectedEvents = events
+					}
+					reapplier := NewEventsReapplier(hsm.NewRegistry(), chasmworkflow.NewRegistry(), metrics.NoopMetricsHandler, log.NewTestLogger())
+					actualEvents, err := reapplier.ReapplyEvents(t.Context(), ms, nil, events, runID)
+					require.ErrorIs(t, err, expectedErr)
+					protorequire.ProtoSliceEqual(t, expectedEvents, actualEvents)
+				})
+			}
+		})
+	}
 }
