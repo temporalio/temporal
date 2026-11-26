@@ -3248,8 +3248,9 @@ func TestValidateAdminBatchOperation_AllNamespaces(t *testing.T) {
 	}{
 		{name: "refresh across all namespaces", request: request(func(*adminservice.StartAdminBatchOperationRequest) {})},
 		{
-			name:    "namespace is ignored",
+			name:    "namespace is rejected",
 			request: request(func(r *adminservice.StartAdminBatchOperationRequest) { r.Namespace = "ns-1" }),
+			wantErr: "Namespace must be empty when AllNamespaces is true",
 		},
 		{
 			name: "executions instead of query",
@@ -3257,7 +3258,14 @@ func TestValidateAdminBatchOperation_AllNamespaces(t *testing.T) {
 				r.VisibilityQuery = ""
 				r.Executions = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
 			}),
-			wantErr: "a query across all namespaces requires a visibility query",
+			wantErr: "Executions must be empty when AllNamespaces is true",
+		},
+		{
+			name: "executions with query",
+			request: request(func(r *adminservice.StartAdminBatchOperationRequest) {
+				r.Executions = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
+			}),
+			wantErr: "Executions must be empty when AllNamespaces is true",
 		},
 		{
 			name:    "whitespace-only query",

@@ -397,6 +397,7 @@ func (s *batchCommandTestSuite) TestAdminAllNamespacesBatchRefreshTasks() {
 		s.Require().NoError(AdminAllNamespacesBatchRefreshWorkflowTasks(ctx, s.client, prompter))
 		s.Contains(s.output.String(), "refresh tasks for 2 execution(s)")
 		s.Contains(s.output.String(), `in all namespaces, including "temporal-system"`)
+		s.Contains(s.output.String(), "--namespace, --workflow-id and --run-id are ignored")
 		s.Contains(s.output.String(), "Reminder: use system or predefined search attributes to narrow the query down")
 	})
 
@@ -429,13 +430,26 @@ func (s *batchCommandTestSuite) TestAdminAllNamespacesBatchRefreshTasks() {
 		s.Nil(s.client.admin.lastRequest)
 	})
 
-	s.Run("rejects --workflow-id with --all-namespaces", func() {
-		s.client.admin.lastRequest = nil
-		err := s.app.Run([]string{
-			"tdbg", "--yes", "execution", "refresh-tasks", "--all-namespaces",
-			"--workflow-id", "wf", "--query", "WorkflowType='MyWorkflow'", "--reason", "refresh",
+	for _, tc := range []struct {
+		name  string
+		flags []string
+	}{
+		{name: "workflow ID", flags: []string{"--workflow-id", "wf"}},
+		{name: "run ID", flags: []string{"--run-id", "run"}},
+		{name: "workflow and run IDs", flags: []string{"--workflow-id", "wf", "--run-id", "run"}},
+	} {
+		s.Run("ignores "+tc.name+" with --all-namespaces", func() {
+			s.client.admin.lastRequest = nil
+			args := []string{
+				"tdbg", "--namespace", "ns-1", "--yes", "execution", "refresh-tasks", "--all-namespaces",
+				"--query", "WorkflowType='MyWorkflow'", "--reason", "refresh",
+			}
+			args = append(args, tc.flags...)
+			s.NoError(s.app.Run(args))
+			s.True(s.client.admin.lastRequest.GetRefreshTasksOperation().GetAllNamespaces())
+			s.Equal("WorkflowType='MyWorkflow'", s.client.admin.lastRequest.GetVisibilityQuery())
+			s.Empty(s.client.admin.lastRequest.GetNamespace())
+			s.Empty(s.client.admin.lastRequest.GetExecutions())
 		})
-		s.ErrorContains(err, "cannot be used with --workflow-id")
-		s.Nil(s.client.admin.lastRequest)
-	})
+	}
 }

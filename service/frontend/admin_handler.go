@@ -1506,7 +1506,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	// Admin batch workflows run in the temporal-system namespace to operate on target namespaces.
 	targetNS := adminRequest.GetNamespace()
 	var targetNSID string
-	// A refresh across all namespaces ignores targetNS and leaves targetNSID empty: the worker lists
+	// A refresh across all namespaces leaves targetNSID empty: the worker lists
 	// executions without a namespace and refreshes each one in the namespace that the listing returns.
 	if !adminRequest.GetRefreshTasksOperation().GetAllNamespaces() {
 		nsID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
@@ -1660,6 +1660,12 @@ func adminBatchWorkflowID(request *adminservice.StartAdminBatchOperationRequest)
 func validateAllNamespaces(params *adminservice.StartAdminBatchOperationRequest) error {
 	if !params.GetRefreshTasksOperation().GetAllNamespaces() {
 		return nil
+	}
+	if params.GetNamespace() != "" {
+		return serviceerror.NewInvalidArgument("Namespace must be empty when AllNamespaces is true")
+	}
+	if len(params.GetExecutions()) > 0 {
+		return serviceerror.NewInvalidArgument("Executions must be empty when AllNamespaces is true")
 	}
 	// Executions don't carry a namespace, so a refresh across all namespaces must select executions by query.
 	if err := batcher.ValidateAllNamespacesQuery(params.GetVisibilityQuery()); err != nil {

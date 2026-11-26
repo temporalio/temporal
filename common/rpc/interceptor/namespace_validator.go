@@ -392,7 +392,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 		}
 		return nil, nil
 	case *adminservice.StartAdminBatchOperationRequest:
-		// A refresh across all namespaces ignores Namespace.
+		// The admin handler validates all-namespaces requests without a namespace lookup.
 		if request.GetRefreshTasksOperation().GetAllNamespaces() {
 			return nil, nil
 		}

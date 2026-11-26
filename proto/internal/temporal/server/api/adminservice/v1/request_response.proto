@@ -790,8 +790,8 @@ message StartAdminBatchOperationResponse {
 // This regenerates all pending tasks for each execution.
 message BatchOperationRefreshTasks {
   // Refresh tasks for the executions matching `visibility_query` in all namespaces, including
-  // temporal-system, as one batch workflow. Requires `visibility_query`; `namespace` is ignored and
-  // `executions` must be empty.
+  // temporal-system, as one batch workflow. Requires `visibility_query`;
+  // `namespace` and `executions` must be empty.
   // The query can only use system and predefined search attributes, not custom ones. Unlike a
   // query in one namespace, it also matches executions with TemporalNamespaceDivision set, such as
   // schedules and batch jobs; add `TemporalNamespaceDivision IS NULL` to skip them. That does not

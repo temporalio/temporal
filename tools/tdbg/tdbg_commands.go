@@ -283,7 +283,7 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				},
 				&cli.BoolFlag{
 					Name:  FlagAllNamespaces,
-					Usage: "Select executions in all namespaces, including temporal-system; requires --query. --namespace and TEMPORAL_CLI_NAMESPACE are ignored",
+					Usage: "Select executions in all namespaces, including temporal-system; requires --query. --namespace, TEMPORAL_CLI_NAMESPACE, --workflow-id and --run-id are ignored",
 				},
 				&cli.StringFlag{
 					Name:  FlagReason,

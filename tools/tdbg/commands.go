@@ -699,13 +699,7 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 }
 
 func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
-	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
-		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
-	}
 	if c.Bool(FlagAllNamespaces) {
-		if c.IsSet(FlagWorkflowID) || c.IsSet(FlagRunID) {
-			return errors.New("--all-namespaces cannot be used with --workflow-id or --run-id")
-		}
 		query := c.String(FlagVisibilityQuery)
 		if strings.TrimSpace(query) == "" {
 			return errors.New("--all-namespaces requires --query")
@@ -714,6 +708,9 @@ func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prom
 			return fmt.Errorf("invalid --query for --all-namespaces: %w", err)
 		}
 		return AdminAllNamespacesBatchRefreshWorkflowTasks(c, clientFactory, prompter)
+	}
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
 	}
 	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
 		return AdminBatchRefreshWorkflowTasks(c, clientFactory, prompter)
@@ -836,7 +833,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 }
 
 // AdminAllNamespacesBatchRefreshWorkflowTasks starts one batch job that refreshes workflow tasks for
-// the executions matching a query in all namespaces. It ignores --namespace.
+// the executions matching a query in all namespaces. It ignores --namespace, --workflow-id, and --run-id.
 func AdminAllNamespacesBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
 	adminClient := clientFactory.AdminClient(c)
 
@@ -862,6 +859,7 @@ func AdminAllNamespacesBatchRefreshWorkflowTasks(c *cli.Context, clientFactory C
 	}
 
 	msg := fmt.Sprintf("A batch workflow will be started in %q to refresh tasks for %d execution(s) matching query %q in all namespaces, including %q.\n"+
+		"With --all-namespaces, --namespace, --workflow-id and --run-id are ignored.\n"+
 		"Reminder: use system or predefined search attributes to narrow the query down to only the necessary executions as much as possible.\n"+
 		"Continue?",
 		primitives.SystemLocalNamespace, countResp.GetCount(), query, primitives.SystemLocalNamespace)

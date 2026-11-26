@@ -1273,8 +1273,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_LifecycleRequest
 	s.ErrorIs(err, errBothNamespaceIDAndNameSet)
 }
 
-// TestInterceptStartAdminBatchOperation covers that a refresh across all namespaces ignores
-// Namespace, while any other admin batch still requires it.
+// TestInterceptStartAdminBatchOperation verifies that all-namespaces refreshes bypass namespace
+// lookup, while other admin batches require a namespace.
 func (s *namespaceValidatorSuite) TestInterceptStartAdminBatchOperation() {
 	testCases := []struct {
 		name    string
