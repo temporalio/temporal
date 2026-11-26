@@ -40,6 +40,8 @@ CREATE TABLE executions_visibility (
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalExternalPayloadCount")) STORED,
   TemporalPriorityKey BIGINT GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalPriorityKey")) STORED,
   TemporalFairnessKey VARCHAR(255) GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalFairnessKey")) STORED,
+  TemporalTimeSkippingEnabled BOOLEAN GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalTimeSkippingEnabled")) STORED,
+  TemporalTimeSkippingAccumulatedDuration BIGINT GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalTimeSkippingAccumulatedDuration")) STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),
