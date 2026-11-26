@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/grpcfailpoints"
 	"go.temporal.io/server/common/testing/httpfailpoints"
 	"go.temporal.io/server/common/testing/serverbuggify"
@@ -94,15 +95,14 @@ func TestFailpointRegistryStartupSwitch(t *testing.T) {
 func TestFailpointsGenerators(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name    string
+	for name, tc := range map[string]struct {
 		enabled bool
 		want    bool
 	}{
-		{name: "disabled"},
-		{name: "enabled", enabled: true, want: true},
+		"disabled": {},
+		"enabled":  {enabled: true, want: true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			registry := newFailpointRegistryIfEnabled(tc.enabled, log.NewNoopLogger())
 
@@ -115,14 +115,15 @@ func TestFailpointsGenerators(t *testing.T) {
 	}
 }
 
-// TestFailpointsDisabledIgnoresBuggify checks that when failpoints are disabled, serverbuggify
-// doesn't install BUGGIFY, and doesn't even read the setting, so an invalid value is ignored.
+// TestFailpointsDisabledIgnoresBuggify checks that when failpoints are disabled, failpointrules and
+// serverbuggify install nothing, and don't even read their settings, so an invalid value is ignored.
 func TestFailpointsDisabledIgnoresBuggify(t *testing.T) {
 	t.Parallel()
 	registry := newFailpointRegistryIfEnabled(false, log.NewNoopLogger())
 	require.Nil(t, registry)
 	client := dynamicconfig.NewMemoryClient()
 	client.OverrideSetting(serverbuggify.Setting, map[string]any{"seed": 5, "unknown": true})
+	client.OverrideSetting(failpointrules.Setting, []any{map[string]any{"key": "on", "action": "Of"}})
 
 	app := fxtest.New(t,
 		fx.Supply(
@@ -130,7 +131,9 @@ func TestFailpointsDisabledIgnoresBuggify(t *testing.T) {
 			fx.Annotate(client, fx.As(new(dynamicconfig.Client))),
 			fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
 		),
+		failpointrules.Module,
 		serverbuggify.Module,
+		failpointrules.ReleaseModule,
 	)
 	app.RequireStart()
 	app.RequireStop()
