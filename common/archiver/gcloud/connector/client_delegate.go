@@ -55,6 +55,7 @@ type (
 		Write(p []byte) (n int, err error)
 		CloseWithError(err error) error
 		SetMetadata(metadata map[string]string)
+		SetChunkSize(chunkSize int)
 	}
 
 	writerDelegate struct {
@@ -195,6 +196,11 @@ func (w *writerDelegate) CloseWithError(err error) error {
 
 func (w *writerDelegate) SetMetadata(metadata map[string]string) {
 	w.writer.Metadata = metadata
+}
+
+// SetChunkSize sets the size of the buffer used to upload the object. It must be called before the first Write.
+func (w *writerDelegate) SetChunkSize(chunkSize int) {
+	w.writer.ChunkSize = chunkSize
 }
 
 // Close closes the Reader. It must be called when done reading.
