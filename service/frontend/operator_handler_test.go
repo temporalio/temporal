@@ -1409,7 +1409,7 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_LocalNamespaceDoesNotBlo
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
@@ -1454,7 +1454,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
@@ -1508,7 +1508,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ClusterNameConflict() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterID = uuid.NewString()
 
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1529,7 +1529,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Clu
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_FailoverVersionIncrementMismatch() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
@@ -1552,7 +1552,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Fai
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardCount_Invalid() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
@@ -1575,7 +1575,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Sha
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
@@ -1620,7 +1620,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_GlobalNamespaceDisabled() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
@@ -1643,7 +1643,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Glo
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_InitialFailoverVersionConflict() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
@@ -1669,7 +1669,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Ini
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardCountZero() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
@@ -1693,36 +1693,34 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Sha
 	s.Contains(err.Error(), "HistoryShardCount must be positive")
 }
 
-func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_EmptyRPCAddressWhenEnabled() {
-	var clusterName = uuid.NewString()
-	var clusterID = uuid.NewString()
-
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
-	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
-	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout("", gomock.Any(), gomock.Any()).Return(
-		s.mockResource.RemoteAdminClient,
-	)
-	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
-		&adminservice.DescribeClusterResponse{
-			ClusterId:                clusterID,
-			ClusterName:              clusterName,
-			HistoryShardCount:        4,
-			FailoverVersionIncrement: 10,
-			InitialFailoverVersion:   1,
-			IsGlobalNamespaceEnabled: true,
-		}, nil)
-	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               "",
-		EnableRemoteClusterConnection: true,
-	})
-	s.Require().Error(err)
-	var invalidArg *serviceerror.InvalidArgument
-	s.Require().ErrorAs(err, &invalidArg)
-	s.Contains(err.Error(), "RPCAddress must not be empty when Enabled=true")
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_InvalidFrontendAddress() {
+	// None of these addresses may reach the client factory: it exits the process on an
+	// address it cannot dial. The ClientFactory mock has no expectations, so any call fails.
+	testCases := []struct {
+		name    string
+		address string
+		errMsg  string
+	}{
+		{name: "empty", address: "", errMsg: "address must not be empty"},
+		{name: "missing port", address: "remote-cluster", errMsg: "missing port in address"},
+		{name: "too many colons", address: "remote-cluster:7233:7233", errMsg: "too many colons in address"},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
+				FrontendAddress:               tc.address,
+				EnableRemoteClusterConnection: true,
+			})
+			s.Require().Error(err)
+			var invalidArg *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArg)
+			s.Contains(err.Error(), tc.errMsg)
+		})
+	}
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	eventLogger := &captureRemoteClusterEventLogger{}
 	s.handler.eventLogger = eventLogger
 	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
@@ -1744,7 +1742,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Err
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure() {
-	rpcAddress := uuid.NewString()
+	rpcAddress := uuid.NewString() + ":7233"
 	eventLogger := &captureRemoteClusterEventLogger{}
 	s.handler.eventLogger = eventLogger
 	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
@@ -1769,7 +1767,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure()
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_EventEmissionPanicCaptured() {
-	rpcAddress := uuid.NewString()
+	rpcAddress := uuid.NewString() + ":7233"
 	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
 	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1791,7 +1789,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_EventEmissionPanicC
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Error() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 	eventLogger := &captureRemoteClusterEventLogger{}
@@ -1824,7 +1822,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Error() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
@@ -1868,7 +1866,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_NotApplied_Error() {
-	var rpcAddress = uuid.NewString()
+	var rpcAddress = uuid.NewString() + ":7233"
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()

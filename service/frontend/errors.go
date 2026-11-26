@@ -92,6 +92,7 @@ var (
 	errWorkflowReturnedErrorMessage                   = "Workflow %s returned an error: %v."
 	errUnableConnectRemoteClusterMessage              = "Unable connect to remote cluster %s with error: %v."
 	errInvalidRemoteClusterInfo                       = "Unable connect to remote cluster with invalid config: %v."
+	errInvalidRemoteClusterAddress                    = "Invalid remote cluster frontend address %q: %v."
 	errUnableToStoreClusterInfo                       = "Unable to persist cluster info with error: %v."
 	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
 	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace %v info with error: %v"
