@@ -919,22 +919,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
-func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
-	queue := UnversionedQueueKey(partition)
-	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
-		NamespaceID: queue.NamespaceId(),
-		TaskQueue:   queue.PersistenceName(),
-		TaskType:    queue.TaskType(),
-	})
-	if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return response.TaskQueueInfo.GetExclusiveWorkerAssignment() != nil, nil
-}
-
 func (e *matchingEngineImpl) GrantEagerDispatch(
 	ctx context.Context,
 	request *matchingservice.GrantEagerDispatchRequest,
@@ -4007,9 +3991,9 @@ func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 
 // checkBoundWorker returns StickyWorkerUnavailable when the worker that owns this sticky queue is dead, so History
 // sends the task to the normal queue instead. The worker counts as alive if it polled the queue recently, or if it
-// still appears in the in-memory heartbeat cache. History names the worker in the session directive, so the lookup
-// works even after this partition was unloaded or moved. Only used for workflows that are not exclusively bound to a
-// worker.
+// still appears in the in-memory heartbeat cache. The heartbeat lookup only applies to tasks History marked with a
+// session directive; an ordinary sticky task without a recent poller is unavailable, as for any sticky queue. Only
+// used for workflows that are not exclusively bound to a worker.
 func (e *matchingEngineImpl) checkBoundWorker(
 	ctx context.Context,
 	pm taskQueuePartitionManager,
@@ -4018,7 +4002,11 @@ func (e *matchingEngineImpl) checkBoundWorker(
 	if stickyWorkerAvailable(pm) {
 		return nil
 	}
-	available, err := e.boundWorkerAvailable(ctx, pm, sessionDirective.GetBoundWorkerInfo().GetInstanceKey())
+	if sessionDirective == nil {
+		// A task without a session directive is an ordinary sticky task: its worker is gone.
+		return serviceerrors.NewStickyWorkerUnavailable()
+	}
+	available, err := e.boundWorkerAvailable(ctx, pm)
 	if err != nil {
 		return err
 	}
@@ -4031,10 +4019,12 @@ func (e *matchingEngineImpl) checkBoundWorker(
 // boundWorkerAvailable reports whether the worker that owns this sticky queue is alive according to its heartbeats.
 // It is only consulted for non-exclusive bindings with no recent poller: exclusive bindings never fall back to the
 // normal queue, so their tasks wait for their worker instead.
-func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQueuePartitionManager, workerInstanceKey string) (bool, error) {
-	if pm == nil || workerInstanceKey == "" {
+func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQueuePartitionManager) (bool, error) {
+	if pm == nil {
 		return false, nil
 	}
+	// A multi-session worker's sticky queue is named after its instance key.
+	workerInstanceKey := pm.Partition().RpcName()
 
 	// TODO (Shivam): Cache worker heartbeat lookups to reduce # of RPC trips
 	_, err := e.matchingRawClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
