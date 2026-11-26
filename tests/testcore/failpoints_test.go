@@ -8,8 +8,64 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/testing/serverbuggify"
+	"go.temporal.io/testx/failpoint"
 	"gopkg.in/yaml.v3"
 )
+
+// recordingTB records whether the test failed instead of failing the real test.
+type recordingTB struct {
+	testing.TB
+	failed bool
+}
+
+func (r *recordingTB) Helper() {}
+
+func (r *recordingTB) Errorf(string, ...any) { r.failed = true }
+
+var requireFiredKey = failpoint.NewKey[error]("testcore.requireFired")
+
+func TestRequireFired(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		configure  func(fp *failpoint.Failpoint[error])
+		executions int
+		wantFailed bool
+	}{
+		{name: "never executed", wantFailed: true},
+		{name: "executed while off", executions: 2, wantFailed: true},
+		{
+			name:       "fired",
+			configure:  func(fp *failpoint.Failpoint[error]) { fp.On() },
+			executions: 1,
+		},
+		{
+			name: "fired before the trigger was set again",
+			configure: func(fp *failpoint.Failpoint[error]) {
+				fp.On()
+				_, _ = fp.Execute()
+				require.NoError(t, fp.SetTrigger(failpoint.Trigger{SkipFirst: 1}))
+			},
+			executions: 1,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fp := failpoint.NewFailpoint(requireFiredKey)
+			if tc.configure != nil {
+				tc.configure(fp)
+			}
+			for range tc.executions {
+				_, _ = fp.Execute()
+			}
+			recorder := &recordingTB{TB: t}
+			requireFired(recorder, requireFiredKey, fp)
+			require.Equal(t, tc.wantFailed, recorder.failed)
+		})
+	}
+}
 
 // WithBuggify gives the test a dedicated cluster whose servers have the failpoints.buggify block.
 // The YAML list of the guide is the standard list that StandardBuggifyKeys returns, and the list

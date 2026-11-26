@@ -618,7 +618,10 @@ func (e *TestEnv) WorkerTaskQueue() string {
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
+// The test fails if the value is not valid for the setting.
 func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	e.t.Helper()
+	requireValidDynamicConfig(e.t, setting, value)
 	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
 			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
@@ -643,6 +646,28 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+}
+
+// requireValidDynamicConfig fails the test if value, or a value of a []dynamicconfig.ConstrainedValue,
+// is not valid for setting, as WithDynamicConfig does.
+func requireValidDynamicConfig(t interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}, setting dynamicconfig.GenericSetting, value any) {
+	t.Helper()
+	values := []any{value}
+	if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
+		values = values[:0]
+		for _, cv := range cvs {
+			values = append(values, cv.Value)
+		}
+	}
+	for _, v := range values {
+		if err := setting.Validate(v); err != nil {
+			t.Fatalf("OverrideDynamicConfig: invalid value for setting %s: %v", setting.Key(), err)
+			return
+		}
+	}
 }
 
 // StartNamespaceLogCapture starts a log capture scoped to this test environment's namespace.

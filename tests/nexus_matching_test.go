@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/testx/failpoint"
 )
 
 type NexusMatchingTestSuite struct {
@@ -48,14 +47,7 @@ func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwar
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
 	// A registered failpoint, even a disabled one, keeps BUGGIFY from skipping the sync match.
-	registry := testcore.FailpointRegistry(env.GetTestCluster())
-	skipKey := matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String())
-	fp := failpoint.NewFailpoint(skipKey)
-	registry.Set(fp)
-	s.T().Cleanup(func() {
-		registry.Delete(skipKey)
-		fp.Disable()
-	})
+	testcore.InjectFailpoint(env, matching.SkipSyncMatchKey, testcore.MayNotFire())
 
 	dispatchAndCompleteNexusTask(s.T(), env, false, false)
 }

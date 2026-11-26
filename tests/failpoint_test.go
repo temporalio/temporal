@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
 )
 
@@ -113,17 +112,13 @@ func completeWorkflows(t *testing.T, env *testcore.TestEnv) {
 func TestSkipSyncMatch(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t)
-	registry := testcore.FailpointRegistry(env.GetTestCluster())
-	key := matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String())
-	fp := failpoint.NewFailpoint(key)
+	fp := testcore.InjectFailpoint(env, matching.SkipSyncMatchKey)
 	fp.On()
-	registry.Set(fp)
-	t.Cleanup(func() {
-		registry.Delete(key)
-		fp.Disable()
-	})
 
 	completeWorkflows(t, env)
+
+	_, fires := fp.Stats()
+	require.Positive(t, fires, "matching skipped the sync match")
 }
 
 // TestBuggifiableSettings completes workflows with each value that BUGGIFY picks for its settings,

@@ -72,3 +72,26 @@ func (s *registrySuite) TestSwapReleasesDisplacedBlock() {
 	displaced.Disable()
 	s.Rcv(done)
 }
+
+func (s *registrySuite) TestGetOrSet() {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[error](key1)
+
+	s.Same(fp1, registry.GetOrSet(fp1))
+	s.Same(fp1, registry.GetOrSet(fp2))
+	s.Same(fp1, registry.Get(key1))
+}
+
+func (s *registrySuite) TestCompareAndDelete() {
+	registry := failpoint.NewRegistry()
+	fp1 := failpoint.NewFailpoint[error](key1)
+	fp2 := failpoint.NewFailpoint[error](key1)
+	registry.Set(fp1)
+
+	s.False(registry.CompareAndDelete(fp2))
+	s.Same(fp1, registry.Get(key1))
+	s.True(registry.CompareAndDelete(fp1))
+	s.Nil(registry.Get(key1))
+	s.False(registry.CompareAndDelete(fp1))
+}

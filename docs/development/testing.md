@@ -5,7 +5,7 @@ This document describes the project's testing setup, utilities and best practice
 ## Setup
 
 ### Build tags
-- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled.
+- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled. It does not control failpoints, which are compiled into every build; see [Failpoints](failpoints.md).
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
 
 ### Environment variables
@@ -296,14 +296,66 @@ The test fails if no matching call reaches the gate.
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise
 difficult to test. This is a **last resort** - prefer mocking and dependency injection when possible.
 
-**Example:**
-
-The UpdateWithStart API has a race window between releasing a lock and starting a workflow where
-another request could create the same workflow first. The `UpdateWithStartInBetweenLockAndStart`
-hook lets tests inject a callback at this exact point, making it possible to reliably test
-conflict handling.
-
 _NOTE: Tests using testhooks must be run with `-tags=test_dep`._
+
+Failpoints (see below) replace testhooks that only delay, call or fail at a point in the code. The
+testhooks that stay are those that return a value to the code, such as a batch size or a forced
+partition, and interceptors that wrap a call and decide whether to run it. Convert a hook that only
+delays, calls or fails to a failpoint when a test needs to change it, instead of adding hooks of
+that kind.
+
+### failpoint package
+
+The `failpoint` package injects faults and timing control at named points in server code. Prefer
+it over a new testhooks key when the test only needs to fail, delay, block, or run a callback at
+a point in the code.
+
+The server installs failpoints only if the startup switch is on, see
+[Failpoints](failpoints.md). Test clusters (`testcore`) have it on.
+
+A failpoint is declared once as a `failpoint.Key[T]`, where `T` is the type of the value it
+returns, in the package that executes it (such as `service/matching` or
+`service/history/api/multioperation`), with a comment that says where it fires and what tests use
+it for. Server code executes it through the server's `*failpoint.Registry`, which fx provides to
+every service as its `FailpointSource`, scoped to a namespace ID:
+
+```go
+if err := failpoint.CheckError(f.failpointSource, matching.ForwardTaskKey.ForScope(nsID)); err != nil {
+    return err
+}
+```
+
+`CheckError` returns an error only if the failpoint returns one. Use `failpoint.Execute` when
+the failpoint returns a value of another type. Without failpoints enabled, the registry is nil,
+so both do nothing.
+
+Tests configure the failpoint for the test's namespace. It is removed when the test ends:
+
+```go
+fp := testcore.InjectFailpoint(env, matching.ForwardTaskKey)
+fp.Pause(100*time.Millisecond)  // Delay every forward.
+fp.Return(serviceerror.NewUnavailable("injected"), failpoint.Trigger{MaxFires: 1})  // Fail the next forward.
+fp.Block(failpoint.Trigger{MaxFires: 1})                         // Hold the next forward ...
+require.NoError(t, fp.Wait(ctx))                 // ... until it arrives ...
+fp.Disable()                                     // ... then release it.
+```
+
+The test fails if the failpoint never fired, so a wrong key, scope or configuration can't pass
+unnoticed; pass `testcore.MayNotFire()` to opt out. Use `testcore.InjectFailpointIn` to inject into
+another cluster of the test, such as the standby cluster of a replication test, and
+`testcore.InjectUnscopedFailpoint` for a failpoint of all scopes, which needs a dedicated cluster.
+
+`Call` runs a callback at the failpoint. For example, Update-with-Start has a race window between
+releasing the workflow lock and starting the workflow, in which another request could start the
+same workflow first. `multioperation.BetweenLockAndStartKey` lets a test start a
+conflicting workflow at exactly this point:
+
+```go
+testcore.InjectFailpoint(env, multioperation.BetweenLockAndStartKey).Call(func() error {
+    // Start the conflicting workflow here.
+    return nil
+}, failpoint.Trigger{MaxFires: 1})
+```
 
 ### softassert package
 
