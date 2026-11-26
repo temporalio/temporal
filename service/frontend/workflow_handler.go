@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
-	otellog "go.opentelemetry.io/otel/log"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -39,7 +38,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -51,7 +49,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/contextutil"
@@ -65,7 +62,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -325,14 +321,12 @@ func NewWorkflowHandler(
 	callbackValidator callbacks.Validator,
 	linkValidator commonlinks.Validator,
 	config *Config,
-	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	nsHandler *namespaceHandler,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	eventLogger otellog.Logger,
 	throttledLogger log.Logger,
 	persistenceExecutionName string,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	workerDeploymentClient workerdeployment.Client,
@@ -346,7 +340,6 @@ func NewWorkflowHandler(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
-	timeSource clock.TimeSource,
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
@@ -356,40 +349,17 @@ func NewWorkflowHandler(
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 	validator *workflow.RequestValidator,
-	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
-	metricsHandler metrics.Handler,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		ActivityHandler:       activityHandler,
-		NexusOperationHandler: nexusOperationHandler,
-		status:                common.DaemonStatusInitialized,
-		callbackValidator:     callbackValidator,
-		linkValidator:         linkValidator,
-		config:                config,
-		tokenSerializer:       tasktoken.NewSerializer(),
-		versionChecker:        headers.NewDefaultVersionChecker(),
-		namespaceHandler: newNamespaceHandler(
-			logger,
-			eventLogger,
-			persistenceMetadataManager,
-			namespaceRegistry,
-			clusterMetadata,
-			nsreplication.NewReplicator(
-				namespaceReplicationQueue,
-				logger,
-				eventLogger,
-				config.EmitNamespaceLifecycleEvents,
-				clusterMetadata.GetCurrentClusterName(),
-			),
-			archivalMetadata,
-			archiverProvider,
-			timeSource,
-			config,
-			chasmNsReplClient,
-			metricsHandler,
-			replicationResolverFactory,
-		),
+		ActivityHandler:                 activityHandler,
+		NexusOperationHandler:           nexusOperationHandler,
+		status:                          common.DaemonStatusInitialized,
+		callbackValidator:               callbackValidator,
+		linkValidator:                   linkValidator,
+		config:                          config,
+		tokenSerializer:                 tasktoken.NewSerializer(),
+		versionChecker:                  headers.NewDefaultVersionChecker(),
+		namespaceHandler:                nsHandler,
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
 		logger:                          logger,

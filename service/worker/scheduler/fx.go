@@ -162,6 +162,7 @@ func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, de
 		autoMigrationSelected: func(scheduleID string) bool {
 			return s.autoMigrationSelected(name.String(), scheduleID)
 		},
+		migrateWithRunningWorkflows: func() bool { return s.migrateWithRunningWorkflows(name.String()) },
 	}, cancel
 }
 
