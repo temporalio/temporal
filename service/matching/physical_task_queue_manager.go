@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -634,12 +635,24 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		// request sent by history service
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
-		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
+		// The registry is nil unless failpoints are enabled; without it the namespace isn't read.
+		if registry := c.partitionMgr.engine.failpointRegistry; registry != nil && skipSyncMatch(registry, c.partitionMgr.ns.ID()) {
+			// The task is persisted and dispatched from the backlog, as if no poller was waiting.
 			return syncMatchNoPoller, nil
 		}
 	}
 
 	return c.matcher.Offer(ctx, task)
+}
+
+// SkipSyncMatchKey skips sync matching of a task that history added to a waiting poller, persisting
+// it to the backlog instead as if no poller was waiting. Tests use On to force the backlog path.
+var SkipSyncMatchKey = failpoint.NewKey[bool]("matching.skipSyncMatch")
+
+// skipSyncMatch reports whether a failpoint makes matching skip the sync match of a task that
+// history added. A failpoint matches the namespace by its ID.
+func skipSyncMatch(registry *failpoint.Registry, nsID namespace.ID) bool {
+	return failpoint.ExecuteSwitch(registry, SkipSyncMatchKey.ForScope(nsID.String()))
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

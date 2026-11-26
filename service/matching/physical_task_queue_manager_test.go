@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -873,6 +874,75 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestSyncMatchRateExcludesForwardedTa
 	s.Zero(syncMatchRate, "a forwarded task must not count toward the sync match rate")
 }
 
+func (s *PhysicalTaskQueueManagerTestSuite) TestTrySyncMatchSkipSyncMatchFailpoint() {
+	tests := []struct {
+		name     string
+		registry func(nsID string) *failpoint.Registry
+		want     syncMatchOutcome
+	}{
+		{
+			name:     "no registry",
+			registry: func(string) *failpoint.Registry { return nil },
+			want:     syncMatchSuccess,
+		},
+		{
+			name:     "failpoint not registered",
+			registry: func(string) *failpoint.Registry { return failpoint.NewRegistry() },
+			want:     syncMatchSuccess,
+		},
+		{
+			name: "failpoint registered but off",
+			registry: func(nsID string) *failpoint.Registry {
+				registry := failpoint.NewRegistry()
+				registry.Set(failpoint.New(SkipSyncMatchKey.ForScope(nsID)))
+				return registry
+			},
+			want: syncMatchSuccess,
+		},
+		{
+			name: "failpoint on for another namespace",
+			registry: func(nsID string) *failpoint.Registry {
+				registry := failpoint.NewRegistry()
+				fp := failpoint.New(SkipSyncMatchKey.ForScope("other-ns-id"))
+				fp.On()
+				registry.Set(fp)
+				return registry
+			},
+			want: syncMatchSuccess,
+		},
+		{
+			name: "failpoint on for the namespace",
+			registry: func(nsID string) *failpoint.Registry {
+				registry := failpoint.NewRegistry()
+				fp := failpoint.New(SkipSyncMatchKey.ForScope(nsID))
+				fp.On()
+				registry.Set(fp)
+				return registry
+			},
+			want: syncMatchNoPoller,
+		},
+	}
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			// SetupTest runs for each subtest, so the manager and its namespace ID are new.
+			s.tqMgr.partitionMgr.engine.failpointRegistry = tc.registry(s.tqMgr.partitionMgr.ns.ID().String())
+
+			poller, pollResult := runOneShotPoller(context.Background(), s.tqMgr)
+			defer poller.Cancel()
+			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+				CreateTime: timestamppb.New(time.Now()),
+			}, nil, 0, nil)
+
+			outcome, err := s.tqMgr.TrySyncMatch(context.Background(), task)
+			s.Require().NoError(err)
+			s.Require().Equal(tc.want, outcome)
+			if tc.want == syncMatchSuccess {
+				s.Require().IsType(&internalTask{}, <-pollResult, "poller should have received the task")
+			}
+		})
+	}
+}
+
 // useSignalsV2ForPollerScaling sets matching.useSignalsV2ForPollerScaling for the manager under
 // test and removes the decision rate limit so every call yields a decision.
 func (s *PhysicalTaskQueueManagerTestSuite) useSignalsV2ForPollerScaling(enabled bool) {
@@ -1318,4 +1388,18 @@ func userDataWithDeploymentVersion(deploymentName, buildID string) *persistences
 			},
 		},
 	}
+}
+
+func TestSkipSyncMatch(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, skipSyncMatch(nil, "ns-id"))
+
+	// A failpoint matches the namespace ID.
+	forced := failpoint.NewRegistry()
+	fp := failpoint.New(SkipSyncMatchKey.ForScope("ns-id"))
+	fp.On()
+	forced.Set(fp)
+	require.True(t, skipSyncMatch(forced, "ns-id"))
+	require.False(t, skipSyncMatch(forced, "other-ns-id"))
 }
