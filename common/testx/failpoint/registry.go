@@ -207,6 +207,15 @@ func (r *Registry) CompareAndDelete(fp entry) bool {
 	return true
 }
 
+// update runs fn with the failpoints of the registry, while no other change to the registry
+// runs, so fn can check and change several entries atomically. fn must not call the registry.
+func (r *Registry) update(fn func(failpoints map[keyID]entry)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fn(r.failpoints)
+	r.setCountLocked()
+}
+
 // Atomically runs fn while no other Atomically call of the registry runs. Code that configures
 // or removes failpoints with several calls, such as a lookup followed by a change, runs them
 // in Atomically, so they are atomic with respect to each other. It does not block executions.
