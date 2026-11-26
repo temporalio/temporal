@@ -6531,7 +6531,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		rootPartition := tqid.UnsafeTaskQueueFamily("test-namespace-id", "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
-		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
 		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
 		mockUDM := NewMockuserDataManager(ctrl)
 		mockUDM.EXPECT().PartitionScale().Return(nil)
@@ -6570,57 +6569,133 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
 	})
 
-	t.Run("fan-out: refuses a poll that arrives after shutdown of an unloaded task queue", func(t *testing.T) {
+	t.Run("fan-out: refuses late polls on a remote host when the root is unloaded", func(t *testing.T) {
 		t.Parallel()
-		ctrl := gomock.NewController(t)
-		ns, mockNsRegistry := createMockNamespaceCache(ctrl, matchingTestNamespace)
-
-		config := defaultTestConfig()
-		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
-
-		engine := &matchingEngineImpl{
-			config:                config,
-			namespaceRegistry:     mockNsRegistry,
-			logger:                log.NewNoopLogger(),
-			timeSource:            clock.NewRealTimeSource(),
-			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
-			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
-			partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
-		}
-
-		workerKey := "test-worker"
-		taskQueue := &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
-		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
-			&matchingservice.CancelOutstandingWorkerPollsRequest{
-				NamespaceId:       ns.ID().String(),
-				TaskQueue:         taskQueue,
-				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_NEXUS,
-				WorkerInstanceKey: workerKey,
-			})
-		require.NoError(t, err)
-
-		// The poll loads the partition that the shutdown found unloaded.
-		partition := tqid.UnsafeTaskQueueFamily(ns.ID().String(), taskQueue.GetName()).TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).RootPartition()
-		mockPM := NewMocktaskQueuePartitionManager(ctrl)
-		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
-		mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
-		mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Times(0)
-		engine.partitions[partition.Key()] = mockPM
-
-		resp, err := engine.PollNexusTaskQueue(context.Background(),
-			&matchingservice.PollNexusTaskQueueRequest{
-				NamespaceId: ns.ID().String(),
-				Request: &workflowservice.PollNexusTaskQueueRequest{
-					Namespace:         ns.Name().String(),
-					TaskQueue:         taskQueue,
-					WorkerInstanceKey: workerKey,
-				},
+		for _, tc := range []struct {
+			name               string
+			fairness           bool
+			scaleState         *persistencespb.PartitionScaleState
+			readErr            error
+			remotePartitionIDs []int32
+		}{
+			{
+				name:               "missing queue metadata uses configured count",
+				readErr:            serviceerror.NewNotFound("task queue not found"),
+				remotePartitionIDs: []int32{1},
 			},
-			metrics.NoopMetricsHandler,
-		)
-		require.NoError(t, err)
-		protorequire.ProtoEqual(t, &matchingservice.PollNexusTaskQueueResponse{}, resp)
+			{
+				name:               "saved scale includes draining partitions",
+				scaleState:         &persistencespb.PartitionScaleState{Target: 3, BacklogState: bitSet(nil).set(4)},
+				remotePartitionIDs: []int32{1, 2, 3, 4},
+			},
+			{
+				name:               "fairness uses the fair queue metadata",
+				fairness:           true,
+				scaleState:         &persistencespb.PartitionScaleState{Target: 3},
+				remotePartitionIDs: []int32{1, 2},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				ctrl := gomock.NewController(t)
+				ns, mockNsRegistry := createMockNamespaceCache(ctrl, matchingTestNamespace)
+
+				config := defaultTestConfig()
+				config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(2)
+				config.EnableFairness = dynamicconfig.GetTypedPropertyFnFilteredByTaskQueue(dynamicconfig.StaticGradualChange(tc.fairness))
+
+				taskManager := persistence.NewMockTaskManager(ctrl)
+				fairTaskManager := persistence.NewMockTaskManager(ctrl)
+				queueStore := taskManager
+				if tc.fairness {
+					queueStore = fairTaskManager
+				}
+
+				taskQueue := &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+				taskType := enumspb.TASK_QUEUE_TYPE_NEXUS
+				queueStore.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
+					NamespaceID: ns.ID().String(),
+					TaskQueue:   taskQueue.GetName(),
+					TaskType:    taskType,
+				}).Return(&persistence.GetTaskQueueResponse{
+					TaskQueueInfo: &persistencespb.TaskQueueInfo{PartitionScaleState: tc.scaleState},
+				}, tc.readErr)
+
+				hostInfo := membership.NewMockHostInfoProvider(ctrl)
+				hostInfo.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("root-host"))
+				rawClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+				rootEngine := &matchingEngineImpl{
+					config:                config,
+					namespaceRegistry:     mockNsRegistry,
+					hostInfoProvider:      hostInfo,
+					taskManager:           taskManager,
+					fairTaskManager:       fairTaskManager,
+					logger:                log.NewNoopLogger(),
+					timeSource:            clock.NewRealTimeSource(),
+					workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+					shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+					partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+					matchingRawClient: &routingMatchingClient{
+						MockMatchingServiceClient: rawClient,
+						routeFn: func(p tqid.Partition) (string, error) {
+							if p.IsRoot() {
+								return "root-host", nil
+							}
+							return "child-host", nil
+						},
+					},
+				}
+				childEngine := &matchingEngineImpl{
+					namespaceRegistry:     mockNsRegistry,
+					logger:                log.NewNoopLogger(),
+					timeSource:            clock.NewRealTimeSource(),
+					workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+					shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+					partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+				}
+				var remotePartitionIDs []int32
+				rawClient.EXPECT().CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+						for _, partition := range req.GetPartitions() {
+							remotePartitionIDs = append(remotePartitionIDs, partition.GetNormalPartitionId())
+						}
+						return childEngine.CancelOutstandingWorkerPollsPartition(ctx, req)
+					})
+
+				workerKey := "test-worker"
+				_, err := rootEngine.CancelOutstandingWorkerPolls(t.Context(), &matchingservice.CancelOutstandingWorkerPollsRequest{
+					NamespaceId:       ns.ID().String(),
+					TaskQueue:         taskQueue,
+					TaskQueueType:     taskType,
+					WorkerInstanceKey: workerKey,
+				})
+				require.NoError(t, err)
+				require.Equal(t, tc.remotePartitionIDs, remotePartitionIDs)
+				require.Empty(t, rootEngine.partitions)
+				require.Empty(t, childEngine.partitions)
+				require.NotNil(t, rootEngine.shutdownWorkers.Get(workerKey))
+
+				// The late poll loads the child partition after its host has recorded shutdown.
+				tq := tqid.UnsafeTaskQueueFamily(ns.ID().String(), taskQueue.GetName()).TaskQueue(taskType)
+				child := tq.NormalPartition(int(tc.remotePartitionIDs[len(tc.remotePartitionIDs)-1]))
+				mockPM := NewMocktaskQueuePartitionManager(ctrl)
+				mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+				mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+				childEngine.partitions[child.Key()] = mockPM
+
+				resp, err := childEngine.PollNexusTaskQueue(t.Context(), &matchingservice.PollNexusTaskQueueRequest{
+					NamespaceId: ns.ID().String(),
+					Request: &workflowservice.PollNexusTaskQueueRequest{
+						Namespace:         ns.Name().String(),
+						TaskQueue:         &taskqueuepb.TaskQueue{Name: child.RpcName(), Kind: taskQueue.GetKind()},
+						WorkerInstanceKey: workerKey,
+					},
+				}, metrics.NoopMetricsHandler)
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, &matchingservice.PollNexusTaskQueueResponse{}, resp)
+			})
+		}
 	})
 
 	t.Run("partition API adds worker to shutdown cache", func(t *testing.T) {
@@ -6746,7 +6821,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
-		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName)).AnyTimes()
 		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
 		mockUDM := NewMockuserDataManager(ctrl)
 		mockUDM.EXPECT().PartitionScale().Return(scaleInfo)
@@ -7040,7 +7114,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			mockPM := NewMocktaskQueuePartitionManager(ctrl)
 			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 			if i == 0 {
-				mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(partition.TaskQueue(), config, nsName))
 				mockUDM := NewMockuserDataManager(ctrl)
 				mockUDM.EXPECT().PartitionScale().Return(nil)
 				mockPM.EXPECT().GetUserDataManager().Return(mockUDM)

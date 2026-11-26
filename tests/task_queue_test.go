@@ -1596,12 +1596,14 @@ func (s *TaskQueueSuite) TestShutdownWorkerIsIdempotent() {
 }
 
 func (s *TaskQueueSuite) TestShutdownWorkerRefusesLaterPollOfUnloadedTaskQueue() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true))
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableMatchingFanOutForPollCancellation, true),
+	)
 
 	tv := testvars.New(s.T())
 	workerInstanceKey := uuid.NewString()
 
-	// No poll has loaded the task queue yet, so matching skips the fan-out of the cancellation.
 	_, err := env.FrontendClient().ShutdownWorker(s.Context(), &workflowservice.ShutdownWorkerRequest{
 		Namespace:         env.Namespace().String(),
 		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
