@@ -32,6 +32,7 @@ type (
 	StreamReceiverMonitorImpl struct {
 		ProcessToolBox
 		executableTaskConverter ExecutableTaskConverter
+		receiverFactory         StreamReceiverFactory
 		enableStreaming         bool
 
 		status       int32
@@ -54,11 +55,13 @@ type (
 func NewStreamReceiverMonitor(
 	processToolBox ProcessToolBox,
 	executableTaskConverter ExecutableTaskConverter,
+	receiverFactory StreamReceiverFactory,
 	enableStreaming bool,
 ) *StreamReceiverMonitorImpl {
 	return &StreamReceiverMonitorImpl{
 		ProcessToolBox:          processToolBox,
 		executableTaskConverter: executableTaskConverter,
+		receiverFactory:         receiverFactory,
 		enableStreaming:         enableStreaming,
 
 		status:       streamStatusInitialized,
@@ -284,7 +287,7 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 	}
 	for streamKey := range streamKeys {
 		if _, ok := m.outboundStreams[streamKey]; !ok {
-			stream := NewStreamReceiver(
+			stream := m.receiverFactory.NewStreamReceiver(
 				m.ProcessToolBox,
 				m.executableTaskConverter,
 				streamKey.Client,
