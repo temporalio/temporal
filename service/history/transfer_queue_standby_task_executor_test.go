@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -285,8 +284,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSe
 		if sessionDropped {
 			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 		} else {
-			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
-			mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+			mutableState.GetExecutionInfo().StickyTaskQueue = "sticky-worker"
 			expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 		}
 	}

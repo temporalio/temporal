@@ -273,7 +273,6 @@ func recordActivityTaskStarted(
 			request.PollRequest.GetSessionOptions(),
 			request.PollRequest.GetWorkerInstanceKey(),
 			mutableState.SessionWorkerQueue(),
-			mutableState.GetExecutionInfo().GetStickyScheduleToStartTimeout(),
 		)
 		if err != nil {
 			return nil, rejectCodeUndefined, err

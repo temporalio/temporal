@@ -93,10 +93,8 @@ const (
 	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
 	minRetainedActivityFailureSize = 128
 
-	// defaultSessionStickyScheduleToStartTimeout is used when a workflow gets a non-exclusive binding to a worker before
-	// that worker has reported its sticky schedule-to-start timeout, which only arrives with a task completion.
-	// In practice, this default timeout is only used for non-exclusive bindings on the very first workflow task of a
-	// workflow that is bound to a worker or if the user has set a 0 value for the sticky schedule-to-start timeout.
+	// defaultSessionStickyScheduleToStartTimeout is the schedule-to-start timeout of a sticky task of a workflow bound to
+	// a multi-session worker: a bound workflow stores no sticky timeout, and a missing or 0 timeout would loop.
 	defaultSessionStickyScheduleToStartTimeout = 5 * time.Second
 )
 
@@ -1504,21 +1502,17 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	}
 }
 
-// BindExclusiveWorker binds the workflow to an exclusive worker's stable identity.
-func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string, instanceKey string) {
-	ms.setSessionState(&persistencespb.SessionState{ExclusiveWorker: true, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: stableIdentity, InstanceKey: instanceKey}})
+// BindExclusiveWorker binds the workflow to a single-session worker, whose sticky queue is its stable identity.
+func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string) {
+	ms.setStickyTaskQueueAndBinding(stableIdentity, nil, &persistencespb.SessionState{ExclusiveWorker: true})
 }
 
-// setSessionState writes the session state and mirrors its location in the sticky queue. Callers outside mutable
-// state go through BindExclusiveWorker or UpdateNonExclusiveWorkerBinding, so the mirror and the exclusive binding hold.
-func (ms *MutableStateImpl) setSessionState(state *persistencespb.SessionState) {
-	current := ms.executionInfo.GetSessionState()
-	if current.GetExclusiveWorker() &&
-		(!state.GetExclusiveWorker() || state.GetBoundWorkerInfo().GetWorkerQueue() != current.GetBoundWorkerInfo().GetWorkerQueue()) {
-		softassert.Fail(ms.logger, "attempted to replace an exclusive worker binding",
-			tag.TaskQueueName(current.GetBoundWorkerInfo().GetWorkerQueue()),
-			tag.NewStringTag("requested-task-queue", state.GetBoundWorkerInfo().GetWorkerQueue()),
-		)
+// setStickyTaskQueueAndBinding is the only writer of the sticky queue and the session binding. For a workflow bound
+// to a worker servicing sessions, the sticky queue is that worker's queue and there is no sticky timeout. session is
+// the binding to write; nil means not bound.
+func (ms *MutableStateImpl) setStickyTaskQueueAndBinding(name string, timeout *durationpb.Duration, session *persistencespb.SessionState) {
+	// An exclusive binding is never replaced or cleared.
+	if ms.HasExclusiveBinding() {
 		return
 	}
 	ms.executionInfo.SessionState = state
@@ -1565,61 +1559,80 @@ func sessionInfo(state *persistencespb.SessionState) *sessionpb.SessionInfo {
 
 func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
 	ms.executionInfo.StickyTaskQueue = name
-	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
+	ms.executionInfo.StickyScheduleToStartTimeout = timeout
 }
 
-// ClearStickyTaskQueue does not clear the sticky task queue if the workflow is bound to an exclusive worker.
-// Currently, executionInfo.StickyTaskQueue and SessionState.BoundWorkerInfo.WorkerQueue are mirrors of each other.
-func (ms *MutableStateImpl) ClearStickyTaskQueue() {
-	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+// HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
+func (ms *MutableStateImpl) HasExclusiveBinding() bool {
+	return ms.executionInfo.GetSessionState().GetExclusiveWorker()
+}
+
+// SetStickyTaskQueue sets the sticky queue a worker asked for, keeping the workflow's binding. A workflow bound to a
+// multi-session worker keeps its bound worker's queue: if Matching wrongly took the bound worker for dead while it ran
+// this task, another worker may have taken the binding meanwhile; the late completion must not move it back.
+func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
+	session := ms.executionInfo.GetSessionState()
+	if session != nil && !session.GetExclusiveWorker() && name != ms.executionInfo.StickyTaskQueue {
 		return
 	}
-	ms.executionInfo.StickyTaskQueue = ""
-	ms.executionInfo.StickyScheduleToStartTimeout = nil
-	if sessionState := ms.executionInfo.GetSessionState(); sessionState != nil {
-		sessionState.BoundWorkerInfo = nil
+	ms.setStickyTaskQueueAndBinding(name, scheduleToStartTimeout, session)
+}
+
+// ClearStickyTaskQueue clears the workflow's sticky queue for reason and reports whether it did. reason decides whether
+// a binding to a multi-session worker is released; a binding to a single-session worker is never cleared.
+func (ms *MutableStateImpl) ClearStickyTaskQueue(reason historyi.StickyClearReason) bool {
+	if ms.HasExclusiveBinding() {
+		return false
 	}
+	if ms.SessionWorkerQueue() != "" {
+		switch reason {
+		case historyi.StickyClearForWorkflowTaskFailure, historyi.StickyClearForCacheDisabled, historyi.StickyClearForStateRebuild:
+			return false // a binding to a multi-session worker is kept
+		default:
+			// a binding to a multi-session worker is released: StickyClearForStartedOffStickyQueue,
+			// StickyClearForBoundWorkerLost, StickyClearForVersioning, StickyClearForResetStickyTaskQueue,
+			// StickyClearForWorkflowClose
+		}
+	}
+	wasSticky := ms.IsStickyTaskQueueSet()
+	ms.setStickyTaskQueueAndBinding("", nil, nil)
+	return wasSticky
 }
 
 func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 	return ms.executionInfo.StickyTaskQueue != ""
 }
 
-// SessionWorkerQueue returns the session's location (general or exclusive), or "" if it has none.
+// SessionWorkerQueue returns the sticky queue of the worker the workflow is bound to, or "" if it is not bound.
 func (ms *MutableStateImpl) SessionWorkerQueue() string {
-	return ms.executionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue()
-}
-
-// ClearStickyTaskQueueUnlessPartOfSession clears stickiness for a workflow that is not bound to a worker and reports
-// whether it did. A bound workflow keeps its binding, and the sticky queue mirroring it, until a worker change moves
-// or unbinds it: failures and timeouts on a live bound worker must not release the binding.
-func (ms *MutableStateImpl) ClearStickyTaskQueueUnlessPartOfSession() bool {
-	if ms.SessionWorkerQueue() != "" || !ms.IsStickyTaskQueueSet() {
-		return false
+	if ms.executionInfo.GetSessionState() == nil {
+		return ""
 	}
-	ms.ClearStickyTaskQueue()
-	return true
+	return ms.executionInfo.GetStickyTaskQueue()
 }
 
-// UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the worker that starts its workflow
-// task or one of its session activities, and reports whether the binding changed. instanceKey is the starting
-// worker's instance key. previousWorkerQueue and previousStickyTimeout are captured before the start cleared
-// stickiness. Any change of binding reschedules the pending workflow task and pending session activities so they
-// follow the worker.
+// UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that services it: a multi-session worker
+// starting one of its tasks becomes its bound worker, and nil options (a worker without sessions started a task)
+// unbind it. It reports whether the binding changed, and reschedules the pending workflow task and session activities
+// when it did. previousWorkerStickyQueue is the bound worker's sticky queue, read before the start cleared stickiness.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
-	instanceKey string,
-	previousWorkerQueue string,
-	previousStickyTimeout *durationpb.Duration,
+	workerInstanceKey string,
+	previousWorkerStickyQueue string,
 ) (bool, error) {
-	if options.GetSingleSession() != nil || ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+	if options.GetSingleSession() != nil || ms.HasExclusiveBinding() {
 		// Exclusive bindings are made by BindExclusiveWorker.
 		return false, nil
 	}
-	workerQueue := options.GetMultiSession().GetWorkerAddress()
+	var newWorkerStickyQueue string
+	if options.GetMultiSession() == nil {
+		newWorkerStickyQueue = "" // a worker without sessions: unbind
+	} else {
+		newWorkerStickyQueue = workerInstanceKey // a multi-session worker's sticky queue is named after its instance key
+	}
 	switch {
-	case workerQueue == "" && previousWorkerQueue == "":
-		// A worker without session options, and no binding to drop: ordinary or already-unbound workflow.
+	case newWorkerStickyQueue == "" && previousWorkerStickyQueue == "":
+		// A worker without sessions, and no binding to drop: an ordinary or already-unbound workflow.
 		return false, nil
 	case workerQueue == "":
 		// Unbind: a worker without session options took over. Session activities move to the normal queue.
@@ -1638,14 +1651,14 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 			boundWorkerInfo.InstanceKey = instanceKey
 			return true, nil
 		}
-		// Restore: the bound worker picked the task up from the normal queue. Its session activities
-		// are already queued there, so nothing is rescheduled. Note: We know that the task is picked from the
-		// normal queue because RecordWorkflowTaskStarted cleared the sticky queue when the start came from it.
-		ms.bindNonExclusiveWorker(workerQueue, instanceKey, previousStickyTimeout)
+		// Restore: the bound worker started the task from the normal queue, for example after it looked dead for a
+		// moment and came back, and the start cleared stickiness. Its session activities are already queued for it,
+		// so nothing is rescheduled.
+		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
 		return true, nil
 	default:
-		// First bind, rebind after an unbind, or move to a new worker.
-		ms.bindNonExclusiveWorker(workerQueue, instanceKey, previousStickyTimeout)
+		// First bind, rebind after an unbind, or move to another worker.
+		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
 	}
 	// A workflow task start leaves nothing to reschedule here: its own task is already started. An activity start
 	// must not leave a copy of the pending workflow task on the previous worker, where it could move the session back.
@@ -1653,21 +1666,6 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		return false, err
 	}
 	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
-}
-
-// unbindNonExclusiveWorker clears the workflow's non-exclusive binding and the sticky queue mirroring it.
-func (ms *MutableStateImpl) unbindNonExclusiveWorker() {
-	ms.setSessionState(nil)
-}
-
-// bindNonExclusiveWorker is setSessionState plus a real sticky schedule-to-start timeout for a non-exclusive binding.
-func (ms *MutableStateImpl) bindNonExclusiveWorker(workerQueue string, instanceKey string, previousStickyTimeout *durationpb.Duration) {
-	ms.setSessionState(&persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: workerQueue, InstanceKey: instanceKey}})
-	stickyTimeout := previousStickyTimeout
-	if stickyTimeout.AsDuration() <= 0 {
-		stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
-	}
-	ms.SetStickyTaskQueue(workerQueue, stickyTimeout)
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
@@ -1678,7 +1676,7 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*tas
 	// If the workflow is bound to an exclusive worker, then the schedule to start timeout is
 	// the WorkflowRunTimeout. This is because unlike regular sticky tasks, exclusive worker tasks do not fall back
 	// on the normal task queue.
-	if ms.executionInfo.GetSessionState().GetExclusiveWorker() {
+	if ms.HasExclusiveBinding() {
 		return ms.CurrentTaskQueue(), ms.executionInfo.WorkflowRunTimeout
 	}
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
@@ -4125,7 +4123,7 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	}
 	ms.executionInfo.AssignedBuildId = buildId
 	// because build ID is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForVersioning)
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
 	return ms.updateBuildIdsAndDeploymentSearchAttributes(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, nil, limit)
 }
@@ -5266,7 +5264,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
 	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowClose)
 	ms.writeEventToCache(event)
 	return ms.processCloseCallbacks()
 }
@@ -5310,7 +5308,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowClose)
 	ms.writeEventToCache(event)
 
 	attrs := event.GetWorkflowExecutionFailedEventAttributes()
@@ -5359,7 +5357,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowClose)
 	ms.writeEventToCache(event)
 
 	attrs := event.GetWorkflowExecutionTimedOutEventAttributes()
@@ -5444,7 +5442,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
 	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowClose)
 	ms.writeEventToCache(event)
 	return ms.processCloseCallbacks()
 }
@@ -6481,7 +6479,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		//
 		// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
 		requestReschedulePendingWorkflowTask = true
-		ms.ClearStickyTaskQueue()
+		ms.ClearStickyTaskQueue(historyi.StickyClearForVersioning)
 
 		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
@@ -6508,7 +6506,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowClose)
 	ms.writeEventToCache(event)
 
 	return ms.processCloseCallbacks()
@@ -6748,7 +6746,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowClose)
 	ms.writeEventToCache(continueAsNewEvent)
 	// Workflow-level callbacks are inherited by the new run, but update callbacks
 	// must fire now because the update was aborted on the old run.
@@ -10116,7 +10114,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 		ms.wrapTimeSourceWithTimeSkipping()
 	}
 
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForStateRebuild)
 
 	return nil
 }
@@ -10352,7 +10350,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// Because deployment has changed we:
 	// - clear sticky queue to make sure the next WFT does not go to the old deployment
 	// - reschedule the pending WFT so the old one is invalided
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForVersioning)
 
 	err := ms.reschedulePendingWorkflowTask()
 	if err != nil {
