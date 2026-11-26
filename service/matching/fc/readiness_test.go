@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testcontext"
@@ -21,7 +22,7 @@ func TestReadiness(t *testing.T) {
 }
 
 func (s *readinessSuite) newReadiness() *Readiness {
-	r := NewReadiness()
+	r := NewReadiness(nil, NewReadinessConfig(dynamicconfig.NewNoopCollection()))
 	s.T().Cleanup(r.Stop)
 	return r
 }
@@ -340,7 +341,7 @@ func (s *readinessSuite) TestCallbacksCanReenterReadiness_Async() {
 func (s *readinessSuite) testCallbacksCanReenterReadiness(mode notifyMode) {
 	testcontext.For(s.T(), testcontext.WithTimeout(5*time.Second))
 	// A lock-order regression can deadlock these goroutines, so stop only after they return.
-	r := NewReadiness()
+	r := NewReadiness(nil, NewReadinessConfig(dynamicconfig.NewNoopCollection()))
 	limiter := s.newLimiter(r, "namespace")
 	notifications := make(chan string, 8)
 	replacement := s.newCallback(notifications, "replacement")

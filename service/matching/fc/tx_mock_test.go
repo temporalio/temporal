@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	taskqueue "go.temporal.io/server/api/taskqueue/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -102,6 +103,20 @@ func (m *MocklimiterTx) commit(arg0 context.Context) error {
 func (mr *MocklimiterTxMockRecorder) commit(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "commit", reflect.TypeOf((*MocklimiterTx)(nil).commit), arg0)
+}
+
+// ref mocks base method.
+func (m *MocklimiterTx) ref() *taskqueue.LimiterRef {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ref")
+	ret0, _ := ret[0].(*taskqueue.LimiterRef)
+	return ret0
+}
+
+// ref indicates an expected call of ref.
+func (mr *MocklimiterTxMockRecorder) ref() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ref", reflect.TypeOf((*MocklimiterTx)(nil).ref))
 }
 
 // reserve mocks base method.
