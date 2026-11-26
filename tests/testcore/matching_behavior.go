@@ -1,8 +1,12 @@
 package testcore
 
 import (
+	"testing"
+
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/matching"
 )
 
 // MatchingBehavior describes a test scenario for matching service behavior.
@@ -14,6 +18,9 @@ type MatchingBehavior struct {
 
 type hookInjector interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
+	T() *testing.T
+	NamespaceID() namespace.ID
+	GetTestCluster() *TestCluster
 }
 
 // Name returns a descriptive name for this behavior combination.
@@ -67,9 +74,7 @@ func (b MatchingBehavior) InjectHooks(env hookInjector) {
 		env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
 	}
 	if b.ForceAsync {
-		env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
-	} else {
-		env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
+		InjectFailpointIn(env.T(), env.GetTestCluster(), matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String())).On()
 	}
 }
 

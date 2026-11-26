@@ -33,7 +33,6 @@ type HistoryPassiveReplicationTestHook interface {
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
 var (
-	MatchingDisableSyncMatch                    = testxhooks.NewKey[bool, namespace.ID]()
 	MatchingLBForceReadPartition                = testxhooks.NewKey[int, namespace.ID]()
 	MatchingLBForceWritePartition               = testxhooks.NewKey[int, namespace.ID]()
 	UpdateWithStartInBetweenLockAndStart        = testxhooks.NewKey[func(), namespace.ID]()
