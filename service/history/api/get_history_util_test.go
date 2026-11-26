@@ -5,10 +5,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.uber.org/mock/gomock"
 )
 
 func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
@@ -313,4 +320,71 @@ func TestAreValidTransientOrSpecTasks(t *testing.T) {
 			r.Equal(tt.expected, result)
 		})
 	}
+}
+
+func TestProcessOutgoingSearchAttributes(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	visibilityMgr := manager.NewMockVisibilityManager(ctrl)
+	visibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
+
+	newPayload := func(value string) *commonpb.Payload {
+		return payload.EncodeString(value)
+	}
+	unaliasedStartedEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						"Keyword01": newPayload("value1"),
+					},
+				},
+			},
+		},
+	}
+	aliasedUpsertEvent := &historypb.HistoryEvent{
+		EventId:   2,
+		EventType: enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+		Attributes: &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
+			UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+						"AliasForKeyword01":                    newPayload("value2"),
+						sadefs.TemporalChangeVersion:           newPayload("change"),
+					},
+				},
+			},
+		},
+	}
+	noSearchAttributesEvent := &historypb.HistoryEvent{
+		EventId:   3,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+		},
+	}
+
+	err := ProcessOutgoingSearchAttributes(
+		searchattribute.NewTestProvider(),
+		searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
+		[]*historypb.HistoryEvent{unaliasedStartedEvent, aliasedUpsertEvent, noSearchAttributesEvent},
+		namespace.Name("test-namespace"),
+		visibilityMgr,
+	)
+	require.NoError(t, err)
+
+	startedSAs := unaliasedStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()
+	require.Len(t, startedSAs, 1)
+	require.Contains(t, startedSAs, "AliasForKeyword01")
+	require.Equal(t, "Keyword", string(startedSAs["AliasForKeyword01"].GetMetadata()[searchattribute.MetadataType]))
+
+	upsertSAs := aliasedUpsertEvent.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
+	require.Len(t, upsertSAs, 2)
+	require.Contains(t, upsertSAs, "AliasForKeyword01")
+	require.Equal(t, "Keyword", string(upsertSAs["AliasForKeyword01"].GetMetadata()[searchattribute.MetadataType]))
+	require.Equal(t, "KeywordList", string(upsertSAs[sadefs.TemporalChangeVersion].GetMetadata()[searchattribute.MetadataType]))
 }
