@@ -217,8 +217,7 @@ func (u *Updater) applyRequest(
 	}
 	if startedWorkflowTask && !alreadyExisted {
 		u.bufferedForWorkflowHeartbeatNotification = true
-		// TODO(whn): Refine the mildly relaxed accuracy without scanning all buffered event types.
-		u.firstBufferedForWorkflowHeartbeatNotification = (ms.NumBufferedEvents() == 0 && !updateReg.HasOutgoingMessages(false))
+		u.firstBufferedForWorkflowHeartbeatNotification = !workflow.HasBufferedWorkflowHeartbeatNotificationInput(ms, nil) && !updateReg.HasOutgoingMessages(false)
 	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
