@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -139,6 +140,188 @@ func TestValidateAttachedCallbacks_NothingAttached(t *testing.T) {
 	ms := historyi.NewMockMutableState(ctrl)
 
 	require.NoError(t, validateAttachedCallbacks(context.Background(), api.NewWorkflowLease(wfContext, nil, ms), "", nil))
+}
+
+func TestApplyOnConflictOptions(t *testing.T) {
+	t.Parallel()
+
+	callbacks := testCallbacks()
+	links := []*commonpb.Link{{Variant: &commonpb.Link_Workflow_{Workflow: &commonpb.Link_Workflow{
+		Namespace:  tests.Namespace.String(),
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+		Reason:     "test",
+	}}}}
+	validationErr := errors.New("callback validation failed")
+	eventErr := errors.New("options event failed")
+
+	for _, tc := range []struct {
+		name           string
+		options        *workflowpb.OnConflictOptions
+		callbacks      []*commonpb.Callback
+		links          []*commonpb.Link
+		wantRequestID  string
+		wantCallbacks  []*commonpb.Callback
+		wantLinks      []*commonpb.Link
+		wantEvent      bool
+		wantValidation bool
+		validationErr  error
+		eventErr       error
+	}{
+		{
+			name: "nil options",
+		},
+		{
+			name:      "no attachments",
+			options:   &workflowpb.OnConflictOptions{},
+			callbacks: callbacks,
+			links:     links,
+			wantEvent: true,
+		},
+		{
+			name:          "request ID only",
+			options:       &workflowpb.OnConflictOptions{AttachRequestId: true},
+			callbacks:     callbacks,
+			links:         links,
+			wantRequestID: "attach-request-id",
+			wantEvent:     true,
+		},
+		{
+			name:      "links only",
+			options:   &workflowpb.OnConflictOptions{AttachLinks: true},
+			callbacks: callbacks,
+			links:     links,
+			wantLinks: links,
+			wantEvent: true,
+		},
+		{
+			name:           "request ID and callbacks",
+			options:        &workflowpb.OnConflictOptions{AttachRequestId: true, AttachCompletionCallbacks: true},
+			callbacks:      callbacks,
+			links:          links,
+			wantRequestID:  "attach-request-id",
+			wantCallbacks:  callbacks,
+			wantEvent:      true,
+			wantValidation: true,
+		},
+		{
+			name:          "empty callbacks skip validation",
+			options:       &workflowpb.OnConflictOptions{AttachRequestId: true, AttachCompletionCallbacks: true},
+			wantRequestID: "attach-request-id",
+			wantEvent:     true,
+		},
+		{
+			name:           "all attachments",
+			options:        &workflowpb.OnConflictOptions{AttachRequestId: true, AttachCompletionCallbacks: true, AttachLinks: true},
+			callbacks:      callbacks,
+			links:          links,
+			wantRequestID:  "attach-request-id",
+			wantCallbacks:  callbacks,
+			wantLinks:      links,
+			wantEvent:      true,
+			wantValidation: true,
+		},
+		{
+			name:           "callback validation failure",
+			options:        &workflowpb.OnConflictOptions{AttachRequestId: true, AttachCompletionCallbacks: true},
+			callbacks:      callbacks,
+			wantRequestID:  "attach-request-id",
+			wantCallbacks:  callbacks,
+			wantValidation: true,
+			validationErr:  validationErr,
+		},
+		{
+			name:          "options event failure",
+			options:       &workflowpb.OnConflictOptions{AttachRequestId: true},
+			wantRequestID: "attach-request-id",
+			wantEvent:     true,
+			eventErr:      eventErr,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			wfContext := historyi.NewMockWorkflowContext(ctrl)
+			ms := historyi.NewMockMutableState(ctrl)
+			wfContext.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey)
+
+			if tc.wantValidation {
+				ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+				ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
+				wfContext.EXPECT().UpdateRegistry(gomock.Any()).Return(update.NewRegistry(ms))
+				ms.EXPECT().GetExecutionInfo().Return(nil)
+				ms.EXPECT().ValidateCallbackAddition(
+					([]chasmworkflow.CallbackAddition)(nil),
+					chasmworkflow.CallbackAddition{RequestID: tc.wantRequestID, Callbacks: tc.wantCallbacks},
+				).Return(tc.validationErr)
+			}
+			if tc.wantEvent {
+				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+					nil,
+					false,
+					tc.wantRequestID,
+					tc.wantCallbacks,
+					tc.wantLinks,
+					"",
+					nil,
+					nil,
+					false,
+					nil,
+				).Return(nil, tc.eventErr)
+			}
+
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:           tests.Namespace.String(),
+				WorkflowId:          tests.WorkflowID,
+				RequestId:           "attach-request-id",
+				OnConflictOptions:   tc.options,
+				CompletionCallbacks: tc.callbacks,
+				Links:               tc.links,
+			}
+			responseLink, nexusContextMatch, err := ApplyOnConflictOptions(
+				context.Background(),
+				api.NewWorkflowLease(wfContext, nil, ms),
+				request,
+			)
+			if tc.validationErr != nil || tc.eventErr != nil {
+				expectedErr := tc.validationErr
+				if expectedErr == nil {
+					expectedErr = tc.eventErr
+				}
+				require.ErrorIs(t, err, expectedErr)
+				require.Nil(t, responseLink)
+				require.Empty(t, nexusContextMatch)
+				return
+			}
+			require.NoError(t, err)
+			require.Empty(t, nexusContextMatch)
+
+			workflowEvent := &commonpb.Link_WorkflowEvent{
+				Namespace:  tests.Namespace.String(),
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			}
+			if tc.wantRequestID == "" {
+				workflowEvent.Reference = &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				}
+			} else {
+				workflowEvent.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: tc.wantRequestID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				}
+			}
+			protorequire.ProtoEqual(t, &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: workflowEvent},
+			}, responseLink)
+		})
+	}
 }
 
 func TestPrepareEagerDispatchCheck(t *testing.T) {

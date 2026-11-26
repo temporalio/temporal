@@ -66,6 +66,83 @@ func (s *updateWithStartSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *updateWithStartSuite) TestCanDedup() {
+	for _, tc := range []struct {
+		name           string
+		requestID      string
+		executionState *persistencespb.WorkflowExecutionState
+		expected       bool
+	}{
+		{
+			name:      "create request ID",
+			requestID: "create-request-id",
+			executionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: "create-request-id",
+			},
+			expected: true,
+		},
+		{
+			name:      "attached request ID",
+			requestID: "attached-request-id",
+			executionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: "create-request-id",
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					"attached-request-id": {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:      "unknown request ID",
+			requestID: "unknown-request-id",
+			executionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: "create-request-id",
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					"attached-request-id": {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+				},
+			},
+			expected: false,
+		},
+		{
+			name:      "request ID key with nil info",
+			requestID: "attached-request-id",
+			executionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: "create-request-id",
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					"attached-request-id": nil,
+				},
+			},
+			expected: true,
+		},
+		{
+			name:      "empty request ID is not an attached ID",
+			requestID: "",
+			executionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: "create-request-id",
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					"": {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+				},
+			},
+			expected: false,
+		},
+		{
+			name:           "empty create request ID preserves existing comparison",
+			requestID:      "",
+			executionState: &persistencespb.WorkflowExecutionState{},
+			expected:       true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.currentMutableState.EXPECT().GetExecutionState().Return(tc.executionState)
+			lease := api.NewWorkflowLease(nil, nil, s.currentMutableState)
+			startReq := &historyservice.StartWorkflowExecutionRequest{
+				StartRequest: &workflowservice.StartWorkflowExecutionRequest{RequestId: tc.requestID},
+			}
+			s.Equal(tc.expected, canDedup(startReq, lease))
+		})
+	}
+}
+
 // TestInvoke_CompletedUpdate_StatusCapturedBeforeRelease verifies that when
 // Invoke finds a completed update outcome, it captures ExecutionState.Status
 // before releasing the workflow lock. A concurrent writer that starts after

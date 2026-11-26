@@ -8,11 +8,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -225,17 +227,17 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 			// If Start is deduped, apply new/attach to update.
 			if canDedup(uws.startReq, workflowLease) {
-				return uws.updateWorkflow(ctx, workflowLease) // lease released inside
+				return uws.updateWorkflow(ctx, workflowLease, false) // lease released inside
 			}
 
 			// If Update exists, attach to update.
 			if upd := workflowLease.GetContext().UpdateRegistry(ctx).Find(ctx, updateID); upd != nil {
-				return uws.updateWorkflow(ctx, workflowLease) // lease released inside
+				return uws.updateWorkflow(ctx, workflowLease, false) // lease released inside
 			}
 
 			// If conflict policy allows re-using the workflow, apply the update.
 			if uws.startReq.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING {
-				return uws.updateWorkflow(ctx, workflowLease) // lease released inside
+				return uws.reuseWorkflow(ctx, workflowLease) // lease released inside
 			}
 		}
 
@@ -316,10 +318,22 @@ func (uws *updateWithStart) getWorkflowLease(ctx context.Context) (api.WorkflowL
 	return runningWorkflowLease, nil
 }
 
-func (uws *updateWithStart) updateWorkflow(
+func (uws *updateWithStart) reuseWorkflow(
 	ctx context.Context,
 	currentWorkflowLease api.WorkflowLease,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
+	return uws.updateWorkflow(ctx, currentWorkflowLease, true) // lease released inside
+}
+
+func (uws *updateWithStart) updateWorkflow(
+	ctx context.Context,
+	currentWorkflowLease api.WorkflowLease,
+	applyConflictOptions bool,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	var responseLink *commonpb.Link
+	var nexusContextMatch metrics.ReasonString
+	var conflictOptionsErr error
+
 	// Apply the update to the workflow.
 	err := api.UpdateWorkflowWithNew(
 		uws.shardContext,
@@ -327,8 +341,25 @@ func (uws *updateWithStart) updateWorkflow(
 		currentWorkflowLease,
 		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			ms := lease.GetMutableState()
+			if applyConflictOptions {
+				responseLink, nexusContextMatch, conflictOptionsErr = startworkflow.ApplyOnConflictOptions(ctx, lease, uws.startReq.StartRequest)
+				if conflictOptionsErr == nil && uws.startReq.StartRequest.GetOnConflictOptions() != nil &&
+					!ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {
+					_, conflictOptionsErr = ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+				}
+				if conflictOptionsErr != nil {
+					return nil, conflictOptionsErr
+				}
+			}
 			updateReg := lease.GetContext().UpdateRegistry(ctx)
-			return uws.updater.ApplyRequest(ctx, updateReg, ms)
+			action, err := uws.updater.ApplyRequest(ctx, updateReg, ms)
+			if err != nil {
+				return nil, err
+			}
+			if applyConflictOptions && uws.startReq.StartRequest.GetOnConflictOptions() != nil {
+				action.Noop = false
+			}
+			return action, nil
 		},
 		nil,
 	)
@@ -337,7 +368,13 @@ func (uws *updateWithStart) updateWorkflow(
 	currentWorkflowLease.GetReleaseFn()(err)
 
 	if err != nil {
+		if conflictOptionsErr != nil {
+			return nil, newMultiOpError(conflictOptionsErr, multiOpAbortedErr)
+		}
 		return nil, newMultiOpError(multiOpAbortedErr, err)
+	}
+	if nexusContextMatch != "" {
+		metrics.NexusWorkflowUseExisting.With(uws.shardContext.GetMetricsHandler()).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
 	}
 
 	// Wait for the update to complete.
@@ -347,11 +384,26 @@ func (uws *updateWithStart) updateWorkflow(
 	}
 
 	wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
+	if responseLink == nil {
+		responseLink = api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), wfKey.WorkflowID, wfKey.RunID)
+		requestID := uws.startReq.StartRequest.GetRequestId()
+		if uws.startReq.StartRequest.GetOnConflictOptions().GetAttachRequestId() &&
+			currentWorkflowLease.GetMutableState().GetExecutionState().GetRequestIds()[requestID].GetEventType() ==
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			responseLink = api.GenerateRequestIDRefLink(
+				uws.startReq.StartRequest.GetNamespace(),
+				wfKey.WorkflowID,
+				wfKey.RunID,
+				requestID,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			)
+		}
+	}
 	startResp := &historyservice.StartWorkflowExecutionResponse{
-		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+		RunId:   wfKey.RunID,
 		Started: false, // set explicitly for emphasis
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Link:    api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), wfKey.WorkflowID, wfKey.RunID),
+		Link:    responseLink,
 	}
 
 	return makeResponse(startResp, updateResp), nil
@@ -434,5 +486,14 @@ func newMultiOpError(startErr, updateErr error) error {
 }
 
 func canDedup(startReq *historyservice.StartWorkflowExecutionRequest, currentWorkflowLease api.WorkflowLease) bool {
-	return startReq.StartRequest.RequestId == currentWorkflowLease.GetMutableState().GetExecutionState().GetCreateRequestId()
+	requestID := startReq.StartRequest.RequestId
+	executionState := currentWorkflowLease.GetMutableState().GetExecutionState()
+	if requestID == executionState.GetCreateRequestId() {
+		return true
+	}
+	if requestID == "" {
+		return false
+	}
+	_, ok := executionState.GetRequestIds()[requestID]
+	return ok
 }
