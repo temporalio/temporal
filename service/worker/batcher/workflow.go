@@ -108,7 +108,7 @@ type (
 		// executionInfo for activity batch operations (terminate/cancel/delete activities)
 		targetExecution *commonpb.Execution
 		// the execution to process for an admin batch across all namespaces, set instead of executionInfo
-		adminExecutionInfo *adminservice.VisibilityExecutionInfo
+		crossNamespaceExecutionInfo *adminservice.VisibilityExecutionInfo
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)

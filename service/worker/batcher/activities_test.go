@@ -2242,7 +2242,7 @@ func (s *activitiesSuite) TestFetchAllNamespacesPage() {
 
 		p, err := fetchAllNamespacesPage(ctx, mockAdminClient, config, []byte("page-2"), 1)
 		s.Require().NoError(err)
-		s.Equal(executions, p.adminExecutionInfos)
+		s.Equal(executions, p.crossNamespaceExecutionInfos)
 		s.Equal([]byte("page-3"), p.nextPageToken)
 		s.Equal(1, p.pageNumber)
 	})
@@ -2269,7 +2269,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_AllNamespace
 			},
 		},
 	}
-	testTask := task{adminExecutionInfo: &adminservice.VisibilityExecutionInfo{
+	testTask := task{crossNamespaceExecutionInfo: &adminservice.VisibilityExecutionInfo{
 		NamespaceId: "ns-2-id",
 		ArchetypeId: 7,
 		BusinessId:  "wf-id",

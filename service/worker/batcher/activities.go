@@ -85,16 +85,17 @@ type batchWorkerProcessor func(
 type page struct {
 	// executionInfos holds workflow executions for workflow batch operations;
 	// targetExecutionInfo holds activity executions for activity batch
-	// operations (terminate/cancel/delete activities). Exactly one is populated.
-	executionInfos      []*workflowpb.WorkflowExecutionInfo
-	targetExecutionInfo []*commonpb.Execution
-	adminExecutionInfos []*adminservice.VisibilityExecutionInfo
-	submittedCount      int
-	successCount        int
-	errorCount          int
-	nextPageToken       []byte
-	pageNumber          int
-	prev, next          *page
+	// operations (terminate/cancel/delete activities). crossNamespaceExecutionInfos
+	// holds executions for admin refreshes across all namespaces. Exactly one is populated.
+	executionInfos               []*workflowpb.WorkflowExecutionInfo
+	targetExecutionInfo          []*commonpb.Execution
+	crossNamespaceExecutionInfos []*adminservice.VisibilityExecutionInfo
+	submittedCount               int
+	successCount                 int
+	errorCount                   int
+	nextPageToken                []byte
+	pageNumber                   int
+	prev, next                   *page
 }
 
 // hasNext returns true if there are more pages to fetch
@@ -102,16 +103,13 @@ func (p *page) hasNext() bool {
 	return len(p.nextPageToken) > 0
 }
 
-// length returns the number of executions in this page. For activity batch
-// operations the executions are held in targetExecutionInfo; for all other
-// batch types they are held in executionInfos. Only one of the two is ever
-// populated for a given page.
+// length returns the number of executions in this page. Exactly one execution slice is populated.
 func (p *page) length() int {
 	if len(p.targetExecutionInfo) > 0 {
 		return len(p.targetExecutionInfo)
 	}
-	if len(p.adminExecutionInfos) > 0 {
-		return len(p.adminExecutionInfos)
+	if len(p.crossNamespaceExecutionInfos) > 0 {
+		return len(p.crossNamespaceExecutionInfos)
 	}
 	return len(p.executionInfos)
 }
@@ -134,8 +132,8 @@ func (p *page) nextTask() task {
 	switch {
 	case len(p.targetExecutionInfo) > 0:
 		t.targetExecution = p.targetExecutionInfo[p.submittedCount]
-	case len(p.adminExecutionInfos) > 0:
-		t.adminExecutionInfo = p.adminExecutionInfos[p.submittedCount]
+	case len(p.crossNamespaceExecutionInfos) > 0:
+		t.crossNamespaceExecutionInfo = p.crossNamespaceExecutionInfos[p.submittedCount]
 	default:
 		t.executionInfo = p.executionInfos[p.submittedCount]
 	}
@@ -631,7 +629,7 @@ func (a *activities) startTaskProcessor(
 				return
 			}
 
-			if task.executionInfo == nil && task.targetExecution == nil && task.adminExecutionInfo == nil {
+			if task.executionInfo == nil && task.targetExecution == nil && task.crossNamespaceExecutionInfo == nil {
 				continue
 			}
 

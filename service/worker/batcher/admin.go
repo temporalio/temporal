@@ -104,9 +104,9 @@ func fetchAllNamespacesPage(
 		return nil, err
 	}
 	return &page{
-		adminExecutionInfos: resp.GetExecutions(),
-		nextPageToken:       resp.GetNextPageToken(),
-		pageNumber:          pageNumber,
+		crossNamespaceExecutionInfos: resp.GetExecutions(),
+		nextPageToken:                resp.GetNextPageToken(),
+		pageNumber:                   pageNumber,
 	}, nil
 }
 
@@ -119,7 +119,7 @@ func (a *activities) processAdminTask(
 	adminReq := batchOperation.AdminRequest
 	switch adminReq.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		if info := task.adminExecutionInfo; info != nil {
+		if info := task.crossNamespaceExecutionInfo; info != nil {
 			return processTask(ctx, limiter, task,
 				func(*workflowpb.WorkflowExecutionInfo) error {
 					execution := &commonpb.WorkflowExecution{WorkflowId: info.GetBusinessId(), RunId: info.GetRunId()}
