@@ -640,9 +640,12 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
 
-		// If failpoint is enabled, the task is persisted and dispatched from the backlog, as if no poller was waiting.
+		// If failpoint is enabled (or BUGGIFY decides so, scoped by namespace name), the task is persisted and
+		// dispatched from the backlog, as if no poller was waiting.
 		if registry := c.partitionMgr.engine.failpointRegistry; registry != nil &&
-			SkipSyncMatchKey.ForScope(c.partitionMgr.ns.ID().String()).Trip(registry) {
+			SkipSyncMatchKey.ForScope(c.partitionMgr.ns.ID().String()).TripWithPolicyScope(
+				registry,
+				c.partitionMgr.ns.Name().String()) {
 			return syncMatchNoPoller, nil
 		}
 	}

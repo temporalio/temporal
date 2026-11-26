@@ -1,6 +1,7 @@
 package failpoint_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,12 +17,14 @@ func TestExecuteSuite(t *testing.T) {
 	parallelsuite.Run(t, &executeSuite{})
 }
 
-func (s *executeSuite) TestTrip() {
-	newRegistry := func(keys ...failpoint.Key[int]) *failpoint.Registry {
+func (s *executeSuite) TestExecute() {
+	fromUnscoped := errors.New("unscoped")
+	fromScoped := errors.New("scoped")
+	newRegistry := func(keys map[failpoint.Key[error]]error) *failpoint.Registry {
 		registry := failpoint.NewRegistry()
-		for _, key := range keys {
-			fp := failpoint.New[int](key)
-			fp.On()
+		for key, err := range keys {
+			fp := failpoint.New[error](key)
+			fp.Return(err)
 			registry.Set(fp)
 		}
 		return registry
@@ -29,63 +32,130 @@ func (s *executeSuite) TestTrip() {
 
 	tests := []struct {
 		name       string
-		registered []failpoint.Key[int]
-		key        failpoint.Key[int]
-		want       bool
+		registered map[failpoint.Key[error]]error
+		key        failpoint.Key[error]
+		want       error
+		wantSet    bool
 	}{
-		{name: "not registered", key: intKey, want: false},
-		{name: "unscoped", registered: []failpoint.Key[int]{intKey}, key: intKey, want: true},
-		{name: "scoped", registered: []failpoint.Key[int]{intKey.ForScope("ns-1")}, key: intKey.ForScope("ns-1"), want: true},
-		{name: "scoped key falls back to unscoped", registered: []failpoint.Key[int]{intKey}, key: intKey.ForScope("ns-1"), want: true},
-		{name: "other scope does not fire", registered: []failpoint.Key[int]{intKey.ForScope("ns-1")}, key: intKey.ForScope("ns-2"), want: false},
-		{name: "unscoped key does not see scoped failpoints", registered: []failpoint.Key[int]{intKey.ForScope("ns-1")}, key: intKey, want: false},
+		{name: "not registered", registered: nil, key: errorKey, want: nil, wantSet: false},
+		{name: "unscoped", registered: map[failpoint.Key[error]]error{errorKey: fromUnscoped}, key: errorKey, want: fromUnscoped, wantSet: true},
+		{
+			name:       "scoped",
+			registered: map[failpoint.Key[error]]error{errorKey.ForScope("ns-1"): fromScoped},
+			key:        errorKey.ForScope("ns-1"),
+			want:       fromScoped,
+			wantSet:    true,
+		},
+		{
+			name:       "scoped key falls back to unscoped",
+			registered: map[failpoint.Key[error]]error{errorKey: fromUnscoped},
+			key:        errorKey.ForScope("ns-1"),
+			want:       fromUnscoped,
+			wantSet:    true,
+		},
+		{
+			name:       "scoped takes precedence over unscoped",
+			registered: map[failpoint.Key[error]]error{errorKey: fromUnscoped, errorKey.ForScope("ns-1"): fromScoped},
+			key:        errorKey.ForScope("ns-1"),
+			want:       fromScoped,
+			wantSet:    true,
+		},
+		{
+			name:       "other scope does not fire",
+			registered: map[failpoint.Key[error]]error{errorKey.ForScope("ns-1"): fromScoped},
+			key:        errorKey.ForScope("ns-2"),
+			want:       nil,
+			wantSet:    false,
+		},
+		{
+			name:       "unscoped key does not see scoped failpoints",
+			registered: map[failpoint.Key[error]]error{errorKey.ForScope("ns-1"): fromScoped},
+			key:        errorKey,
+			want:       nil,
+			wantSet:    false,
+		},
 	}
 	for _, tc := range tests {
 		s.Run(tc.name, func(s *executeSuite) {
-			s.Equal(tc.want, tc.key.Trip(newRegistry(tc.registered...)))
+			got, set := tc.key.Execute(newRegistry(tc.registered))
+			s.Equal(tc.want, got)
+			s.Equal(tc.wantSet, set)
 		})
 	}
-
-	s.Run("scoped failpoint takes precedence over unscoped", func(s *executeSuite) {
-		registry := newRegistry(intKey)
-		scoped := failpoint.New[int](intKey.ForScope("ns-1"))
-		registry.Set(scoped) // off
-		s.False(intKey.ForScope("ns-1").Trip(registry))
-		s.True(intKey.Trip(registry))
-	})
-
-	s.Run("off", func(s *executeSuite) {
-		registry := failpoint.NewRegistry()
-		fp := failpoint.New[int](intKey)
-		registry.Set(fp)
-		s.False(intKey.Trip(registry))
-
-		fp.On()
-		s.True(intKey.Trip(registry))
-
-		fp.Disable()
-		s.False(intKey.Trip(registry))
-	})
 }
 
 func (s *executeSuite) TestExecuteIgnoresFailpointOfAnotherType() {
 	// Typed keys keep this from happening by accident: the two keys have the same name.
 	registry := failpoint.NewRegistry()
 	fp := failpoint.New(failpoint.UndeclaredKey[int]("same.name"))
-	fp.On()
+	fp.Return(1)
 	registry.Set(fp)
 
-	s.False(failpoint.UndeclaredKey[error]("same.name").Trip(registry))
+	got, set := failpoint.UndeclaredKey[error]("same.name").Execute(registry)
+	s.NoError(got)
+	s.False(set)
 	s.True(failpoint.UndeclaredKey[int]("same.name").Trip(registry))
 }
 
+func (s *executeSuite) TestExecuteOfErrorKey() {
+	injected := errors.New("injected")
+	tests := []struct {
+		name      string
+		configure func(fp *failpoint.Failpoint[error])
+		want      error
+	}{
+		{name: "not configured", configure: func(*failpoint.Failpoint[error]) {}, want: nil},
+		{name: "return error", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(injected) }, want: injected},
+		{name: "return nil", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(nil) }, want: nil},
+	}
+	for _, tc := range tests {
+		s.Run(tc.name, func(s *executeSuite) {
+			registry := failpoint.NewRegistry()
+			fp := failpoint.New[error](errorKey)
+			tc.configure(fp)
+			registry.Set(fp)
+			s.Equal(tc.want, executeError(registry, errorKey))
+		})
+	}
+}
+
 func (s *executeSuite) TestExecuteNilRegistry() {
+	got, set := errorKey.Execute(nil)
+	s.False(set)
+	s.NoError(got)
+	s.NoError(executeError(nil, errorKey))
 	s.False(errorKey.Trip(nil))
+}
+
+func (s *executeSuite) TestTrip() {
+	tests := []struct {
+		name      string
+		configure func(*failpoint.Failpoint[int])
+		want      bool
+	}{
+		{name: "on", configure: func(fp *failpoint.Failpoint[int]) { fp.On() }, want: true},
+		{name: "return", configure: func(fp *failpoint.Failpoint[int]) { fp.Return(7) }, want: true},
+		{name: "off", configure: func(fp *failpoint.Failpoint[int]) {}, want: false},
+	}
+	for _, tc := range tests {
+		s.Run(tc.name, func(s *executeSuite) {
+			fp := failpoint.New[int](intKey)
+			tc.configure(fp)
+
+			registry := failpoint.NewRegistry()
+			registry.Set(fp)
+			s.Equal(tc.want, intKey.Trip(registry))
+		})
+	}
+
+	s.Run("not registered", func(s *executeSuite) {
+		s.False(intKey.Trip(failpoint.NewRegistry()))
+	})
 }
 
 // Not in executeSuite because testing.AllocsPerRun cannot run in parallel with other tests.
 func TestExecuteInertDoesNotAllocate(t *testing.T) {
-	key := intKey.ForScope("ns")
+	key := errorKey.ForScope("ns")
 	for _, tc := range []struct {
 		name     string
 		registry *failpoint.Registry
@@ -95,7 +165,8 @@ func TestExecuteInertDoesNotAllocate(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			allocs := testing.AllocsPerRun(100, func() {
-				_ = key.Trip(tc.registry)
+				_, _ = key.Execute(tc.registry)
+				_, _ = key.Execute(tc.registry)
 			})
 			require.Zero(t, allocs)
 		})
