@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -42,6 +43,112 @@ func (l *logRecorder) Warn(msg string, tags ...tag.Tag) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.records = append(l.records, logRecord{msg: msg, tags: tags})
+}
+
+func TestDLQWriter_CreateQueueOnDemand(t *testing.T) {
+	t.Parallel()
+
+	notFound := persistence.NewQueueNotFoundError(persistence.QueueTypeHistoryDLQ, "missing-queue")
+	unavailable := serviceerror.NewUnavailable("unavailable")
+	type writeAttempt struct {
+		enqueueErr error
+		createErr  error
+		retryErr   error
+		wantErr    error
+	}
+	for _, tc := range []struct {
+		name     string
+		attempts []writeAttempt
+	}{
+		{name: "existing queue", attempts: []writeAttempt{{}, {}}},
+		{name: "missing queue", attempts: []writeAttempt{{enqueueErr: notFound}, {}}},
+		{name: "concurrent creator", attempts: []writeAttempt{{enqueueErr: notFound, createErr: persistence.ErrQueueAlreadyExists}}},
+		{name: "create failure is retried on next write", attempts: []writeAttempt{
+			{enqueueErr: notFound, createErr: unavailable, wantErr: queues.ErrCreateDLQ},
+			{enqueueErr: notFound},
+		}},
+		{name: "queue disappears between writes", attempts: []writeAttempt{{enqueueErr: notFound}, {enqueueErr: notFound}}},
+		{name: "enqueue failure is not retried", attempts: []writeAttempt{{enqueueErr: unavailable, wantErr: queues.ErrSendTaskToDLQ}}},
+		{name: "retry failure", attempts: []writeAttempt{{enqueueErr: notFound, retryErr: unavailable, wantErr: queues.ErrSendTaskToDLQ}}},
+		{name: "retry is bounded", attempts: []writeAttempt{{enqueueErr: notFound, retryErr: notFound, wantErr: queues.ErrSendTaskToDLQ}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			queueWriter := persistence.NewMockHistoryTaskQueueManager(ctrl)
+			namespaceRegistry := namespace.NewMockRegistry(ctrl)
+			namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			logger := log.NewTestLogger()
+			writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry, chasm.NewRegistry(logger))
+			task := &tasks.WorkflowTask{}
+			queueKey := persistence.QueueKey{
+				QueueType: persistence.QueueTypeHistoryDLQ, Category: task.GetCategory(),
+				SourceCluster: "source_cluster", TargetCluster: "target_cluster",
+			}
+			request := &persistence.EnqueueTaskRequest{
+				QueueType: queueKey.QueueType, SourceCluster: queueKey.SourceCluster, TargetCluster: queueKey.TargetCluster,
+				Task: task, SourceShardID: 7,
+			}
+			response := &persistence.EnqueueTaskResponse{Metadata: persistence.MessageMetadata{ID: 42}}
+			var successfulWrites int
+			for _, attempt := range tc.attempts {
+				calls := []any{queueWriter.EXPECT().EnqueueTask(gomock.Any(), request).Return(response, attempt.enqueueErr)}
+				if errors.As(attempt.enqueueErr, new(*serviceerror.NotFound)) {
+					calls = append(calls, queueWriter.EXPECT().CreateQueue(gomock.Any(), &persistence.CreateQueueRequest{
+						QueueKey: queueKey,
+					}).Return(nil, attempt.createErr))
+					if attempt.createErr == nil || errors.Is(attempt.createErr, persistence.ErrQueueAlreadyExists) {
+						calls = append(calls, queueWriter.EXPECT().EnqueueTask(gomock.Any(), request).Return(response, attempt.retryErr))
+					}
+				}
+				gomock.InOrder(calls...)
+				err := writer.WriteTaskToDLQ(t.Context(), queueKey.SourceCluster, queueKey.TargetCluster, request.SourceShardID, task, true)
+				if attempt.wantErr != nil {
+					require.ErrorIs(t, err, attempt.wantErr)
+				} else {
+					require.NoError(t, err)
+					successfulWrites++
+				}
+			}
+			require.Len(t, capture.Snapshot()[metrics.DLQWrites.Name()], successfulWrites)
+		})
+	}
+}
+
+func TestDLQWriter_ConcurrentQueueCreation(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	queueWriter := persistence.NewMockHistoryTaskQueueManager(ctrl)
+	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	logger := log.NewTestLogger()
+	writer := queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, logger, namespaceRegistry, chasm.NewRegistry(logger))
+	const numWrites = 50
+	var created atomic.Bool
+	queueWriter.EXPECT().CreateQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *persistence.CreateQueueRequest) (*persistence.CreateQueueResponse, error) {
+			created.Store(true)
+			return &persistence.CreateQueueResponse{}, nil
+		},
+	)
+	queueWriter.EXPECT().EnqueueTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *persistence.EnqueueTaskRequest) (*persistence.EnqueueTaskResponse, error) {
+			if !created.Load() {
+				return nil, serviceerror.NewNotFound("queue not created")
+			}
+			return &persistence.EnqueueTaskResponse{}, nil
+		},
+	).Times(numWrites + 1)
+	var group errgroup.Group
+	for shardID := range numWrites {
+		group.Go(func() error {
+			return writer.WriteTaskToDLQ(t.Context(), "source", "target", shardID+1, &tasks.WorkflowTask{}, true)
+		})
+	}
+	require.NoError(t, group.Wait())
 }
 
 func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
