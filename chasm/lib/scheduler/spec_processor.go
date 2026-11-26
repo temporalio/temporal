@@ -98,7 +98,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	// Skip over entire time range if paused or no actions can be taken.
 	//
 	// Manual (backfill/patch) runs are always buffered here.
-	if !scheduler.useScheduledAction(false) && !manual {
+	if !scheduler.canTakeScheduledAction() && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := s.NextTime(scheduler, end)
 		wakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)

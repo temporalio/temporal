@@ -530,9 +530,10 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 
 // processBuffer resolves the Invoker's buffered starts that haven't yet begun
 // execution. This is where the decision is made to drive execution to
-// completion, or skip/drop a start.
+// completion, or skip/drop a start. It only reads state;
+// recordProcessBufferResult applies the result.
 func (h *InvokerProcessBufferTaskHandler) processBuffer(
-	ctx chasm.MutableContext,
+	ctx chasm.Context,
 	invoker *Invoker,
 	scheduler *Scheduler,
 ) (result processBufferResult) {
@@ -542,8 +543,10 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	// Processing ignores starts that are already executing or backing off. An existing
 	// deferred BUFFER_ONE start still participates so it can reject later starts.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0 ||
-			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
+		state := internal.ClassifyBufferedStart(start)
+		return state == internal.BufferedStartUnprocessed ||
+			(state == internal.BufferedStartDeferred &&
+				scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
@@ -569,8 +572,9 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	result.overlapSkippedByPolicy = action.OverlapSkippedByPolicy
 
 	// Add starting workflows to result, trim others. Catchup-window expiry is
-	// checked before useScheduledAction so that a start past its catchup
-	// window doesn't consume a LimitedActions slot.
+	// checked before taking scheduled-action capacity so that a start past its
+	// catchup window doesn't consume a LimitedActions slot.
+	capacity := scheduler.scheduledActionCapacity()
 	droppedCounter := newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleBufferedStartDropped.Name())
 	for _, start := range readyStarts {
@@ -580,7 +584,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 			// (e.g., due to overlap deferral, retries, or system delay).
 			// Only emit the metric if the schedule would have run this
 			// start -- skip paused or action-exhausted schedules.
-			if start.Manual || scheduler.useScheduledAction(false) {
+			if start.Manual || capacity > 0 {
 				// Determine if a running action contributed: either one is still
 				// running, or the previous action's CloseTime (stored in DesiredTime)
 				// was already past this start's deadline.
@@ -596,11 +600,14 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		}
 
 		// Ensure we can take more actions. Manual actions are always allowed.
-		if !start.Manual && !scheduler.useScheduledAction(true) {
-			// Drop buffered automated actions while paused or out of actions.
-			result.discardStarts = append(result.discardStarts, start)
-			droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedPausedOrLimited))
-			continue
+		if !start.Manual {
+			if capacity == 0 {
+				// Drop buffered automated actions while paused or out of actions.
+				result.discardStarts = append(result.discardStarts, start)
+				droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedPausedOrLimited))
+				continue
+			}
+			capacity--
 		}
 
 		keepStarts[start.GetRequestId()] = struct{}{}
