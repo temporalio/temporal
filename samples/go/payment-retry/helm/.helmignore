@@ -1,0 +1,13 @@
+# Common .helmignore patterns
+.DS_Store
+*.swp
+*.bak
+*~
+# VCS
+.git/
+.gitignore
+.svn/
+# Chart sources
+*.tgz
+# Editor
+.vscode/
