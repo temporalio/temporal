@@ -1,11 +1,19 @@
 package serverbuggify
 
 import (
+	"fmt"
 	"math"
+	"net/http"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/httpfailpoints"
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
 )
@@ -123,6 +131,53 @@ func TestReadStatic_OnlyListedKeysAreBuggified(t *testing.T) {
 		"matching.skipSyncMatch":                             false, // not listed
 	} {
 		require.Equal(t, want, static.Config.Activated(name), name)
+	}
+}
+
+// Outgoing HTTP requests whose paths differ only by an ID are one name to BUGGIFY, so the set of
+// activated names doesn't depend on the IDs and stays bounded.
+func TestReadStatic_HTTPKeysStayBounded(t *testing.T) {
+	t.Parallel()
+
+	always := 1.0
+	static, err := ReadStatic(config.FailpointsBuggify{Seed: 1, Keys: []config.FailpointsBuggifyKey{
+		{Match: "http:*", ActivationProbability: &always, FireProbability: &always, Error: "Unavailable"},
+	}})
+	require.NoError(t, err)
+	registry := failpoint.NewRegistry()
+	b := buggify.New(registry)
+	require.NoError(t, b.Set(static.Config))
+	var mu sync.Mutex
+	var events []buggify.Event
+	b.OnDecision(func(e buggify.Event) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, e)
+	})
+	wrapped := httpfaults.Wrap(httpfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}), httpfaults.Scope{NamespaceID: "ns"}, func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK}, nil
+	})
+
+	const requests = 50
+	for i := range requests {
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://example.com/callbacks/%d", i), nil)
+		require.NoError(t, err)
+		_, err = wrapped(req)
+		require.Error(t, err, "BUGGIFY fails every request with the probabilities of the test")
+	}
+
+	await.RequireTrue(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(events) == 1+requests
+	}, 5*time.Second, 10*time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, buggify.Event{Kind: buggify.EventActivation, Name: "http:POST", Activated: true}, events[0])
+	for _, e := range events[1:] {
+		require.Equal(t, buggify.EventFire, e.Kind)
+		require.Equal(t, "http:POST", e.Name)
+		require.Equal(t, "ns", e.Scope)
 	}
 }
 

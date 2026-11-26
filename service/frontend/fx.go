@@ -50,13 +50,15 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/grpcfailpoints"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -279,7 +281,8 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
-	testHooks testhooks.TestHooks,
+	failpointSource *failpoint.Registry,
+	namespaceRegistry namespace.Registry,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -341,7 +344,11 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
-	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
+	// Frontend requests mostly carry a namespace name; the registry resolves it to the namespace ID
+	// that failpoints are scoped to. The requests of the public frontend come from clients, so a
+	// Policy of the failpoint registry, such as BUGGIFY, would exercise the retries of the client
+	// and not the server.
+	faultGenerator := grpcfailpoints.NewGenerator(failpointSource, failpointadapter.RegistryNamespaces(namespaceRegistry), serviceName == primitives.FrontendService)
 	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
 		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
 	}

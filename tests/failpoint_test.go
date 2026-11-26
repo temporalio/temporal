@@ -9,13 +9,16 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/serverbuggify"
+	"go.temporal.io/server/common/testing/serverfailpoints"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
@@ -38,18 +41,35 @@ func TestFailpoint(t *testing.T) {
 		require.NotNil(t, registry.Get(key))
 		require.Nil(t, registry.Get(matching.ForwardTaskKey), "the failpoint is scoped to the test namespace")
 	})
+
+	t.Run("gRPC failpoint fails a history call for the test namespace", func(t *testing.T) {
+		t.Parallel()
+		env := testcore.NewEnv(t)
+		testcore.InjectFailpoint(env, serverfailpoints.GRPCKey(historyservice.HistoryService_StartWorkflowExecution_FullMethodName)).
+			Return(serviceerror.NewInvalidArgument("injected"), failpoint.Trigger{MaxFires: 1})
+
+		_, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowRequest(env, env.Tv()))
+		require.ErrorContains(t, err, "injected")
+
+		mustStartWorkflow(env, env.Tv())
+	})
 }
 
-// TestBuggify runs a dedicated cluster with BUGGIFY enabled via the static config and verifies that
-// matching.SkipSyncMatchKey is activated and fires deterministically, and that an explicit
-// failpoint takes precedence over BUGGIFY.
+// TestBuggify runs a dedicated cluster with BUGGIFY, since BUGGIFY applies to the whole cluster. The
+// seed and the keys come from the failpoints.buggify block of the static config.
+// The keys only activate gRPC keys and matching.skipSyncMatch, and only let the history
+// StartWorkflowExecution call fail, so the rest of the cluster keeps working.
 func TestBuggify(t *testing.T) {
 	t.Parallel()
+	startKey := serverfailpoints.GRPCKey(historyservice.HistoryService_StartWorkflowExecution_FullMethodName)
 	probability := func(p float64) *float64 { return &p }
 	static := config.FailpointsBuggify{
 		Seed: 42,
 		Keys: []config.FailpointsBuggifyKey{
-			{Match: matching.SkipSyncMatchKey.Name(), ActivationProbability: probability(1), FireProbability: probability(1)},
+			{Match: startKey.Name(), ActivationProbability: probability(1), FireProbability: probability(1), Error: "InvalidArgument"},
+			// Half of the other gRPC keys are activated, but never fire.
+			{Match: "grpc:*", ActivationProbability: probability(0.5), FireProbability: probability(0), Error: "Unavailable"},
+			{Match: matching.SkipSyncMatchKey.Name(), ActivationProbability: probability(0.25), FireProbability: probability(0.25)},
 		},
 	}
 	env := testcore.NewEnv(t, testcore.WithBuggify(static))
@@ -69,18 +89,67 @@ func TestBuggify(t *testing.T) {
 		case buggify.EventFire:
 			fires[e.Name]++
 		default:
+			// The test only checks activations and fires.
 		}
 	})
 	t.Cleanup(func() { b.OnDecision(nil) })
 
-	completeWorkflows(t, env)
+	scopedStartKey := startKey.ForScope(env.NamespaceID().String())
 
-	await.Require(t.Context(), t, func(t *await.T) {
+	t.Run("a BUGGIFY error surfaces from a gRPC key", func(t *testing.T) {
+		_, err := env.FrontendClient().StartWorkflowExecution(testcontext.For(t), startWorkflowRequest(env, env.Tv()))
+		_, ok := errors.AsType[*serviceerror.InvalidArgument](err)
+		require.True(t, ok)
+		require.ErrorContains(t, err, "BUGGIFY: injected by failpoint "+startKey.Name())
+
+		require.True(t, b.Config().Activated(startKey.Name()))
+		await.Require(t.Context(), t, func(t *await.T) {
+			mu.Lock()
+			defer mu.Unlock()
+			require.Positive(t, fires[startKey.Name()])
+		}, 10*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("an explicit failpoint takes precedence", func(t *testing.T) {
+		fp := testcore.InjectFailpointIn(t, env.GetTestCluster(), scopedStartKey)
+		fp.Return(serviceerror.NewInvalidArgument("explicit"))
+		_, err := env.FrontendClient().StartWorkflowExecution(testcontext.For(t), startWorkflowRequest(env, env.Tv()))
+		require.ErrorContains(t, err, "explicit")
+
+		// A registered failpoint keeps BUGGIFY away from its key even while it is disabled.
+		fp.Disable()
+		mustStartWorkflow(env, env.Tv())
+	})
+
+	t.Run("the seed determines the activated keys", func(t *testing.T) {
+		resolved, err := serverbuggify.ReadStatic(static)
+		require.NoError(t, err)
+		want := resolved.Config
+		require.Equal(t, want, b.Config())
+
+		require.NoError(t, b.Set(buggify.Config{}))
+		require.NoError(t, b.Set(want))
+		mu.Lock()
+		clear(activations)
+		mu.Unlock()
+
+		testcore.InjectFailpointIn(t, env.GetTestCluster(), scopedStartKey, testcore.MayNotFire())
+		mustStartWorkflow(env, env.Tv().WithWorkflowIDNumber(3))
+
+		await.Require(t.Context(), t, func(t *await.T) {
+			mu.Lock()
+			defer mu.Unlock()
+			require.Contains(t, activations, matching.SkipSyncMatchKey.Name())
+		}, 10*time.Second, 100*time.Millisecond)
+
 		mu.Lock()
 		defer mu.Unlock()
-		require.True(t, activations[matching.SkipSyncMatchKey.Name()])
-		require.Positive(t, fires[matching.SkipSyncMatchKey.Name()])
-	}, 10*time.Second, 100*time.Millisecond)
+		for name, active := range activations {
+			require.Equal(t, want.Activated(name), active, name)
+			// BUGGIFY doesn't inject into the requests that clients send to the public frontend.
+			require.NotContains(t, name, "grpc:/temporal.api.workflowservice.v1.WorkflowService/")
+		}
+	})
 }
 
 // completeWorkflows runs a few workflows with timers and an activity on the SDK worker of env,

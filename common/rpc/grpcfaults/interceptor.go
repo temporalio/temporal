@@ -6,33 +6,42 @@ import (
 	"google.golang.org/grpc"
 )
 
-// UnaryServerInterceptor returns a unary server interceptor that checks for
-// dynamically registered fault injection callbacks before and after the handler.
+// UnaryServerInterceptor returns a unary server interceptor that checks the generator for faults
+// before and after the handler.
 //
-// This allows tests and configured generators to register callbacks that can
-// inspect requests/responses and inject faults on demand.
+// This allows tests to inspect requests/responses and inject faults on demand.
 //
 // Behavior:
-// - If no request generator is registered, the handler proceeds normally.
-// - Request callbacks are checked before the handler. A matched fault can skip the handler.
-// - Response callbacks are checked after the handler with its response and error. A matched fault can replace them.
-// - If no callbacks match, the handler's response and error are returned.
+//   - If no generator is configured, no interceptor is installed.
+//   - The generator is checked before the handler. A fault error skips the handler; a fault response
+//     is returned without running it.
+//   - The generator is checked after the handler with its response and error. A fault error replaces
+//     them; a fault response replaces them without an error.
+//   - If no fault matches, the handler's response and error are returned.
 func UnaryServerInterceptor(generator Generator) grpc.UnaryServerInterceptor {
 	if generator == nil {
 		return nil
 	}
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		// Check before the handler. A fault can short-circuit the call.
-		if outcome := generator.GenerateRequest(ctx, info.FullMethod, req); outcome != nil {
-			return outcome.Response, outcome.Error
+		faultResp, faultErr := generator.GenerateRequest(ctx, info.FullMethod, req)
+		if faultErr != nil {
+			return nil, faultErr
+		}
+		if faultResp != nil {
+			return faultResp, nil
 		}
 
 		// Call the handler.
 		resp, err := handler(ctx, req)
 
 		// Check after the handler. A fault can replace the response or error.
-		if outcome := generator.GenerateResponse(ctx, info.FullMethod, req, resp, err); outcome != nil {
-			return outcome.Response, outcome.Error
+		faultResp, faultErr = generator.GenerateResponse(ctx, info.FullMethod, req, resp, err)
+		if faultErr != nil {
+			return nil, faultErr
+		}
+		if faultResp != nil {
+			return faultResp, nil
 		}
 		return resp, err
 	}

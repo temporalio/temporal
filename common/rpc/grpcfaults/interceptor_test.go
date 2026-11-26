@@ -10,21 +10,62 @@ import (
 	"google.golang.org/grpc"
 )
 
+// generator returns the outcomes of its functions; a nil function returns no fault.
+type generator struct {
+	request  func(operation string, req any) (any, error)
+	response func(operation string, req, resp any, err error) (any, error)
+}
+
+func (g generator) GenerateRequest(_ context.Context, operation string, req any) (any, error) {
+	if g.request == nil {
+		return nil, nil
+	}
+	return g.request(operation, req)
+}
+
+func (g generator) GenerateResponse(_ context.Context, operation string, req, resp any, err error) (any, error) {
+	if g.response == nil {
+		return nil, nil
+	}
+	return g.response(operation, req, resp, err)
+}
+
 func TestUnaryServerInterceptor_NilGenerator(t *testing.T) {
 	t.Parallel()
 
 	require.Nil(t, grpcfaults.UnaryServerInterceptor(nil))
 }
 
+func TestUnaryServerInterceptor_NoFault(t *testing.T) {
+	t.Parallel()
+
+	handlerErr := errors.New("handler")
+	interceptor := grpcfaults.UnaryServerInterceptor(generator{})
+
+	response, err := interceptor(
+		context.Background(),
+		"request",
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, any) (any, error) {
+			return "response", handlerErr
+		},
+	)
+
+	require.ErrorIs(t, err, handlerErr)
+	require.Equal(t, "response", response)
+}
+
 func TestUnaryServerInterceptor_ConfiguredBeforeHandler(t *testing.T) {
 	t.Parallel()
 
 	injectedErr := errors.New("injected")
-	generator := grpcfaults.NewCallbackGenerator()
-	generator.RegisterRequestCallback(grpcfaults.Scope{}, func(context.Context, string, any) *grpcfaults.Outcome {
-		return &grpcfaults.Outcome{Error: injectedErr}
+	interceptor := grpcfaults.UnaryServerInterceptor(generator{
+		request: func(operation string, req any) (any, error) {
+			require.Equal(t, "/test.Service/Method", operation)
+			require.Equal(t, "request", req)
+			return nil, injectedErr
+		},
 	})
-	interceptor := grpcfaults.UnaryServerInterceptor(generator)
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -45,47 +86,71 @@ func TestUnaryServerInterceptor_ConfiguredBeforeHandler(t *testing.T) {
 func TestUnaryServerInterceptor_ConfiguredAfterHandler(t *testing.T) {
 	t.Parallel()
 
-	generator := grpcfaults.NewCallbackGenerator()
-	generator.RegisterResponseCallback(grpcfaults.Scope{}, func(context.Context, string, any, any, error) *grpcfaults.Outcome {
-		return &grpcfaults.Outcome{Response: "replacement"}
+	handlerErr := errors.New("handler")
+	injectedErr := errors.New("injected")
+	interceptor := grpcfaults.UnaryServerInterceptor(generator{
+		response: func(operation string, req, response any, err error) (any, error) {
+			require.Equal(t, "/test.Service/Method", operation)
+			require.Equal(t, "request", req)
+			require.Equal(t, "response", response)
+			require.ErrorIs(t, err, handlerErr)
+			return nil, injectedErr
+		},
 	})
-	interceptor := grpcfaults.UnaryServerInterceptor(generator)
 
 	response, err := interceptor(
 		context.Background(),
 		"request",
 		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
 		func(context.Context, any) (any, error) {
+			return "response", handlerErr
+		},
+	)
+
+	require.ErrorIs(t, err, injectedErr)
+	require.NotErrorIs(t, err, handlerErr)
+	require.Nil(t, response)
+}
+
+func TestUnaryServerInterceptor_ReplacementBeforeHandler(t *testing.T) {
+	t.Parallel()
+
+	interceptor := grpcfaults.UnaryServerInterceptor(generator{
+		request: func(string, any) (any, error) { return "replacement", nil },
+	})
+	handlerCalled := false
+
+	response, err := interceptor(
+		context.Background(),
+		"request",
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, any) (any, error) {
+			handlerCalled = true
 			return "response", nil
 		},
 	)
 
 	require.NoError(t, err)
 	require.Equal(t, "replacement", response)
+	require.False(t, handlerCalled)
 }
 
-func TestUnaryServerInterceptor_ConfiguredHandlerError(t *testing.T) {
+func TestUnaryServerInterceptor_ReplacementAfterHandler(t *testing.T) {
 	t.Parallel()
 
-	handlerErr := errors.New("handler")
-	injectedErr := errors.New("injected")
-	generator := grpcfaults.NewCallbackGenerator()
-	generator.RegisterResponseCallback(grpcfaults.Scope{}, func(_ context.Context, _ string, _, response any, err error) *grpcfaults.Outcome {
-		require.Nil(t, response)
-		require.ErrorIs(t, err, handlerErr)
-		return &grpcfaults.Outcome{Error: injectedErr}
+	interceptor := grpcfaults.UnaryServerInterceptor(generator{
+		response: func(string, any, any, error) (any, error) { return "replacement", nil },
 	})
-	interceptor := grpcfaults.UnaryServerInterceptor(generator)
 
 	response, err := interceptor(
 		context.Background(),
 		"request",
 		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
 		func(context.Context, any) (any, error) {
-			return nil, handlerErr
+			return nil, errors.New("handler")
 		},
 	)
 
-	require.ErrorIs(t, err, injectedErr)
-	require.Nil(t, response)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", response)
 }

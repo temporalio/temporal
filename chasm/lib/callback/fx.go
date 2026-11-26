@@ -14,9 +14,10 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/httpfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/httpfailpoints"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 )
 
@@ -35,7 +36,7 @@ func httpCallerProviderProvider(
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
 	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
-	testHooks testhooks.TestHooks,
+	failpointSource *failpoint.Registry,
 	config *Config,
 ) (HTTPCallerProvider, error) {
 	logger = log.With(logger, tag.NexusStageHandlerOutbound)
@@ -53,7 +54,7 @@ func httpCallerProviderProvider(
 		Transport: roundTripper,
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
-	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
+	httpFaultGenerator := httpfailpoints.NewGenerator(failpointSource, failpointadapter.RegistryNamespaces(namespaceRegistry))
 
 	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		scope := httpfaults.Scope{NamespaceID: namespace.ID(key.NamespaceID)}

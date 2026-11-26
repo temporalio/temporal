@@ -221,27 +221,34 @@ executing. `InjectResponseFault` runs _after_ the handler, so an injected error 
 operation that executed but whose response was lost. The test fails if the fault never triggers.
 Only unary RPCs are intercepted; streaming RPCs are unaffected.
 
-The `env` methods scope faults to the test's namespace.
+The `env` methods scope faults to the test's namespace. They are callbacks of the
+`serverfailpoints.AnyGRPCKey` and `serverfailpoints.AnyGRPCResponseKey` failpoints (see the
+[failpoint package](#failpoint-package)), so they see requests that carry the namespace ID, and
+requests that only carry its name: a service resolves the name to the ID from its namespace cache
+if it can, and otherwise matches the name scope directly. Several faults injected by a test all
+run, in order, until one returns an error.
 
 ### HTTP fault injection
 
 `InjectHTTPRequestFault` and `InjectHTTPResponseFault` inject faults into HTTP clients that install
 the test fault generator. Callback delivery and Nexus operation clients support these faults. The
-faults are scoped to the test namespace and are unavailable in builds without `test_dep`.
+faults are scoped to the test namespace. They are
+callbacks of the `serverfailpoints.AnyHTTPKey` and `serverfailpoints.AnyHTTPResponseKey` failpoints.
 
-Return an `httpfaults.Outcome` with one action:
+A fault returns a response and an error. Return:
 
-- `Response` returns a synthetic HTTP response.
-- `Error` returns a transport error.
+- `nil, nil` to leave the call alone.
+- A response and no error to return a synthetic HTTP response without an error. After the call,
+  the response replaces the result of the call; it closes the response of the call, unless it is
+  that response itself, so a replacement must not share its body.
+- An error to return it as a transport error. An error wins over a response.
 
 ```go
-env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfaults.Outcome {
+env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) (*http.Response, error) {
     if req.URL.Path != "/callback" {
-        return nil
+        return nil, nil
     }
-    return &httpfaults.Outcome{
-        Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
-    }
+    return httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"), nil
 })
 ```
 
@@ -356,6 +363,36 @@ testcore.InjectFailpoint(env, multioperation.BetweenLockAndStartKey).Call(func()
     return nil
 }, failpoint.Trigger{MaxFires: 1})
 ```
+
+Failpoints also run at the gRPC and HTTP fault injection points, without a declared key. The keys
+are in `serverfailpoints`:
+
+- `serverfailpoints.GRPCKey(fullMethod)` fires before the handler of a unary gRPC method on every
+  service; `serverfailpoints.GRPCResponseKey(fullMethod)` fires after it. An error from the latter
+  replaces the result of the handler. Streaming methods, such as replication streams, run no
+  failpoints.
+- `serverfailpoints.HTTPKey("POST /path")` fires before an outgoing callback or Nexus HTTP request;
+  `serverfailpoints.HTTPResponseKey("POST /path")` fires after it. The error of these failpoints
+  fails the call. A callback that answers the call with a response calls `Replace` on its argument
+  (the `*httpfaults.Request` before the call, the `*httpfaults.Result` after it) and returns no
+  error. The last response that it sets wins; `Wrap` closes the body of every other response that
+  the fault set, and of the ones that an error discards, once.
+- `serverfailpoints.AnyGRPCKey`, `serverfailpoints.AnyGRPCResponseKey`,
+  `serverfailpoints.AnyHTTPKey` and `serverfailpoints.AnyHTTPResponseKey` fire for every method or
+  request, if the failpoint of the method or request did not fire with any action (a pause or a
+  callback that returns nil also counts). A `CallWithArg` callback receives the request before the
+  handler, and a `*grpcfaults.Result` or `*httpfaults.Result` after it.
+
+gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has one (frontend
+resolves the namespace name of a request to its ID), so `testcore.InjectFailpoint` works for them
+on a shared cluster. A request that only carries a namespace name uses the ID if the service
+resolves it from its namespace cache, and otherwise is scoped to
+`failpointadapter.NameScope(name)`; the `Inject*Fault` helpers of `TestEnv` register their faults
+for the ID and the name of the test's namespace. To inject a failpoint for a request that may not
+resolve, such as one that frontend sends to history or matching, scope its key with
+`failpointadapter.NameScope(name)` and use `testcore.InjectFailpointIn`. A failpoint without a scope applies to all namespaces, but only
+to requests whose namespace has no failpoint registered for the same key. A failpoint registered
+for the namespace takes precedence, even when it is disabled.
 
 ### softassert package
 

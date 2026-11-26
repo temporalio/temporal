@@ -7,6 +7,9 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/grpcfailpoints"
+	"go.temporal.io/server/common/testing/httpfailpoints"
 	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/fx"
@@ -51,29 +54,48 @@ func TestResolveFailpoints(t *testing.T) {
 	}
 }
 
-// TestFailpointsDisabledIgnoresBuggify checks that when failpoints are disabled, serverbuggify
-// neither randomizes dynamic config settings nor installs BUGGIFY, even with a seed configured.
-func TestFailpointsDisabledIgnoresBuggify(t *testing.T) {
+// TestFailpointsGenerators checks that transport fault generators and BUGGIFY are only installed
+// when failpoints are enabled.
+func TestFailpointsGenerators(t *testing.T) {
 	t.Parallel()
-	registry := resolveFailpoints(false, log.NewNoopLogger())
-	client := dynamicconfig.NewMemoryClient()
-	wrapped, buggifyStatic, err := serverbuggify.RandomizeSettings(
-		client,
-		log.NewNoopLogger(),
-		registry != nil,
-		config.FailpointsBuggify{Seed: 5, Trace: true},
-	)
-	require.NoError(t, err)
-	require.Same(t, client, wrapped)
-	require.Equal(t, serverbuggify.StaticConfig{}, buggifyStatic)
 
-	app := fxtest.New(t,
-		fx.Supply(
-			registry,
-			fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
-		),
-		serverbuggify.Module,
-	)
-	app.RequireStart()
-	app.RequireStop()
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		want    bool
+	}{
+		{name: "disabled"},
+		{name: "enabled", enabled: true, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			registry := resolveFailpoints(tc.enabled, log.NewNoopLogger())
+
+			require.Equal(t, tc.want, grpcfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}, false) != nil)
+			require.Equal(t, tc.want, httpfailpoints.NewGenerator(registry, failpointadapter.Namespaces{}) != nil)
+
+			if !tc.want {
+				client := dynamicconfig.NewMemoryClient()
+				wrapped, buggifyStatic, err := serverbuggify.RandomizeSettings(
+					client,
+					log.NewNoopLogger(),
+					registry != nil,
+					config.FailpointsBuggify{Seed: 5, Trace: true},
+				)
+				require.NoError(t, err)
+				require.Same(t, client, wrapped)
+				require.Equal(t, serverbuggify.StaticConfig{}, buggifyStatic)
+
+				app := fxtest.New(t,
+					fx.Supply(
+						registry,
+						fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
+					),
+					serverbuggify.Module,
+				)
+				app.RequireStart()
+				app.RequireStop()
+			}
+		})
+	}
 }
