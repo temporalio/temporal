@@ -583,3 +583,37 @@ func TestActivityInfoMatchEvaluator_BackoffInterval(t *testing.T) {
 		})
 	}
 }
+
+func TestActivityInfoMatchEvaluator_StringValueWithSpecialCharacters(t *testing.T) {
+	ai := &persistencespb.ActivityInfo{
+		ActivityId: `charge-o'brien`,
+		ActivityType: &commonpb.ActivityType{
+			Name: `say "hello"`,
+		},
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+	}{
+		{
+			name:          "activity id",
+			query:         fmt.Sprintf(`%s = 'charge-o''brien'`, activityIDColName),
+			expectedMatch: true,
+		},
+		{
+			name:          "activity type",
+			query:         fmt.Sprintf(`%s = 'say "hello"'`, activityTypeNameColName),
+			expectedMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := MatchActivity(ai, tt.query)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedMatch, match)
+		})
+	}
+}

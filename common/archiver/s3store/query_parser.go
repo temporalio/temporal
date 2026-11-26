@@ -120,7 +120,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	if !ok {
 		return fmt.Errorf("invalid value: %s", sqlparser.String(compExpr.Right))
 	}
-	valStr := sqlparser.String(valExpr)
+	valStr := sqlquery.SQLValString(valExpr)
 
 	switch colNameStr {
 	case WorkflowTypeName, WorkflowType:
