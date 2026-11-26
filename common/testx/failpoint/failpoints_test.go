@@ -3,6 +3,7 @@ package failpoint_test
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -511,10 +512,26 @@ func (s *failpointSuite) TestTrigger() {
 		})
 	}
 
+	s.Run("probability is deterministic for seed", func(s *failpointSuite) {
+		run := func() []bool {
+			fp := failpoint.NewFailpoint[error](key1)
+			fp.Return(errors.New("injected"))
+			s.NoError(fp.SetTrigger(failpoint.Trigger{Probability: 0.5, Seed: 42}))
+			return fires(fp, 50)
+		}
+		first := run()
+		s.Equal(first, run())
+		s.Contains(first, true)
+		s.Contains(first, false)
+	})
+
 	invalidTests := []struct {
 		name    string
 		trigger failpoint.Trigger
 	}{
+		{name: "rejects negative probability", trigger: failpoint.Trigger{Probability: -1}},
+		{name: "rejects probability above one", trigger: failpoint.Trigger{Probability: 1.5}},
+		{name: "rejects NaN probability", trigger: failpoint.Trigger{Probability: math.NaN()}},
 		{name: "rejects negative skip first", trigger: failpoint.Trigger{SkipFirst: -1}},
 		{name: "rejects negative max fires", trigger: failpoint.Trigger{MaxFires: -1}},
 	}
@@ -532,6 +549,36 @@ func (s *failpointSuite) TestTrigger() {
 			s.Equal([]bool{false}, fires(fp, 1))
 		})
 	}
+
+	s.Run("reports picked seed", func(s *failpointSuite) {
+		fp := failpoint.NewFailpoint[error](key1)
+		fp.Return(errors.New("injected"))
+		registry := failpoint.NewRegistry()
+		registry.Set(fp)
+
+		s.Zero(fp.Seed())
+		s.NoError(fp.SetTrigger(failpoint.Trigger{Probability: 0.5}))
+		seed := fp.Seed()
+		s.NotZero(seed)
+		src := registry
+		var got []bool
+		for range 50 {
+			_, fired := failpoint.Execute[error](src, key1)
+			got = append(got, fired)
+		}
+		s.Equal(seed, fp.Seed())
+
+		// The reported seed reproduces the sequence.
+		replay := failpoint.NewFailpoint[error](key1)
+		replay.Return(errors.New("injected"))
+		s.NoError(replay.SetTrigger(failpoint.Trigger{Probability: 0.5, Seed: seed}))
+		s.Equal(seed, replay.Seed())
+		s.Equal(got, fires(replay, 50))
+
+		// A trigger without a probability has no seed.
+		s.NoError(fp.SetTrigger(failpoint.Trigger{}))
+		s.Zero(fp.Seed())
+	})
 
 	s.Run("skipped execution does not consume max fires", func(s *failpointSuite) {
 		fp := failpoint.NewFailpoint[error](key1)
@@ -574,7 +621,7 @@ func (s *failpointSuite) TestTrigger() {
 
 	s.Run("action setter rejects invalid trigger", func(s *failpointSuite) {
 		fp := failpoint.NewFailpoint[error](key1)
-		s.Panics(func() { fp.Return(errors.New("x"), failpoint.Trigger{SkipFirst: -1}) })
+		s.Panics(func() { fp.Return(errors.New("x"), failpoint.Trigger{Probability: 2}) })
 		s.Panics(func() { fp.Block(failpoint.Trigger{MaxFires: -1}) })
 		s.Panics(func() { fp.On(failpoint.Trigger{}, failpoint.Trigger{}) })
 		s.Equal(failpoint.ActionOff, fp.State().Action, "a rejected setter changes nothing")

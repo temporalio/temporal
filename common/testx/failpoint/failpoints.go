@@ -2,9 +2,11 @@
 package failpoint
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -49,7 +51,11 @@ type Failpoint[T any] struct {
 	arrivedCh chan struct{}
 	arrived   bool
 
+	// trigger limits which executions fire; rng is set when trigger has a probability, and seed is
+	// the seed of rng.
 	trigger Trigger
+	rng     *rand.Rand
+	seed    int64
 	// executions and fires count the executions of the configured failpoint and how many fired.
 	executions int64
 	fires      int64
@@ -59,21 +65,16 @@ type Failpoint[T any] struct {
 
 // Trigger limits when a failpoint fires. The zero value fires on every execution.
 type Trigger struct {
+	// Probability is the chance, in (0, 1], that an execution fires. Zero means always.
+	Probability float64
+	// Seed seeds the random number generator for Probability. Zero means a time-based seed, which
+	// Failpoint.Seed reports.
+	Seed int64
 	// SkipFirst is the number of executions to skip before the failpoint can fire.
 	SkipFirst int64
 	// MaxFires is the maximum number of times the failpoint fires. Zero means unlimited. One fires
 	// once: for a Block action, exactly one execution blocks.
 	MaxFires int64
-}
-
-func validateTrigger(trigger Trigger) error {
-	if trigger.SkipFirst < 0 {
-		return fmt.Errorf("skipFirst %d must be non-negative", trigger.SkipFirst)
-	}
-	if trigger.MaxFires < 0 {
-		return fmt.Errorf("maxFires %d must be non-negative", trigger.MaxFires)
-	}
-	return nil
 }
 
 // NewFailpoint creates a Failpoint with the given key.
@@ -95,8 +96,8 @@ type settings[T any] struct {
 
 // install replaces the whole configuration of the failpoint, its action and its trigger, so no
 // execution sees a part of it, such as the new action with the old trigger, and releases the
-// executions held by the previous one.
-func (f *Failpoint[T]) install(s settings[T], trigger Trigger) {
+// executions held by the previous one. It returns the seed of the trigger, see Seed.
+func (f *Failpoint[T]) install(s settings[T], trigger Trigger) (seed int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -113,6 +114,7 @@ func (f *Failpoint[T]) install(s settings[T], trigger Trigger) {
 	if f.action == ActionBlock {
 		f.armBlockLocked()
 	}
+	return f.seed
 }
 
 // installTrigger is install for an optional trigger argument of an action setter. It panics if
@@ -156,6 +158,20 @@ func (f *Failpoint[T]) SetTrigger(trigger Trigger) error {
 func (f *Failpoint[T]) setTriggerLocked(trigger Trigger) {
 	f.trigger = trigger
 	f.executions, f.fires = 0, 0
+	f.rng, f.seed = nil, 0
+	if trigger.Probability > 0 {
+		f.seed = cmp.Or(trigger.Seed, time.Now().UnixNano())
+		f.rng = rand.New(rand.NewSource(f.seed))
+	}
+}
+
+// Seed returns the seed of the trigger's random numbers, which is the seed of the trigger or, if
+// it has none, the one picked when the trigger was set. Setting a trigger with this seed repeats
+// the sequence of fires. It is zero if the trigger has no probability.
+func (f *Failpoint[T]) Seed() int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.seed
 }
 
 // Stats returns how often the configured failpoint executed and how often it fired since its
@@ -181,6 +197,9 @@ func (f *Failpoint[T]) fireLocked() bool {
 		return false
 	}
 	if f.trigger.MaxFires > 0 && f.fires >= f.trigger.MaxFires {
+		return false
+	}
+	if f.rng != nil && f.rng.Float64() >= f.trigger.Probability {
 		return false
 	}
 	f.fires++

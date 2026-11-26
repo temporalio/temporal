@@ -2,7 +2,9 @@ package failpoint
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -43,29 +45,72 @@ func (k keyID) String() string {
 	return fmt.Sprintf("%s@%s", k.name, k.scope)
 }
 
-// reservedPrefix is a prefix that ReserveKeyPrefix reserved, and the value type of every key under
-// it.
+// keyKind is what the declaration of a key tells the rules about its failpoints.
+type keyKind struct {
+	// accepts reports whether a failpoint of the key can return err, so a rule can use Return.
+	accepts func(err error) bool
+	// newFailpoint creates a failpoint of the type of the key.
+	newFailpoint func(id keyID) ruleTarget
+}
+
+// reservedPrefix is a prefix that ReserveKeyPrefix reserved, and the kind of every key under it.
 type reservedPrefix struct {
 	prefix string
 	typ    reflect.Type
+	kind   keyKind
 }
 
 var (
 	keysMu           sync.Mutex
-	declaredKeys     = map[string]struct{}{}
+	keyKinds         = map[string]keyKind{}
 	reservedPrefixes []reservedPrefix
 )
 
+func kindOf[T any]() keyKind {
+	return keyKind{
+		accepts: func(err error) bool {
+			_, ok := any(err).(T)
+			return ok
+		},
+		newFailpoint: func(id keyID) ruleTarget {
+			return NewFailpoint(Key[T]{name: id.name, scope: id.scope})
+		},
+	}
+}
+
+// lookupKind returns the kind of the keys with name, or an error unless name is the name of a
+// declared key or has a reserved prefix, so a typo in a rule doesn't create a failpoint that no
+// call site executes.
+func lookupKind(name string) (keyKind, error) {
+	keysMu.Lock()
+	defer keysMu.Unlock()
+	if kind, ok := keyKinds[name]; ok {
+		return kind, nil
+	}
+	for _, p := range reservedPrefixes {
+		if strings.HasPrefix(name, p.prefix) {
+			return p.kind, nil
+		}
+	}
+	prefixes := make([]string, 0, len(reservedPrefixes))
+	for _, p := range reservedPrefixes {
+		prefixes = append(prefixes, p.prefix)
+	}
+	return keyKind{}, fmt.Errorf("unknown key %q, declared keys are %s and keys with the prefixes %s",
+		name, strings.Join(slices.Sorted(maps.Keys(keyKinds)), ", "), strings.Join(slices.Sorted(slices.Values(prefixes)), ", "))
+}
+
 // KeyPrefix builds the keys of the failpoints that code names at run time, such as from the method
-// of a request. All its keys have the value type T. Get one from ReserveKeyPrefix.
+// of a request. All its keys have the value type T, for call sites and for rules. Get one from
+// ReserveKeyPrefix.
 type KeyPrefix[T any] struct {
 	prefix string
 }
 
 // ReserveKeyPrefix reserves a prefix for the names of keys that code builds at run time, such as
-// from the method of a request, with KeyPrefix.Key. NewKey panics on a name with a reserved
-// prefix, so a declared key can't collide with them. It is meant for init functions and package
-// variables.
+// from the method of a request, with KeyPrefix.Key. Rules can name the keys under the prefix, and
+// their failpoints have the value type T. NewKey panics on a name with a reserved prefix, so a
+// declared key can't collide with them. It is meant for init functions and package variables.
 //
 // ReserveKeyPrefix panics if the prefix is empty, if a key declared with NewKey already has it,
 // or if it overlaps a prefix reserved with another type. Reserving a prefix again with the same
@@ -78,7 +123,7 @@ func ReserveKeyPrefix[T any](prefix string) KeyPrefix[T] {
 	typ := reflect.TypeFor[T]()
 	keysMu.Lock()
 	defer keysMu.Unlock()
-	for name := range declaredKeys {
+	for name := range keyKinds {
 		if strings.HasPrefix(name, prefix) {
 			//nolint:forbidigo // a conflicting declaration is a programming error
 			panic(fmt.Sprintf("failpoint: key %q is already declared and has the prefix %q", name, prefix))
@@ -93,7 +138,7 @@ func ReserveKeyPrefix[T any](prefix string) KeyPrefix[T] {
 			panic(fmt.Sprintf("failpoint: key prefix %q of type %v overlaps the prefix %q of type %v", prefix, typ, p.prefix, p.typ))
 		}
 	}
-	reservedPrefixes = append(reservedPrefixes, reservedPrefix{prefix: prefix, typ: typ})
+	reservedPrefixes = append(reservedPrefixes, reservedPrefix{prefix: prefix, typ: typ, kind: kindOf[T]()})
 	return KeyPrefix[T]{prefix: prefix}
 }
 
@@ -119,11 +164,11 @@ func NewKey[T any](name string) Key[T] {
 			panic(fmt.Sprintf("failpoint: key %q has the reserved prefix %q", name, p.prefix))
 		}
 	}
-	if _, ok := declaredKeys[name]; ok {
+	if _, ok := keyKinds[name]; ok {
 		//nolint:forbidigo // duplicate key is a programming error
 		panic(fmt.Sprintf("failpoint: duplicate key %q", name))
 	}
-	declaredKeys[name] = struct{}{}
+	keyKinds[name] = kindOf[T]()
 	return Key[T]{name: name}
 }
 
