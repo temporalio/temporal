@@ -1,32 +1,39 @@
 # failpoint
 
-Package `failpoint` provides typed, zero-cost-when-off failpoints for Go code under test. A
-failpoint lets a test force an alternate code path at a named point. Call sites look up a key in a
-`*Registry`; without a registry they cost a nil check, and with an empty registry they cost one
-atomic load and zero allocations.
+Package `failpoint` provides typed, zero-cost-when-off fault injection points for Go code under
+test. Call sites look up a key in a `*Registry`; without a registry they cost a nil check,
+and with an empty registry they cost one atomic load and zero allocations.
 
 ## Declare a key
 
 ```go
-var SkipCache = failpoint.NewKey[struct{}]("billing.skipCache")
+var ChargeCard = failpoint.NewKey[error]("billing.chargeCard")
 ```
 
-The type parameter types the key, so call sites and tests agree on it at compile time. Each name
-can be declared once; `NewKey` panics on a duplicate. `SkipCache.ForScope("tenant-1")` scopes a
-key, for example to one tenant; `ExecuteSwitch` falls back to the unscoped key when no scoped
-failpoint is registered.
+The type parameter is the type of the value that the failpoint returns, so call sites and tests
+agree on it at compile time. Each name can be declared once; `NewKey` panics on a duplicate.
+`ChargeCard.ForScope("tenant-1")` scopes a key, for example to one tenant; `Execute` falls back to
+the unscoped key when no scoped failpoint is registered.
 
 ## Execute it
 
-Branch-style call sites use `ExecuteSwitch` to find out whether to take an alternate path:
-
 ```go
-func (s *Service) Load(ctx context.Context) error {
+func (s *Service) Charge(ctx context.Context) error {
 	// s.failpoints is a *failpoint.Registry, or nil when failpoints are disabled.
-	if failpoint.ExecuteSwitch(s.failpoints, SkipCache) {
-		return s.loadUncached(ctx)
+	if err := failpoint.ExecuteError(s.failpoints, ChargeCard); err != nil {
+		return err
 	}
 	// ...
+}
+```
+
+`ExecuteError` returns the injected error for an error failpoint. Use `Execute` for other value
+types, and `ExecuteSwitch` for branch-style call sites that only need to know whether to take an
+alternate path:
+
+```go
+if failpoint.ExecuteSwitch(s.failpoints, SkipCache) {
+	return s.loadUncached(ctx)
 }
 ```
 
@@ -36,12 +43,19 @@ func (s *Service) Load(ctx context.Context) error {
 registry := failpoint.NewRegistry()
 svc := NewService(registry)
 
-fp := failpoint.New[struct{}](SkipCache)
-fp.On()
+fp := failpoint.New[error](ChargeCard)
+fp.Return(errors.New("card declined"))
 registry.Set(fp)
 
-// svc.Load now takes the uncached path.
+require.EqualError(t, svc.Charge(ctx), "card declined")
 ```
 
-Use `fp.Disable()` to turn a failpoint off, and `registry.Delete(key)` to detach it from the
-registry.
+Use `fp.On()` for switch-style failpoints, `fp.Disable()` to turn a failpoint off, and
+`registry.Delete(key)` to detach it from the registry.
+
+## Default policy (BUGGIFY)
+
+`Registry.SetPolicy` installs a `Policy` that decides `ExecuteError` and `ExecuteSwitch` call sites
+when no explicit failpoint is registered for a key. Explicitly registered failpoints always take
+precedence over the policy, even when disabled. Subpackage [`buggify`](./buggify) implements a
+seeded probabilistic policy on top of this interface.

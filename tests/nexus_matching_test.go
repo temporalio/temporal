@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -45,6 +46,8 @@ func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwar
 	env.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
+	// A registered failpoint, even a disabled one, keeps BUGGIFY from skipping the sync match.
+	testcore.InjectFailpoint(env, matching.SkipSyncMatchKey)
 
 	dispatchAndCompleteNexusTask(s.T(), env, false, false)
 }

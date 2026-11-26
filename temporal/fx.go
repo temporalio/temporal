@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
@@ -153,6 +154,8 @@ var (
 		chasm.Module,
 		serialization.Module,
 		FxLogAdapter,
+		// serverbuggify starts before the services so BUGGIFY is active when they start.
+		serverbuggify.Module,
 		fx.Invoke(ServerLifetimeHooks),
 	)
 )

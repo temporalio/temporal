@@ -73,8 +73,11 @@ func (b MatchingBehavior) InjectHooks(env hookInjector) {
 	} else {
 		env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
 	}
+	// Without ForceAsync the failpoint doesn't fire, but its registration keeps BUGGIFY from
+	// skipping the sync match.
+	fp := InjectFailpointIn(env.T(), env.GetTestCluster(), matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String()))
 	if b.ForceAsync {
-		InjectFailpointIn(env.T(), env.GetTestCluster(), matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String())).On()
+		fp.On()
 	}
 }
 

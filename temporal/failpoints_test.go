@@ -4,7 +4,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 // TestFailpointRegistryStartupSwitch checks that only the failpoints.enabled config setting enables failpoints,
@@ -43,4 +48,25 @@ func TestFailpointRegistryStartupSwitch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFailpointsDisabledIgnoresBuggify checks that when failpoints are disabled, serverbuggify
+// doesn't install BUGGIFY, and doesn't even read the setting, so an invalid value is ignored.
+func TestFailpointsDisabledIgnoresBuggify(t *testing.T) {
+	t.Parallel()
+	registry := newFailpointRegistryIfEnabled(false, log.NewNoopLogger())
+	require.Nil(t, registry)
+	client := dynamicconfig.NewMemoryClient()
+	client.OverrideSetting(serverbuggify.Setting, map[string]any{"seed": 5, "unknown": true})
+
+	app := fxtest.New(t,
+		fx.Supply(
+			registry,
+			fx.Annotate(client, fx.As(new(dynamicconfig.Client))),
+			fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
+		),
+		serverbuggify.Module,
+	)
+	app.RequireStart()
+	app.RequireStop()
 }

@@ -636,7 +636,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
 		// The registry is nil unless failpoints are enabled; without it the namespace isn't read.
-		if registry := c.partitionMgr.engine.failpointRegistry; registry != nil && skipSyncMatch(registry, c.partitionMgr.ns.ID()) {
+		if registry := c.partitionMgr.engine.failpointRegistry; registry != nil && skipSyncMatch(registry, c.partitionMgr.ns.ID(), c.partitionMgr.ns.Name()) {
 			// The task is persisted and dispatched from the backlog, as if no poller was waiting.
 			return syncMatchNoPoller, nil
 		}
@@ -649,10 +649,12 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 // it to the backlog instead as if no poller was waiting. Tests use On to force the backlog path.
 var SkipSyncMatchKey = failpoint.NewKey[bool]("matching.skipSyncMatch")
 
-// skipSyncMatch reports whether a failpoint makes matching skip the sync match of a task that
-// history added. A failpoint matches the namespace by its ID.
-func skipSyncMatch(registry *failpoint.Registry, nsID namespace.ID) bool {
-	return failpoint.ExecuteSwitch(registry, SkipSyncMatchKey.ForScope(nsID.String()))
+// skipSyncMatch reports whether a failpoint (or the registry's policy, such as BUGGIFY) makes
+// matching skip the sync match of a task that history added. A registered failpoint matches the
+// namespace by its ID; the policy decides in the scope of the namespace name, so a namespace that
+// is recreated with the same name and the same seed gets the same decisions.
+func skipSyncMatch(registry *failpoint.Registry, nsID namespace.ID, nsName namespace.Name) bool {
+	return failpoint.ExecuteSwitchWithPolicyScope(registry, SkipSyncMatchKey.ForScope(nsID.String()), nsName.String())
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

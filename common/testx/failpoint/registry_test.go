@@ -34,7 +34,7 @@ func (s *registrySuite) TestSetGetDelete() {
 func (s *registrySuite) TestSetRejectsNilAndEmptyKey() {
 	registry := failpoint.NewRegistry()
 	fp := failpoint.New[int](intKey)
-	fp.On()
+	fp.Return(42)
 	registry.Set(fp)
 
 	s.Panics(func() { registry.Set(nil) })
