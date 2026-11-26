@@ -1,6 +1,7 @@
 package history
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
@@ -14,7 +15,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -66,6 +66,7 @@ type (
 		workflowID  string
 		runID       string
 		branchToken []byte
+		completed   chan<- struct{}
 	}
 )
 
@@ -96,6 +97,7 @@ func NewScavenger(
 	logger log.Logger,
 	serializer serialization.Serializer,
 ) *Scavenger {
+	hbd.NextPageToken = bytes.Clone(hbd.NextPageToken)
 	return &Scavenger{
 		numShards:   numShards,
 		db:          db,
@@ -139,36 +141,68 @@ func (s *Scavenger) loadTasks(
 
 	defer close(reqCh)
 
-	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(ctx), s.hbd.NextPageToken)
-	for iter.HasNext() {
-		if err := s.rateLimiter.Wait(ctx); err != nil {
-			// context done
+	s.Lock()
+	pageToken := s.hbd.NextPageToken
+	s.Unlock()
+	for {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
-
-		item, err := iter.Next()
+		resp, err := s.db.GetAllHistoryTreeBranches(ctx, &persistence.GetAllHistoryTreeBranchesRequest{
+			PageSize:      pageSize,
+			NextPageToken: bytes.Clone(pageToken),
+		})
 		if err != nil {
 			return err
 		}
+		nextPageToken := bytes.Clone(resp.NextPageToken)
+		s.Lock()
+		s.hbd.CurrentPage++
+		s.Unlock()
 
-		// Heartbeat to prevent heartbeat timeout.
+		// Buffer every possible completion so workers can finish even if dispatch
+		// is interrupted. A store may return more rows than the requested page size.
+		completed := make(chan struct{}, len(resp.Branches))
+		dispatched := 0
+		for _, item := range resp.Branches {
+			if err := s.rateLimiter.Wait(ctx); err != nil {
+				return err
+			}
+
+			s.heartbeat(ctx)
+			task := s.filterTask(item)
+			if task == nil {
+				continue
+			}
+			task.completed = completed
+			select {
+			case reqCh <- *task:
+				dispatched++
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		for range dispatched {
+			select {
+			case <-completed:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// An interrupted page must resume from its input until all outcomes are counted.
+		s.Lock()
+		s.hbd.NextPageToken = nextPageToken
+		s.Unlock()
 		s.heartbeat(ctx)
-
-		task := s.filterTask(item)
-		if task == nil {
-			continue
+		if len(nextPageToken) == 0 {
+			return nil
 		}
-
-		select {
-		case reqCh <- *task:
-			// noop
-
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		pageToken = nextPageToken
 	}
-
-	return nil
 }
 
 func (s *Scavenger) taskWorker(
@@ -190,6 +224,7 @@ func (s *Scavenger) taskWorker(
 
 			s.heartbeat(ctx)
 			s.handleErr(s.handleTask(ctx, task))
+			task.completed <- struct{}{}
 		}
 	}
 }
@@ -301,29 +336,6 @@ func (s *Scavenger) handleErr(
 
 	metrics.HistoryScavengerSuccessCount.With(s.metricsHandler).Record(1)
 	s.hbd.SuccessCount++
-}
-
-func (s *Scavenger) getPaginationFn(
-	ctx context.Context,
-) collection.PaginationFn[persistence.HistoryBranchDetail] {
-	return func(paginationToken []byte) ([]persistence.HistoryBranchDetail, []byte, error) {
-		req := &persistence.GetAllHistoryTreeBranchesRequest{
-			PageSize:      pageSize,
-			NextPageToken: paginationToken,
-		}
-		resp, err := s.db.GetAllHistoryTreeBranches(ctx, req)
-		if err != nil {
-			return nil, nil, err
-		}
-		paginateItems := resp.Branches
-
-		s.Lock()
-		s.hbd.CurrentPage++
-		s.hbd.NextPageToken = resp.NextPageToken
-		s.Unlock()
-
-		return paginateItems, resp.NextPageToken, nil
-	}
 }
 
 func (s *Scavenger) cleanUpWorkflowPastRetention(
