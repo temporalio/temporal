@@ -94,7 +94,7 @@ func (e *sessionMoveEnv) registerStickyPoller(worker string) {
 // it from startup would. Without it, Matching treats the worker as gone and session activities fall back.
 func (e *sessionMoveEnv) registerStickyActivityPoller(worker string) {
 	_, err := e.poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: e.stickyQueue(worker), Identity: "worker-" + worker, SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+		TaskQueue: e.stickyQueue(worker), Identity: "worker-" + worker, SessionOptions: multiSessionWorkerOptions(),
 		WorkerInstanceKey: e.instanceKey(worker),
 	}).HandleTask(e.tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.FailNow(e.t, "no activity task expected while registering a sticky activity poller")
@@ -135,7 +135,7 @@ func (e *sessionMoveEnv) runActivityAs(
 ) *workflowservice.PollActivityTaskQueueResponse {
 	request := &workflowservice.PollActivityTaskQueueRequest{TaskQueue: queue, Identity: "worker-" + worker}
 	if worker != "" {
-		request.SessionOptions = multiSessionWorkerOptions(e.stickyQueue(worker).GetName())
+		request.SessionOptions = multiSessionWorkerOptions()
 		request.WorkerInstanceKey = e.instanceKey(worker)
 	}
 	var task *workflowservice.PollActivityTaskQueueResponse
@@ -523,7 +523,8 @@ func TestWorkflowSessionActivityMoveReschedulesPendingWorkflowTask(t *testing.T)
 	require.Error(t, err)
 }
 
-func multiSessionWorkerOptions(workerAddress string) *sessionpb.WorkerSessionOptions {
+// multiSessionWorkerOptions are a multi-session worker's session options. Its sticky queue is named after its instance key.
+func multiSessionWorkerOptions() *sessionpb.WorkerSessionOptions {
 	return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
 		MultiSession: &sessionpb.MultiSessionOptions{},
 	}}

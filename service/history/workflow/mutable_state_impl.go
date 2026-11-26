@@ -1574,11 +1574,10 @@ func (ms *MutableStateImpl) SessionWorkerQueue() string {
 	return ms.executionInfo.GetStickyTaskQueue()
 }
 
-// UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the worker that starts its workflow
-// task or one of its session activities, and reports whether the binding changed. instanceKey is the starting
-// worker's instance key. previousWorkerQueue and previousStickyTimeout are captured before the start cleared
-// stickiness. Any change of binding reschedules the pending workflow task and pending session activities so they
-// follow the worker.
+// UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that services it: a multi-session worker
+// starting one of its tasks becomes its bound worker, and nil options (a worker without sessions started a task)
+// unbind it. It reports whether the binding changed, and reschedules the pending workflow task and session activities
+// when it did. previousWorkerStickyQueue is the bound worker's sticky queue, read before the start cleared stickiness.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
 	workerInstanceKey string,

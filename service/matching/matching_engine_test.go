@@ -7649,7 +7649,7 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 				metadata := &pollMetadata{workerInstanceKey: tv.WorkerInstanceKey(), conditions: &matchingservice.PollConditions{NoWait: true}}
 				switch tc.mode {
 				case "multi-session":
-					metadata.sessionOptions = multiSessionOptions(tv.StickyTaskQueue().GetName())
+					metadata.sessionOptions = multiSessionOptions()
 				case "exclusive":
 					require.NoError(t, queue.AssignExclusiveWorker())
 					metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
@@ -7669,17 +7669,13 @@ func (s *matchingEngineSuite) TestMultiSessionTaskAdmission() {
 				if tc.lookup {
 					s.mockMatchingClient.EXPECT().DescribeWorker(gomock.Any(), &matchingservice.DescribeWorkerRequest{
 						NamespaceId: tv.NamespaceID().String(),
-						Request:     &workflowservice.DescribeWorkerRequest{Namespace: s.ns.Name().String(), WorkerInstanceKey: tv.WorkerInstanceKey()},
+						Request:     &workflowservice.DescribeWorkerRequest{Namespace: s.ns.Name().String(), WorkerInstanceKey: partition.RpcName()},
 					}).Return(&matchingservice.DescribeWorkerResponse{}, tc.lookupErr)
 				}
 
 				var sessionDirective *taskqueuespb.TaskSessionDirective
 				if tc.directive != "" {
-					worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: partition.RpcName(), InstanceKey: tv.WorkerInstanceKey()}
-					if tc.noKey {
-						worker.InstanceKey = ""
-					}
-					sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: worker, IsExclusiveWorkerAssigned: tc.directive == "exclusive"}
+					sessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: tc.directive == "exclusive"}
 				}
 				if tc.unloaded {
 					s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)

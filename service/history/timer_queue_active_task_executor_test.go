@@ -1451,13 +1451,13 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			if tc.session {
 				activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
-			if tc.session && !tc.droppedSession {
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
-			}
 			if tc.droppedSession {
 				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			} else {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
+			}
+			if tc.session && !tc.droppedSession {
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			}
 
 			activityInfo.Attempt = 1

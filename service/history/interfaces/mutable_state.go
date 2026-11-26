@@ -279,13 +279,14 @@ type (
 		ClearStickyTaskQueue(reason StickyClearReason) bool
 		IsStickyTaskQueueSet() bool
 		SessionWorkerQueue() string
-		ClearStickyTaskQueueUnlessPartOfSession() bool
-		// UpdateNonExclusiveWorkerBinding gives the workflow a non-exclusive binding to the multi-session worker that started
-		// its workflow task or one of its session activities. previousWorkerQueue and previousStickyTimeout must be read
-		// before this start changed stickiness (ClearStickyTaskQueue or a deployment transition clears the binding); passing
-		// current values misreads a move as a restore. Call it after the task's started event is recorded; for workflow
-		// tasks, after the response is built, so a worker coming from the normal queue gets full history.
-		UpdateNonExclusiveWorkerBinding(options *sessionpb.WorkerSessionOptions, instanceKey string, previousWorkerQueue string, previousStickyTimeout *durationpb.Duration) (bool, error)
+		// HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
+		HasExclusiveBinding() bool
+		// UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that just started one of its tasks.
+		// previousWorkerStickyQueue must be read before this start changed stickiness (a binding move or a deployment
+		// transition clears the binding); passing the current value misreads a move as a restore. Call it after the task's
+		// started event is recorded; for workflow tasks, after the response is built, so a worker coming from the normal
+		// queue gets full history.
+		UpdateNonExclusiveWorkerBinding(options *sessionpb.WorkerSessionOptions, workerInstanceKey string, previousWorkerStickyQueue string) (bool, error)
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool

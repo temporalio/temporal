@@ -1174,24 +1174,23 @@ TestRecordActivityTaskStartedMovesSessionBinding tests a session activity start 
     reissued. A non-session activity, or the bound worker itself, leaves everything as it was.
 */
 func (s *engine2Suite) TestRecordActivityTaskStartedMovesSessionBinding() {
-	multiSession := func(address string) *sessionpb.WorkerSessionOptions {
-		return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
-			MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: address},
-		}}
-	}
+	multiSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+		MultiSession: &sessionpb.MultiSessionOptions{},
+	}}
 	for _, tc := range []struct {
 		name            string
 		sessionActivity bool
 		options         *sessionpb.WorkerSessionOptions
+		instanceKey     string
 		wantWorkerQueue string
 		wantRescheduled bool
 	}{
-		{name: "multi-session worker moves the session", sessionActivity: true, options: multiSession("worker-y-sticky"),
+		{name: "multi-session worker moves the session", sessionActivity: true, options: multiSession, instanceKey: "worker-y-sticky",
 			wantWorkerQueue: "worker-y-sticky", wantRescheduled: true},
 		{name: "worker without session options unbinds", sessionActivity: true, wantRescheduled: true},
-		{name: "bound worker keeps the session", sessionActivity: true, options: multiSession("worker-x-sticky"),
+		{name: "bound worker keeps the session", sessionActivity: true, options: multiSession, instanceKey: "worker-x-sticky",
 			wantWorkerQueue: "worker-x-sticky"},
-		{name: "non-session activity leaves the binding", options: multiSession("worker-y-sticky"),
+		{name: "non-session activity leaves the binding", options: multiSession, instanceKey: "worker-y-sticky",
 			wantWorkerQueue: "worker-x-sticky"},
 	} {
 		s.Run(tc.name, func() {
@@ -1206,9 +1205,8 @@ func (s *engine2Suite) TestRecordActivityTaskStartedMovesSessionBinding() {
 				started.SessionState = inSession
 			}
 			pending.SessionState = inSession
-			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "worker-x-sticky"}}
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			ms.GetExecutionInfo().StickyTaskQueue = "worker-x-sticky"
-			ms.GetExecutionInfo().StickyScheduleToStartTimeout = durationpb.New(7 * time.Second)
 			wt := addWorkflowTaskScheduledEvent(ms)
 
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
@@ -1227,17 +1225,13 @@ func (s *engine2Suite) TestRecordActivityTaskStartedMovesSessionBinding() {
 				ScheduledEventId:  scheduledEvent.GetEventId(),
 				RequestId:         "reqId",
 				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-					TaskQueue: &taskqueuepb.TaskQueue{Name: tl}, Identity: "worker", SessionOptions: tc.options, WorkerInstanceKey: "worker-instance",
+					TaskQueue: &taskqueuepb.TaskQueue{Name: tl}, Identity: "worker", SessionOptions: tc.options, WorkerInstanceKey: tc.instanceKey,
 				},
 			})
 
 			s.Require().NoError(err)
 			s.Require().NotNil(mutation)
-			s.Equal(tc.wantWorkerQueue, mutation.ExecutionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
 			s.Equal(tc.wantWorkerQueue, mutation.ExecutionInfo.GetStickyTaskQueue())
-			if tc.wantRescheduled && tc.wantWorkerQueue != "" {
-				s.Equal("worker-instance", mutation.ExecutionInfo.GetSessionState().GetBoundWorkerInfo().GetInstanceKey())
-			}
 			var rescheduledWorkflowTask, rescheduledActivities []int64
 			for _, task := range mutation.Tasks[tasks.CategoryTransfer] {
 				switch task := task.(type) {

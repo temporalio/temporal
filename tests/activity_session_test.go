@@ -84,8 +84,8 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	// A worker polls its sticky activity queue from startup; without a recent poll Matching treats it as gone.
 	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
-		WorkerInstanceKey: tv.WorkerInstanceKey(),
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(),
+		WorkerInstanceKey: tv.StickyTaskQueue().GetName(),
 	}).HandleTask(tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.FailNow(t, "no activity task expected while registering the sticky activity poller")
 		return nil, nil
@@ -117,8 +117,8 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
 	stickyPoller := poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
-		WorkerInstanceKey: tv.WorkerInstanceKey(),
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(),
+		WorkerInstanceKey: tv.StickyTaskQueue().GetName(),
 	})
 	_, err = stickyPoller.HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		require.Equal(t, "session-activity", task.ActivityId)
@@ -149,87 +149,11 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 func (s *Versioning3Suite) TestMultiSessionWorkerRejectedWithVersioning() {
 	env := s.setupEnv(testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
 	tv := env.Tv()
-	env.updateTaskQueueDeploymentDataWithRoutingConfig(s, tv, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimeNowPtrUtc(), RevisionNumber: 1,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT}}, nil, tqTypeWf)
-	if independentDeployment || behavior == vbUnpinned {
-		activityVersion := tv
-		if independentDeployment {
-			activityVersion = tv.WithBuildIDNumber(2)
-		}
-		env.updateTaskQueueDeploymentDataWithRoutingConfig(s, activityVersion, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(activityVersion.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimeNowPtrUtc(), RevisionNumber: 1,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{activityVersion.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT}}, nil, tqTypeAct)
-	}
-	if behavior == vbPinned {
-		env.startWorkflow(s, tv, tv.VersioningOverridePinned())
-	} else {
-		env.startWorkflow(s, tv, nil)
-	}
-
-	expectStickyRejection := behavior == vbUnpinned && independentDeployment
-	var rejectedDispatch chan error
-	if expectStickyRejection {
-		rejectedDispatch = make(chan error, 1)
-		defer env.InjectResponseFault(func(req, _ any, handlerErr error) error {
-			addRequest, ok := req.(*matchingservice.AddActivityTaskRequest)
-			if !ok || addRequest.GetTaskQueue().GetName() != tv.StickyTaskQueue().GetName() {
-				return nil
-			}
-			select {
-			case rejectedDispatch <- handlerErr:
-			default:
-			}
-			return handlerErr
-		})()
-	}
-
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
-	stickyActivityPoll := &workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: tv.StickyTaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
-		SessionOptions: multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()), WorkerInstanceKey: tv.WorkerInstanceKey(),
-	}
-	// A worker polls its sticky activity queue from startup; without a recent poll Matching treats it as gone.
-	_, err := poller.PollActivityTask(stickyActivityPoll).HandleTask(tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-		s.FailNow("no activity task expected while registering the sticky activity poller")
-		return nil, nil
-	}, taskpoller.WithTimeout(stickyPollTimeout))
-	s.Require().Error(err)
-	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		DeploymentOptions: tv.WorkerDeploymentOptions(true),
-		TaskQueue:         tv.TaskQueue(),
-		SessionOptions:    multiSessionWorkerOptions(tv.StickyTaskQueue().GetName()),
-		WorkerInstanceKey: tv.WorkerInstanceKey(),
-	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		response := env.respondWftWithActivities(tv, tv, true, behavior, "session-activity")
-		response.Commands[0].GetScheduleActivityTaskCommandAttributes().SessionOptions = &sessionpb.ActivitySessionOptions{
-			Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
-		}
-		return response, nil
-	}, taskpoller.WithTimeout(time.Minute))
-	s.Require().NoError(err)
-	if expectStickyRejection {
-		s.Require().ErrorAs(await.Rcv(s.T(), rejectedDispatch), new(*serviceerrors.StickyWorkerUnavailable))
-		description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
-		})
-		s.Require().NoError(err)
-		s.Require().Len(description.GetPendingActivities(), 1)
-		s.Require().Equal("session-activity", description.GetPendingActivities()[0].GetActivityId())
-		s.Require().Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.GetPendingActivities()[0].GetState())
-		s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.GetWorkflowExecutionInfo().GetStatus())
-		return
-	}
-
-	_, err = poller.PollActivityTask(stickyActivityPoll).HandleTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-		s.Require().Equal("session-activity", task.ActivityId)
-		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
-	}, taskpoller.WithContext(s.Context()))
-	s.Require().NoError(err)
-	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
+	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+	defer cancel()
+	_, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(), TaskQueue: tv.TaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		SessionOptions: multiSessionWorkerOptions(), WorkerInstanceKey: tv.StickyTaskQueue().GetName(),
 	})
 	s.Require().ErrorAs(err, new(*serviceerror.InvalidArgument))
 	s.Require().ErrorContains(err, "multi-session workers do not support worker versioning")
