@@ -53,6 +53,17 @@ type (
 		ExporterConfig telemetry.ExportConfig `yaml:"otel"`
 		// Visibility related config
 		Visibility Visibility `yaml:"visibility"`
+		// Failpoints is the static switch for failpoints, see Failpoints
+		Failpoints Failpoints `yaml:"failpoints"`
+	}
+
+	// Failpoints configures failpoints, which let tests make server code fail or stall. They are
+	// installed only if Enabled is true. The server reads it once at startup, from this static config
+	// only: no environment variable or dynamic config setting enables failpoints.
+	Failpoints struct {
+		// Enabled installs failpoints and logs a warning at startup. It is false by default, and then
+		// nothing about failpoints is active.
+		Enabled bool `yaml:"enabled"`
 	}
 
 	// Service contains the service specific config items

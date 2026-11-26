@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	expmaps "golang.org/x/exp/maps"
@@ -127,6 +128,9 @@ type (
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
+		// FailpointSource holds the failpoint registry, or none if the startup switch did not
+		// enable failpoints.
+		FailpointSource *failpoint.Registry
 	}
 )
 
@@ -233,6 +237,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			dcClient = dynamicconfig.NewNoopClient()
 		}
 	}
+	failpointSource := so.failpointSource
+	if failpointSource == nil {
+		failpointSource = resolveFailpoints(so.config.Failpoints.Enabled, logger)
+	}
 
 	testHooks := testhooks.NewTestHooks()
 	if so.testHooks != nil {
@@ -311,6 +319,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		MetricsHandler:             metricHandler,
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
+		FailpointSource:            failpointSource,
 	}, nil
 }
 
@@ -379,6 +388,7 @@ type (
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		TestHooks                       testhooks.TestHooks
+		FailpointSource                 *failpoint.Registry
 	}
 )
 
@@ -459,6 +469,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
+			},
+			func() *failpoint.Registry {
+				return params.FailpointSource
 			},
 		),
 		fx.Decorate(func() testhooks.TestHooks {
