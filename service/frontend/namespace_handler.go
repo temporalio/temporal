@@ -84,6 +84,7 @@ var (
 	errCannotDoNamespaceFailoverAndUpdate = serviceerror.NewInvalidArgument("Cannot set active cluster to current cluster when other parameters are set.")
 	errInvalidRetentionPeriod             = serviceerror.NewInvalidArgument("A valid retention period is not set on request.")
 	errInvalidNamespaceStateUpdate        = serviceerror.NewInvalidArgument("Invalid namespace state update.")
+	errSoftDeleteSystemNamespace          = serviceerror.NewFailedPrecondition("The system namespace can't be soft-deleted.")
 
 	errCustomSearchAttributeFieldAlreadyAllocated = serviceerror.NewInvalidArgument("Custom search attribute field name already allocated.")
 )
@@ -459,23 +460,29 @@ func (d *namespaceHandler) describeNamespaceFromRegistry(request *workflowservic
 }
 
 // UpdateNamespace update the namespace
-//
-//nolint:revive // cognitive complexity grandfathered
 func (d *namespaceHandler) UpdateNamespace(
 	ctx context.Context,
 	updateRequest *workflowservice.UpdateNamespaceRequest,
 ) (*workflowservice.UpdateNamespaceResponse, error) {
+	return d.updateNamespace(ctx, updateRequest, internalUpdateOptions{})
+}
 
-	// must get the metadata (notificationVersion) first
-	// this version can be regarded as the lock on the v2 namespace table
-	// and since we do not know which table will return the namespace afterwards
-	// this call has to be made
-	metadata, err := d.metadataMgr.GetMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: updateRequest.GetNamespace()})
+// internalUpdateOptions let the namespace lifecycle APIs reuse UpdateNamespace. The public
+// UpdateNamespace never sets them.
+type internalUpdateOptions struct {
+	// namespaceID reads the namespace by ID instead of by the request's name.
+	namespaceID namespace.ID
+	// allowSoftDelete permits the REGISTERED to SOFT_DELETED state change.
+	allowSoftDelete bool
+}
+
+//nolint:revive // cognitive complexity grandfathered
+func (d *namespaceHandler) updateNamespace(
+	ctx context.Context,
+	updateRequest *workflowservice.UpdateNamespaceRequest,
+	opts internalUpdateOptions,
+) (*workflowservice.UpdateNamespaceResponse, error) {
+	getResponse, notificationVersion, err := d.readNamespaceForWrite(ctx, namespace.Name(updateRequest.GetNamespace()), opts.namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +564,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 		if updatedInfo.State != enumspb.NAMESPACE_STATE_UNSPECIFIED && info.State != updatedInfo.State {
 			configurationChanged = true
-			if err := validateStateUpdate(getResponse, updateRequest); err != nil {
+			if err := validateStateUpdate(getResponse, updateRequest, opts.allowSoftDelete); err != nil {
 				return nil, err
 			}
 			info.State = updatedInfo.State
@@ -833,6 +840,40 @@ func (d *namespaceHandler) UpdateNamespace(
 		tag.WorkflowNamespaceID(info.Id),
 	)
 	return response, nil
+}
+
+// readNamespaceForWrite reads the notification version, which is the lock on the namespace table,
+// then the namespace. It must be read first: the version is the expected value of the update's
+// compare-and-swap.
+func (d *namespaceHandler) readNamespaceForWrite(
+	ctx context.Context,
+	nsName namespace.Name,
+	nsID namespace.ID,
+) (*persistence.GetNamespaceResponse, int64, error) {
+	metadata, err := d.metadataMgr.GetMetadata(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: nsName.String(),
+		ID:   nsID.String(),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return getResponse, metadata.NotificationVersion, nil
+}
+
+// SoftDeleteNamespace moves a REGISTERED namespace to SOFT_DELETED. It is an UpdateNamespace of the
+// state, so it gets the same validation, versioning, and replication. On a namespace that is
+// already SOFT_DELETED the update changes nothing and replicates the record again, so a retry
+// still reaches peers.
+func (d *namespaceHandler) SoftDeleteNamespace(ctx context.Context, nsName namespace.Name, nsID namespace.ID) error {
+	_, err := d.updateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace:  nsName.String(),
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: enumspb.NAMESPACE_STATE_SOFT_DELETED},
+	}, internalUpdateOptions{namespaceID: nsID, allowSoftDelete: true})
+	return err
 }
 
 func (d *namespaceHandler) updateReplicationRamps(
@@ -1498,7 +1539,13 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 	return nil
 }
 
-func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, nsUpdateRequest *workflowservice.UpdateNamespaceRequest) error {
+// validateStateUpdate checks the request's namespace state change. allowSoftDelete permits
+// REGISTERED to SOFT_DELETED, which only SoftDeleteNamespace requests.
+func validateStateUpdate(
+	existingNamespace *persistence.GetNamespaceResponse,
+	nsUpdateRequest *workflowservice.UpdateNamespaceRequest,
+	allowSoftDelete bool,
+) error {
 	if nsUpdateRequest.UpdateInfo == nil {
 		return nil // no change
 	}
@@ -1517,6 +1564,14 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 	case enumspb.NAMESPACE_STATE_REGISTERED:
 		switch newState {
 		case enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_DEPRECATED:
+			return nil
+		case enumspb.NAMESPACE_STATE_SOFT_DELETED:
+			if !allowSoftDelete {
+				return errInvalidNamespaceStateUpdate
+			}
+			if existingNamespace.Namespace.Info.Id == primitives.SystemNamespaceID {
+				return errSoftDeleteSystemNamespace
+			}
 			return nil
 		default:
 			return errInvalidNamespaceStateUpdate

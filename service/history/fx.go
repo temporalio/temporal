@@ -118,6 +118,7 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(RegisterPreallocatedSearchAttributeMappings),
 	fx.Invoke(func(
 		chasmEngine chasm.Engine,
 		chasmVisibilityManager chasm.VisibilityManager,

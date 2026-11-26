@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/wideevents"
@@ -2752,23 +2753,139 @@ func (s *namespaceHandlerCommonSuite) TestValidateReplicationStateUpdate_Namespa
 
 func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 	testCases := []struct {
-		oldState enumspb.NamespaceState
-		newState enumspb.NamespaceState
+		name            string
+		id              string
+		oldState        enumspb.NamespaceState
+		newState        enumspb.NamespaceState
+		handover        bool
+		allowSoftDelete bool
+		expectedErr     error
 	}{
-		{oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED},
-		{oldState: enumspb.NAMESPACE_STATE_DEPRECATED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED},
-		{oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_REGISTERED},
-		{oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_DELETED},
+		{name: "soft delete", oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowSoftDelete: true},
+		{name: "public update can't soft delete", oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, expectedErr: errInvalidNamespaceStateUpdate},
+		{name: "deprecated", oldState: enumspb.NAMESPACE_STATE_DEPRECATED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowSoftDelete: true, expectedErr: errInvalidNamespaceStateUpdate},
+		{name: "deleted", oldState: enumspb.NAMESPACE_STATE_DELETED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowSoftDelete: true, expectedErr: errInvalidNamespaceStateUpdate},
+		{name: "system namespace", id: primitives.SystemNamespaceID, oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowSoftDelete: true, expectedErr: errSoftDeleteSystemNamespace},
+		{name: "handover", oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, handover: true, allowSoftDelete: true},
+		{name: "out of soft deleted", oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_REGISTERED, allowSoftDelete: true, expectedErr: errInvalidNamespaceStateUpdate},
+		{name: "soft deleted to deleted", oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_DELETED, expectedErr: errInvalidNamespaceStateUpdate},
 	}
-	for _, testCase := range testCases {
-		err := validateStateUpdate(
-			&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{State: testCase.oldState},
-			}},
-			&workflowservice.UpdateNamespaceRequest{
-				UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: testCase.newState},
-			},
-		)
-		s.ErrorIs(err, errInvalidNamespaceStateUpdate, "%v -> %v", testCase.oldState, testCase.newState)
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			replicationState := enumspb.REPLICATION_STATE_NORMAL
+			if tc.handover {
+				replicationState = enumspb.REPLICATION_STATE_HANDOVER
+			}
+			err := validateStateUpdate(
+				&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+					Info:              &persistencespb.NamespaceInfo{Id: tc.id, State: tc.oldState},
+					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{State: replicationState},
+				}},
+				&workflowservice.UpdateNamespaceRequest{
+					UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: tc.newState},
+				},
+				tc.allowSoftDelete,
+			)
+			switch {
+			case tc.handover:
+				var invalidArgument *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgument)
+			case tc.expectedErr != nil:
+				s.Require().ErrorIs(err, tc.expectedErr)
+			default:
+				s.NoError(err)
+			}
+		})
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) registeredNamespaceResponse(nid string, name string) *persistence.GetNamespaceResponse {
+	response := s.softDeletedNamespaceResponse(nid, name)
+	response.Namespace.Info.State = enumspb.NAMESPACE_STATE_REGISTERED
+	return response
+}
+
+// expectSoftDeleteClusterMetadata stubs the cluster metadata that UpdateNamespace's validation reads.
+func (s *namespaceHandlerCommonSuite) expectSoftDeleteClusterMetadata() {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		"cluster1": {Enabled: true, InitialFailoverVersion: 1},
+		"cluster2": {Enabled: true, InitialFailoverVersion: 2},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("cluster1").AnyTimes()
+}
+
+func (s *namespaceHandlerCommonSuite) TestSoftDeleteNamespace_Registered() {
+	nid := uuid.NewString()
+	s.expectSoftDeleteClusterMetadata()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: nid}).Return(
+		s.registeredNamespaceResponse(nid, "ns"), nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, request.Namespace.Info.State)
+			s.Equal(int64(6), request.Namespace.ConfigVersion)
+			s.Equal(int64(7), request.NotificationVersion)
+			s.True(request.IsGlobalNamespace)
+			return nil
+		})
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			attributes := task.GetNamespaceTaskAttributes()
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, attributes.GetInfo().GetState())
+			s.Equal(int64(6), attributes.GetConfigVersion())
+			return nil
+		})
+
+	s.NoError(s.handler.SoftDeleteNamespace(s.T().Context(), "", namespace.ID(nid)))
+}
+
+func (s *namespaceHandlerCommonSuite) TestSoftDeleteNamespace_AlreadySoftDeleted() {
+	s.expectSoftDeleteClusterMetadata()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "ns"}).Return(
+		s.softDeletedNamespaceResponse(uuid.NewString(), "ns"), nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			attributes := task.GetNamespaceTaskAttributes()
+			s.Equal(enumspb.NAMESPACE_STATE_SOFT_DELETED, attributes.GetInfo().GetState())
+			s.Equal(int64(5), attributes.GetConfigVersion())
+			return nil
+		})
+
+	s.NoError(s.handler.SoftDeleteNamespace(s.T().Context(), "ns", ""))
+}
+
+func (s *namespaceHandlerCommonSuite) TestSoftDeleteNamespace_Rejected() {
+	testCases := []struct {
+		name     string
+		id       string
+		state    enumspb.NamespaceState
+		handover bool
+		check    func(error)
+	}{
+		{name: "deprecated", id: uuid.NewString(), state: enumspb.NAMESPACE_STATE_DEPRECATED, check: func(err error) { s.ErrorIs(err, errInvalidNamespaceStateUpdate) }},
+		{name: "deleted", id: uuid.NewString(), state: enumspb.NAMESPACE_STATE_DELETED, check: func(err error) { s.ErrorIs(err, errInvalidNamespaceStateUpdate) }},
+		{name: "system namespace", id: primitives.SystemNamespaceID, state: enumspb.NAMESPACE_STATE_REGISTERED, check: func(err error) { s.ErrorIs(err, errSoftDeleteSystemNamespace) }},
+		{name: "handover", id: uuid.NewString(), state: enumspb.NAMESPACE_STATE_REGISTERED, handover: true, check: func(err error) {
+			var invalidArgument *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArgument)
+		}},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			response := s.registeredNamespaceResponse(tc.id, "ns")
+			response.Namespace.Info.State = tc.state
+			if tc.handover {
+				response.Namespace.ReplicationConfig.State = enumspb.REPLICATION_STATE_HANDOVER
+			}
+			s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
+			s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(response, nil)
+			s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
+			s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Times(0)
+
+			tc.check(s.handler.SoftDeleteNamespace(s.T().Context(), "ns", ""))
+		})
 	}
 }
