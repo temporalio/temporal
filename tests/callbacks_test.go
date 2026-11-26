@@ -78,16 +78,14 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 	ch, callbackAddress := newNexusCompletionHandler(s.T())
 
 	var attempts atomic.Int32
-	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, _ *http.Response, _ error) *httpfaults.Outcome {
+	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, _ *http.Response, _ error) (*http.Response, error) {
 		if !strings.HasSuffix(req.URL.Path, "/cb1") {
-			return nil
+			return nil, nil
 		}
 		if attempts.Add(1) == 1 {
-			return &httpfaults.Outcome{
-				Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
-			}
+			return httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"), nil
 		}
-		return nil
+		return nil, nil
 	})
 
 	cb := &commonpb.Callback{

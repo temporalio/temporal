@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -768,14 +767,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationRetriesAfterHTTPFault(chasmEn
 
 	// The first request fails before it reaches the handler. The retry succeeds.
 	var attempts atomic.Int32
-	env.InjectHTTPRequestFault(func(_ context.Context, req *http.Request) *httpfaults.Outcome {
+	env.InjectHTTPRequestFault(func(_ context.Context, req *http.Request) (*http.Response, error) {
 		if !strings.HasSuffix(req.URL.Path, "/operation") {
-			return nil
+			return nil, nil
 		}
 		if attempts.Add(1) == 1 {
-			return &httpfaults.Outcome{Error: errors.New("simulated transport failure")}
+			return nil, errors.New("simulated transport failure")
 		}
-		return nil
+		return nil, nil
 	})
 
 	callerWF := func(ctx workflow.Context) (string, error) {
@@ -3398,14 +3397,14 @@ func (s *NexusWorkflowTestSuite) TestTimeoutCleanupWithLateCallbackAndCancellati
 			return nil
 		},
 	}
-	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, resp *http.Response, callErr error) *httpfaults.Outcome {
+	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, resp *http.Response, callErr error) (*http.Response, error) {
 		if !strings.HasSuffix(req.URL.Path, "/cancel") || resp == nil || callErr != nil {
-			return nil
+			return nil, nil
 		}
 		responseHeld <- resp.StatusCode
 		<-releaseCancel
 		responseReleased <- struct{}{}
-		return &httpfaults.Outcome{Response: resp}
+		return resp, nil
 	})
 	endpoint := env.createRandomExternalNexusServer(ctx, s.T(), handler)
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tq}, "workflow")

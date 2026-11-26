@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -61,22 +62,24 @@ func newBuggifyRegistry(t *testing.T, config buggify.Config) (*failpoint.Registr
 	}
 }
 
-// dynamicKeys memoizes keys constructed by name across parallel tests and repeated -count runs.
-var (
-	dynamicMu   sync.Mutex
-	dynamicKeys = map[string]failpoint.Key[error]{}
-)
+// undeclaredPrefixes are the prefixes of the names that the tests build keys of, as the code under
+// test does from the method of a request.
+var undeclaredPrefixes = map[string]failpoint.KeyPrefix[error]{
+	"key.":      failpoint.ReserveKeyPrefix[error]("key."),
+	"excluded.": failpoint.ReserveKeyPrefix[error]("excluded."),
+	"ac":        failpoint.ReserveKeyPrefix[error]("ac"),
+	"http:":     failpoint.ReserveKeyPrefix[error]("http:"),
+}
 
-// undeclared returns a key for name and scope, declaring name once if needed.
+// undeclared returns the key of the failpoint that the code under test builds from name.
 func undeclared(name, scope string) failpoint.Key[error] {
-	dynamicMu.Lock()
-	defer dynamicMu.Unlock()
-	k, ok := dynamicKeys[name]
-	if !ok {
-		k = failpoint.NewKey[error](name)
-		dynamicKeys[name] = k
+	for prefix, keys := range undeclaredPrefixes {
+		if suffix, ok := strings.CutPrefix(name, prefix); ok {
+			return keys.Key(suffix).ForScope(scope)
+		}
 	}
-	return k.ForScope(scope)
+	//nolint:forbidigo // a missing prefix is a programming error of the test
+	panic("buggify test: reserve a prefix for the key " + name)
 }
 
 func TestBuggify_Determinism(t *testing.T) {
@@ -124,9 +127,10 @@ func TestBuggify_Execute(t *testing.T) {
 		err := failpoint.ExecuteError(src, key)
 		require.ErrorIs(t, err, errBuggify)
 		require.ErrorContains(t, err, "BUGGIFY: injected by failpoint 1")
-		got, set := failpoint.Execute[error](src, key)
-		require.ErrorIs(t, got, errBuggify)
-		require.True(t, set)
+		result := failpoint.ExecuteInOrder(src, failpoint.ExecuteOptions{}, key)
+		require.ErrorIs(t, result.Value, errBuggify)
+		require.True(t, result.Set)
+		require.True(t, result.Fired)
 
 		require.Equal(t, []buggify.Event{
 			{Kind: buggify.EventActivation, Name: key1.Name(), Activated: true},
@@ -158,6 +162,14 @@ func TestBuggify_Execute(t *testing.T) {
 		require.NoError(t, failpoint.ExecuteError(src, key2))
 		require.ErrorIs(t, failpoint.ExecuteError(src, key1), errBuggify)
 		require.True(t, failpoint.ExecuteSwitch(src, key2))
+	})
+
+	t.Run("ExplicitOnly ignores BUGGIFY", func(t *testing.T) {
+		t.Parallel()
+		registry, _, events := newBuggifyRegistry(t, alwaysConfig())
+		result := failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{ExplicitOnly: true}, key1)
+		require.Equal(t, failpoint.Result[error]{}, result)
+		require.Empty(t, events())
 	})
 }
 
@@ -312,6 +324,20 @@ func TestBuggify_SetCopiesTheConfiguration(t *testing.T) {
 		},
 	}, b.Config())
 	require.True(t, failpoint.ExecuteSwitch(registry, undeclared("ac", "")))
+}
+
+func TestExecuteInOrder_Buggify(t *testing.T) {
+	t.Parallel()
+	registry, _, _ := newBuggifyRegistry(t, alwaysConfig())
+	key := key1.ForScope("ns")
+	errorOf := func(result failpoint.Result[error]) error { return result.Value }
+	opts := failpoint.ExecuteOptions{PolicyKey: key.Name(), PolicyScope: key.Scope()}
+	require.ErrorIs(t, errorOf(failpoint.ExecuteInOrder(registry, opts, key2.ForScope("ns"))), errBuggify)
+
+	// A disabled failpoint of the unscoped key of another key is enough to keep BUGGIFY away.
+	registry.Set(failpoint.New[error](key2))
+	require.NoError(t, errorOf(failpoint.ExecuteInOrder(registry, opts, key2.ForScope("ns"))))
+	require.ErrorIs(t, errorOf(failpoint.ExecuteInOrder(registry, opts, key3)), errBuggify)
 }
 
 func TestBuggify_ManyUnselectedNames(t *testing.T) {

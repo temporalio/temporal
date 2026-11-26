@@ -15,6 +15,9 @@ agree on it at compile time. Each name can be declared once; `NewKey` panics on 
 `ChargeCard.ForScope("tenant-1")` scopes a key, for example to one tenant; `Execute` falls back to
 the unscoped key when no scoped failpoint is registered.
 
+Code that builds names at run time, such as one key per request method, reserves a prefix with
+`ReserveKeyPrefix[T]` and builds keys with the returned `KeyPrefix`.
+
 ## Execute it
 
 ```go
@@ -28,8 +31,9 @@ func (s *Service) Charge(ctx context.Context) error {
 ```
 
 `ExecuteError` returns the injected error for an error failpoint. Use `Execute` for other value
-types, and `ExecuteSwitch` for branch-style call sites that only need to know whether to take an
-alternate path:
+types, `ExecuteInOrder` to evaluate ordered keys (and scopes in precedence order) from a single
+registry snapshot and pass an argument to `CallWithArg` callbacks, and `ExecuteSwitch` for
+branch-style call sites that only need to know whether to take an alternate path:
 
 ```go
 if failpoint.ExecuteSwitch(s.failpoints, SkipCache) {
