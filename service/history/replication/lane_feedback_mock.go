@@ -41,41 +41,41 @@ func (m *MockLaneFeedbackProvider) EXPECT() *MockLaneFeedbackProviderMockRecorde
 }
 
 // Feedback mocks base method.
-func (m *MockLaneFeedbackProvider) Feedback(shardID int32, maxBytes int) *anypb.Any {
+func (m *MockLaneFeedbackProvider) Feedback(stream LaneFeedbackStream, maxBytes int) *anypb.Any {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Feedback", shardID, maxBytes)
+	ret := m.ctrl.Call(m, "Feedback", stream, maxBytes)
 	ret0, _ := ret[0].(*anypb.Any)
 	return ret0
 }
 
 // Feedback indicates an expected call of Feedback.
-func (mr *MockLaneFeedbackProviderMockRecorder) Feedback(shardID, maxBytes any) *gomock.Call {
+func (mr *MockLaneFeedbackProviderMockRecorder) Feedback(stream, maxBytes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Feedback", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).Feedback), shardID, maxBytes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Feedback", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).Feedback), stream, maxBytes)
 }
 
 // RecordTask mocks base method.
-func (m *MockLaneFeedbackProvider) RecordTask(shardID int32, namespaceID string) {
+func (m *MockLaneFeedbackProvider) RecordTask(stream LaneFeedbackStream, namespaceID string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RecordTask", shardID, namespaceID)
+	m.ctrl.Call(m, "RecordTask", stream, namespaceID)
 }
 
 // RecordTask indicates an expected call of RecordTask.
-func (mr *MockLaneFeedbackProviderMockRecorder) RecordTask(shardID, namespaceID any) *gomock.Call {
+func (mr *MockLaneFeedbackProviderMockRecorder) RecordTask(stream, namespaceID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTask", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).RecordTask), shardID, namespaceID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTask", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).RecordTask), stream, namespaceID)
 }
 
 // ThrottledNamespaceIDs mocks base method.
-func (m *MockLaneFeedbackProvider) ThrottledNamespaceIDs(shardID int32) []string {
+func (m *MockLaneFeedbackProvider) ThrottledNamespaceIDs(stream LaneFeedbackStream) []string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ThrottledNamespaceIDs", shardID)
+	ret := m.ctrl.Call(m, "ThrottledNamespaceIDs", stream)
 	ret0, _ := ret[0].([]string)
 	return ret0
 }
 
 // ThrottledNamespaceIDs indicates an expected call of ThrottledNamespaceIDs.
-func (mr *MockLaneFeedbackProviderMockRecorder) ThrottledNamespaceIDs(shardID any) *gomock.Call {
+func (mr *MockLaneFeedbackProviderMockRecorder) ThrottledNamespaceIDs(stream any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ThrottledNamespaceIDs", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).ThrottledNamespaceIDs), shardID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ThrottledNamespaceIDs", reflect.TypeOf((*MockLaneFeedbackProvider)(nil).ThrottledNamespaceIDs), stream)
 }

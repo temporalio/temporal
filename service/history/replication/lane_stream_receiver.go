@@ -186,6 +186,10 @@ func (r *laneStreamReceiver) Key() ClusterShardKeyPair {
 	}
 }
 
+func (r *laneStreamReceiver) feedbackStream() LaneFeedbackStream {
+	return LaneFeedbackStream{Source: r.serverShardKey, Target: r.clientShardKey}
+}
+
 func (r *laneStreamReceiver) sendEventLoop() error {
 	var panicErr error
 	defer func() {
@@ -321,7 +325,7 @@ func (r *laneStreamReceiver) ackMessage(
 
 	var throttleHighNamespaceIDs []string
 	if receiverMode == ReceiverModeTieredStack {
-		throttleHighNamespaceIDs = r.laneFeedback.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+		throttleHighNamespaceIDs = r.laneFeedback.ThrottledNamespaceIDs(r.feedbackStream())
 	}
 	laneProtocolVersion, maxLanes, laneFeedback := r.laneAckFields(receiverMode)
 	err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
@@ -418,7 +422,7 @@ func (r *laneStreamReceiver) processMessages(
 			// namespace stays observable and can be released once its rate drops.
 			for _, task := range convertedTasks {
 				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
-					r.laneFeedback.RecordTask(r.clientShardKey.ShardID, nsID)
+					r.laneFeedback.RecordTask(r.feedbackStream(), nsID)
 				}
 			}
 		}
@@ -437,6 +441,9 @@ func (r *laneStreamReceiver) processMessages(
 			r.finishLaneBatch(laneID, messages.GetLaneInfo().GetRetire())
 		}
 		for _, task := range trackedTasks {
+			if r.PayloadObserver != nil {
+				observePayload(r.PayloadObserver, task.ReplicationTask(), clusterName, r.serverShardKey.ShardID, PayloadReceived, time.Now())
+			}
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
 				return err
@@ -746,7 +753,7 @@ func (r *laneStreamReceiver) laneAckFields(receiverMode ReceiverMode) (version i
 	if maxBytes <= 0 {
 		return version, maxLanes, nil
 	}
-	feedback = r.laneFeedback.Feedback(r.clientShardKey.ShardID, maxBytes)
+	feedback = r.laneFeedback.Feedback(r.feedbackStream(), maxBytes)
 	if size := proto.Size(feedback); size > maxBytes {
 		metrics.ReplicationLaneFeedbackDropped.With(r.MetricsHandler).Record(
 			1,
