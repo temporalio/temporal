@@ -214,11 +214,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	executionInfo := ms.GetExecutionInfo()
-	sessionState := executionInfo.GetSessionState()
-	if sessionState.GetExclusiveWorker() {
+	if ms.HasExclusiveBinding() {
 		requestedStickyQueue := request.GetStickyAttributes().GetWorkerTaskQueue()
-		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != sessionState.GetBoundWorkerInfo().GetWorkerQueue() {
+		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != ms.SessionWorkerQueue() {
 			releaseLeaseWithError = false
 			return nil, serviceerror.NewInvalidArgument("workflow is bound to another single-session destination")
 		}
@@ -1213,7 +1211,7 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 	if err != nil {
 		return err
 	}
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 	if err != nil {
 		return err

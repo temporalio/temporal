@@ -64,7 +64,6 @@ func TestForceTerminateWorkflowRecordsMetric(t *testing.T) {
 // for exclusive and non-exclusive bindings alike.
 func TestTaskSessionDirective(t *testing.T) {
 	t.Parallel()
-	worker := &taskqueuespb.BoundWorkerInfo{WorkerQueue: "worker", InstanceKey: "key"}
 	sticky := &taskqueuepb.TaskQueue{Name: "worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
 	for _, tc := range []struct {
 		name         string

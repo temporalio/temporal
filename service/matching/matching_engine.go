@@ -1442,11 +1442,8 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	if sticky && !stickyWorkerAvailable(pm) {
-		assigned, err := e.exclusiveWorkerAssigned(ctx, partition)
-		if err != nil {
-			return nil, err
-		}
-		if !assigned {
+		// Only a workflow bound to a single-session worker waits for it; other sticky queries are reported unavailable.
+		if !queryRequest.GetSessionDirective().GetIsExclusiveWorkerAssigned() {
 			return nil, serviceerrors.NewStickyWorkerUnavailable()
 		}
 		if pm == nil {

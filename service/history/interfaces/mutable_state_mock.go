@@ -1837,15 +1837,17 @@ func (mr *MockMutableStateMockRecorder) CheckSpeculativeWorkflowTaskTimeoutTask(
 }
 
 // ClearStickyTaskQueue mocks base method.
-func (m *MockMutableState) ClearStickyTaskQueue() {
+func (m *MockMutableState) ClearStickyTaskQueue(reason StickyClearReason) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ClearStickyTaskQueue")
+	ret := m.ctrl.Call(m, "ClearStickyTaskQueue", reason)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // ClearStickyTaskQueue indicates an expected call of ClearStickyTaskQueue.
-func (mr *MockMutableStateMockRecorder) ClearStickyTaskQueue() *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ClearStickyTaskQueue(reason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).ClearStickyTaskQueue))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).ClearStickyTaskQueue), reason)
 }
 
 // ClearStickyTaskQueueUnlessPartOfSession mocks base method.
@@ -3122,6 +3124,20 @@ func (m *MockMutableState) HasCompletedAnyWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) HasCompletedAnyWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasCompletedAnyWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasCompletedAnyWorkflowTask))
+}
+
+// HasExclusiveBinding mocks base method.
+func (m *MockMutableState) HasExclusiveBinding() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasExclusiveBinding")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasExclusiveBinding indicates an expected call of HasExclusiveBinding.
+func (mr *MockMutableStateMockRecorder) HasExclusiveBinding() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasExclusiveBinding", reflect.TypeOf((*MockMutableState)(nil).HasExclusiveBinding))
 }
 
 // HasParentExecution mocks base method.

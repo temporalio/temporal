@@ -12,6 +12,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -603,6 +604,61 @@ func TestMergeAndApply(t *testing.T) {
 			} else {
 				require.False(t, hasChanges)
 			}
+		})
+	}
+}
+
+// TestMergeAndApplyRejectsVersioningOverrideForSessionBinding tests that the versioning override of a workflow bound to
+// a worker servicing sessions cannot be set or unset, while its other options can still be updated.
+func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
+	pinned := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+			Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "d", BuildId: "b"},
+		}},
+	}
+	priority := &commonpb.Priority{PriorityKey: 2}
+	versioningMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
+
+	tcs := []struct {
+		name         string
+		sessionState *persistencespb.SessionState
+		options      *workflowpb.WorkflowExecutionOptions
+		mask         *fieldmaskpb.FieldMask
+		rejected     bool
+	}{
+		{name: "single-session binding, set override", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask, rejected: true},
+		{name: "multi-session binding, set override", sessionState: &persistencespb.SessionState{},
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask, rejected: true},
+		{name: "multi-session binding, unset override", sessionState: &persistencespb.SessionState{},
+			options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask, rejected: true},
+		{name: "binding, override mixed with priority", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned, Priority: priority},
+			mask:    &fieldmaskpb.FieldMask{Paths: []string{"versioning_override", "priority"}}, rejected: true},
+		{name: "binding, priority only", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+			options: &workflowpb.WorkflowExecutionOptions{Priority: priority}, mask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}}},
+		{name: "not bound, set override",
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{SessionState: tc.sessionState}).AnyTimes()
+			if !tc.rejected {
+				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+					gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(&historypb.HistoryEvent{}, nil)
+			}
+
+			_, _, err := MergeAndApply(ms, tc.options, tc.mask, "")
+			if tc.rejected {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }

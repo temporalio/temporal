@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
@@ -12,6 +13,11 @@ import (
 
 func TestValidateWorkerSessionOptions(t *testing.T) {
 	t.Parallel()
+	singleSession := func(stableIdentity string) *sessionpb.WorkerSessionOptions {
+		return &sessionpb.WorkerSessionOptions{
+			Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: stableIdentity}},
+		}
+	}
 	for _, tc := range []struct {
 		name           string
 		kind           enumspb.TaskQueueKind
@@ -41,11 +47,9 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			options := tc.options
-			if tc.singleSession {
-				options = &sessionpb.WorkerSessionOptions{
-					Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tc.stableIdentity}},
-				}
+			taskQueue := &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			if tc.sticky != "" {
+				taskQueue = &taskqueuepb.TaskQueue{Name: tc.sticky, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"}
 			}
 			if tc.multiSession {
 				options = &sessionpb.WorkerSessionOptions{
@@ -56,7 +60,7 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 			if tc.noInstanceKey {
 				instanceKey = ""
 			}
-			err := validateWorkerSessionOptions(options, &taskqueuepb.TaskQueue{Name: "queue", Kind: tc.kind}, instanceKey)
+			err := validateWorkerSessionOptions(tc.options, taskQueue, tc.instanceKey, versionCapabilities)
 			if tc.invalid {
 				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			} else {

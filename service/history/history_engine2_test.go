@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
@@ -693,8 +692,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTas
 			s.Equal(response.GetStartedEventId(), persistedExecutionInfo.GetWorkflowTaskStartedEventId())
 			if tc.singleSession {
 				s.True(persistedExecutionInfo.GetSessionState().GetExclusiveWorker())
-				s.Equal("S", persistedExecutionInfo.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
-				s.Equal("worker-s-instance", persistedExecutionInfo.GetSessionState().GetBoundWorkerInfo().GetInstanceKey())
 				s.Equal("S", persistedExecutionInfo.GetStickyTaskQueue())
 				s.Empty(persistedExecutionInfo.GetAssignedBuildId())
 			} else {
@@ -902,7 +899,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				s.Equal(int64(3), info.GetWorkflowTaskStartedEventId())
 				if exclusiveWorker {
 					s.Equal("S", info.GetStickyTaskQueue())
-					s.Equal("S", info.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
 				}
 				return tests.UpdateWorkflowExecutionResponse, nil
 			})
