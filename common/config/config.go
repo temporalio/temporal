@@ -63,6 +63,44 @@ type (
 		// Enabled installs failpoints and logs a warning at startup.
 		// It is false by default, and then nothing about failpoints is active.
 		Enabled bool `yaml:"enabled"`
+		// Buggify configures BUGGIFY, seeded random failpoint activation, for a server with failpoints
+		// enabled. It has no effect while Enabled is false.
+		Buggify FailpointsBuggify `yaml:"buggify"`
+		// buggifyBlocks are the unread failpoints.buggify blocks of the YAML files that were loaded, in
+		// order. They are decoded only by ReadBuggify, once the final value of Enabled is known, so
+		// a block of a server without failpoints is never decoded or validated.
+		buggifyBlocks []yaml.Node
+	}
+
+	// FailpointsBuggify configures BUGGIFY from the static config. BUGGIFY applies only to the failpoint
+	// keys that Keys lists; see docs/development/failpoints.md for a standard list.
+	FailpointsBuggify struct {
+		// Seed seeds BUGGIFY, a positive number. Zero leaves BUGGIFY off. A seed needs Keys.
+		Seed uint64 `yaml:"seed"`
+		// Keys is the allowlist of the failpoint keys that BUGGIFY applies to. The first entry that
+		// matches the name of a key sets its probabilities and error, and a key that matches no entry
+		// is never buggified. Put a narrow entry before a broad one to treat some keys of a group
+		// differently, for example with an activationProbability of 0.
+		Keys []FailpointsBuggifyKey `yaml:"keys"`
+		// Trace prints one line per BUGGIFY decision to the standard output of the server, in the
+		// format of serverbuggify.TraceLine.
+		Trace bool `yaml:"trace"`
+	}
+
+	// FailpointsBuggifyKey is an entry of the failpoints.buggify.keys allowlist.
+	FailpointsBuggifyKey struct {
+		// Match is a pattern for the names of failpoint keys, in which "*" matches any text, including
+		// none, anywhere in the name. There is no other syntax, no regular expressions.
+		Match string `yaml:"match"`
+		// ActivationProbability is the probability in [0, 1] that a matching key is activated for the
+		// run. It is required.
+		ActivationProbability *float64 `yaml:"activationProbability"`
+		// FireProbability is the probability in [0, 1] that an execution of an activated matching key
+		// fires. It is required.
+		FireProbability *float64 `yaml:"fireProbability"`
+		// Error names a registered error that a matching key returns when it fires, such as
+		// Unavailable. Without it, the key only fires at failpoint.ExecuteSwitch call sites.
+		Error string `yaml:"error"`
 	}
 
 	// Service contains the service specific config items
