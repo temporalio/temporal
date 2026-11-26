@@ -3,8 +3,8 @@ package timestamp
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -23,11 +23,13 @@ var (
 // (always interpreted as exactly 24 hours).
 func ParseDuration(s string) (time.Duration, error) {
 	s = reDays.ReplaceAllStringFunc(s, func(v string) string {
-		fv, err := strconv.ParseFloat(strings.TrimSuffix(v, "d"), 64)
-		if err != nil {
+		days, ok := new(big.Rat).SetString(strings.TrimSuffix(v, "d"))
+		if !ok {
 			return v // will cause time.ParseDuration to return an error
 		}
-		return fmt.Sprintf("%fh", 24*fv)
+		days.Mul(days, big.NewRat(int64(24*time.Hour), 1))
+		nanos := new(big.Int).Quo(days.Num(), days.Denom())
+		return nanos.String() + "ns"
 	})
 	return time.ParseDuration(s)
 }
