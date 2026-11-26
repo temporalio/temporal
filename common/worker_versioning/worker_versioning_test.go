@@ -896,6 +896,20 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 	}
 }
 
+func TestFindDeploymentVersionForWorkflowID_PartialRampEmptyWorkflowID(t *testing.T) {
+	current := &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "v1"}
+	ramping := &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "v2"}
+	histogram := make(map[string]int)
+	runs := 1000000
+	for range runs {
+		v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, 0, ramping, 30, 0, "", false)
+		histogram[v.GetBuildId()]++
+	}
+
+	assert.InEpsilon(t, .7*float64(runs), histogram[current.GetBuildId()], .02)
+	assert.InEpsilon(t, .3*float64(runs), histogram[ramping.GetBuildId()], .02)
+}
+
 func TestFormatPinnedVersionNotInTaskQueueError(t *testing.T) {
 	tests := []struct {
 		name           string
