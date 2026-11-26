@@ -1454,3 +1454,9 @@ func userDataWithDeploymentVersion(deploymentName, buildID string) *persistences
 		},
 	}
 }
+
+func multiSessionOptions() *sessionpb.WorkerSessionOptions {
+	return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+		MultiSession: &sessionpb.MultiSessionOptions{},
+	}}
+}
