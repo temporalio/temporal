@@ -146,6 +146,28 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, memo.GetFields(), migrationState.Memo)
 }
 
+func TestLegacyToCreateFromMigrationStateRequest_PreservesZeroCatchupWindow(t *testing.T) {
+	now := time.Now().UTC()
+	schedule := newTestSchedule()
+	schedule.Policies.CatchupWindow = durationpb.New(0)
+	req := LegacyToCreateFromMigrationStateRequest(
+		schedule,
+		&schedulepb.ScheduleInfo{},
+		&schedulespb.InternalState{
+			Namespace:         "test-ns",
+			NamespaceId:       "test-ns-id",
+			ScheduleId:        "test-sched-id",
+			LastProcessedTime: timestamppb.New(now),
+		},
+		nil,
+		nil,
+		now,
+	)
+
+	require.NotNil(t, req.GetState().GetSchedulerState().GetSchedule().GetPolicies().GetCatchupWindow())
+	require.Zero(t, req.GetState().GetSchedulerState().GetSchedule().GetPolicies().GetCatchupWindow().AsDuration())
+}
+
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
 	// V1 scheduler workflows carry TemporalNamespaceDivision ('TemporalScheduler')
 	// and TemporalSchedulePaused in their search attributes. Both are system SAs
