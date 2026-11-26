@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -19,7 +21,7 @@ func retirementTask(namespaceID string, id int64) tasks.Task {
 
 func TestSenderLaneRegistryRetirementHasFixedBoundary(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 50, nil)
 	require.NoError(t, err)
@@ -68,7 +70,7 @@ func TestSenderLaneRegistryRetirementHasFixedBoundary(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementIncludesInFlightSend(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 10, nil)
 	require.NoError(t, err)
@@ -101,7 +103,7 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			resume := tc.resume
-			r, err := newSenderLaneRegistry(100, nil)
+			r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 			require.NoError(t, err)
 			lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
 			require.NoError(t, err)
@@ -115,7 +117,7 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 			require.True(t, r.RequestRetirement("a"))
 			r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: resume}})
 			state := r.BuildReaderState(syncReplicationState(350, 350, 350))
-			restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes)
+			restored, err := newSenderLaneRegistry(laneDefaultCursor(state), state.Lanes, log.NewNoopLogger())
 			require.NoError(t, err)
 			current, ok := restored.SnapshotByKey("a")
 			require.True(t, ok)
@@ -143,7 +145,7 @@ func TestSenderLaneRegistryRestoresFiniteRetirement(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementWaitsForPendingHandoff(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	_, acquired := r.AcquireDefault(200)
 	require.True(t, acquired)
@@ -164,7 +166,7 @@ func TestSenderLaneRegistryRetirementWaitsForPendingHandoff(t *testing.T) {
 
 func TestSenderLaneRegistryRetirementWaitsWhileDefaultAdvances(t *testing.T) {
 	t.Parallel()
-	r, err := newSenderLaneRegistry(100, nil)
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
 	require.NoError(t, err)
@@ -207,4 +209,81 @@ func TestSenderLaneRegistryRetirementWaitsWhileDefaultAdvances(t *testing.T) {
 	require.Empty(t, r.ReadyRetirements())
 	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 1100}})
 	require.Len(t, r.ReadyRetirements(), 1)
+}
+
+func TestSenderLaneRegistryRetirementWaitsForResumeBeforeHandoff(t *testing.T) {
+	t.Parallel()
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
+	require.NoError(t, err)
+	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
+	require.NoError(t, err)
+	_, acquired := r.Acquire(lane.id)
+	require.True(t, acquired)
+	require.True(t, r.RequestRetirement("a"))
+	// A PAUSE arriving before the in-flight send finishes prevents handoff.
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+	}})
+	r.AdvanceLaneCursor(lane.id, 200)
+	r.Release(lane.id)
+	current, ok := r.SnapshotByID(lane.id)
+	require.True(t, ok)
+	require.True(t, current.retiring)
+	require.Equal(t, int64(math.MaxInt64), current.scope.Range.ExclusiveMax.TaskID)
+	owner, acquired := r.AcquireDefault(500)
+	require.True(t, acquired)
+	require.Equal(t, "a", owner(retirementTask("a", 450)))
+	r.ReleaseDefault(500, true)
+	require.Empty(t, r.ReadyRetirements())
+	_, acquired = r.Acquire(lane.id)
+	require.False(t, acquired)
+	// RESUME permits catchup, but the unsent tail still belongs to the lane.
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+	}})
+	current, acquired = r.Acquire(lane.id)
+	require.True(t, acquired)
+	require.Equal(t, int64(math.MaxInt64), current.scope.Range.ExclusiveMax.TaskID)
+	r.AdvanceLaneCursor(lane.id, 500)
+	r.Release(lane.id)
+	current, ok = r.SnapshotByID(lane.id)
+	require.True(t, ok)
+	require.Equal(t, int64(500), current.scope.Range.ExclusiveMax.TaskID)
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {InclusiveLowWatermark: 500}})
+	require.Len(t, r.ReadyRetirements(), 1)
+}
+
+func TestSenderLaneRegistryPauseAfterFixedHandoff(t *testing.T) {
+	t.Parallel()
+	r, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
+	require.NoError(t, err)
+	lane, _, err := r.Create("a", namespaceLaneFilter("a"), 100, nil)
+	require.NoError(t, err)
+	require.True(t, r.RequestRetirement("a"))
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+	}})
+	require.Empty(t, r.ReadyRetirements(), "PAUSE prevents starting a retirement marker")
+	current, ok := r.SnapshotByID(lane.id)
+	require.True(t, ok)
+	require.Equal(t, int64(100), current.scope.Range.ExclusiveMax.TaskID)
+	owner, acquired := r.AcquireDefault(500)
+	require.True(t, acquired)
+	require.Empty(t, owner(retirementTask("a", 450)), "an accepted handoff cannot reclaim default ownership")
+	r.ReleaseDefault(500, true)
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+	}})
+	require.Len(t, r.ReadyRetirements(), 1)
+	// Once the sender has selected the marker, a later PAUSE cannot recall it.
+	r.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+		InclusiveLowWatermark: 100,
+		FlowControlCommand:    enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+	}})
+	_, completed := r.CompleteRetirement(lane.id)
+	require.True(t, completed)
 }

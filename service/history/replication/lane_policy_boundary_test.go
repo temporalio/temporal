@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -12,7 +13,7 @@ import (
 
 func TestSenderLaneRegistryOwnsDesiredFilter(t *testing.T) {
 	t.Parallel()
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	require.NoError(t, err)
 	filter := namespaceLaneFilter("ns-a")
 	policyState := []byte{1}
@@ -31,9 +32,10 @@ func TestSenderLaneRegistryOwnsDesiredFilter(t *testing.T) {
 }
 
 func (s *laneStreamSenderSuite) TestPolicyInputsCannotChangeLaneOwnership() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy
 	first := DesiredLane{Key: "first", Filter: namespaceLaneFilter("ns-a"), PolicyState: []byte{1}}
@@ -71,11 +73,12 @@ func (s *laneStreamSenderSuite) TestPolicyInputsCannotChangeLaneOwnership() {
 }
 
 func (s *laneStreamSenderSuite) TestPolicyPanicWhileLanesReadRequestedState() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	_, _, err = registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	s.streamSender.laneLimiters["a"] = &fakeLaneLimiter{}
 	policy := NewMockLaneStreamPolicy(s.controller)
 	s.streamSender.lanePolicy = policy

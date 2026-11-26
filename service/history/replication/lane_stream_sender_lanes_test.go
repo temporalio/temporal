@@ -19,6 +19,9 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/queues"
@@ -156,12 +159,37 @@ func (l *fakeLaneLimiter) Reserve(time.Time) (bool, time.Duration) {
 // requestLane makes logicalKey the only lane in the policy's latest answer, paced by limiter.
 func (s *laneStreamSenderSuite) requestLane(logicalKey string, limiter LaneLimiter) {
 	if s.streamSender.laneRegistry == nil {
-		registry, err := newSenderLaneRegistry(0, nil)
+		registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 		s.NoError(err)
 		s.streamSender.laneRegistry = registry
 	}
 	s.streamSender.requestedLanes = map[string]struct{}{logicalKey: {}}
 	s.streamSender.laneLimiters[logicalKey] = limiter
+}
+
+func (s *laneStreamSenderSuite) TestPaceLane_WaitsWhileReceiverPausesLane() {
+	logicalKey := namespaceLaneKey("ns-a")
+	limiter := &fakeLaneLimiter{}
+	s.requestLane(logicalKey, limiter)
+	lane, _, err := s.streamSender.laneRegistry.Create(logicalKey, namespaceLaneFilter("ns-a"), 0, nil)
+	s.NoError(err)
+	s.streamSender.laneRegistry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE},
+	})
+	// A handover lifts the lane's rate limit but not the receiver's pause.
+	s.streamSender.handoverInProgress.Store(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.streamSender.paceLane(ctx, logicalKey) }()
+	cancel()
+	s.ErrorIs(<-done, context.Canceled)
+
+	s.streamSender.laneRegistry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME},
+	})
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.Zero(limiter.calls)
 }
 
 func (s *laneStreamSenderSuite) TestPaceLane_StreamEnded() {
@@ -200,7 +228,24 @@ func (s *laneStreamSenderSuite) TestPaceLane_NotPaced() {
 	for range 3 {
 		s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
 	}
+
+	// So does every lane while a handover is in progress on the shard.
+	s.requestLane(logicalKey, limiter)
+	s.streamSender.handoverInProgress.Store(true)
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
 	s.Zero(limiter.calls)
+}
+
+func (s *laneStreamSenderSuite) TestPaceLane_HandoverWhileRefused() {
+	logicalKey := namespaceLaneKey("ns-a")
+	// The limiter asks for an hour, and a handover starts meanwhile. The lane re-checks within
+	// laneMaxRetryAfter and sends without asking the limiter again.
+	limiter := &fakeLaneLimiter{refusals: 1, retryAfter: time.Hour}
+	limiter.onReserve = func() { s.streamSender.handoverInProgress.Store(true) }
+	s.requestLane(logicalKey, limiter)
+
+	s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	s.Equal(1, limiter.calls)
 }
 
 func (s *laneStreamSenderSuite) TestPaceLane_DrainCapPacesWithdrawnLanes() {
@@ -347,6 +392,20 @@ func (s *laneStreamSenderSuite) TestPaceLane_RequestedLaneIgnoresDrainCap() {
 	s.NotContains(s.streamSender.laneDrainLimiters, logicalKey)
 }
 
+func (s *laneStreamSenderSuite) TestPaceLane_HandoverLiftsDrainCap() {
+	logicalKey := namespaceLaneKey("ns-a")
+	s.requestLane(logicalKey, &fakeLaneLimiter{})
+	s.streamSender.requestedLanes = nil
+	s.config.ReplicationLaneDrainTasksPerSecond = dynamicconfig.GetFloatPropertyFn(0.001)
+	s.streamSender.handoverInProgress.Store(true)
+
+	// A namespace handover lifts the drain cap along with every other lane limit.
+	for range 3 {
+		s.NoError(s.streamSender.paceLane(context.Background(), logicalKey))
+	}
+	s.NotContains(s.streamSender.laneDrainLimiters, logicalKey)
+}
+
 func (s *laneStreamSenderSuite) TestLaneRetired_DropsDrainLimiter() {
 	logicalKey := namespaceLaneKey("ns-a")
 	s.requestLane(logicalKey, &fakeLaneLimiter{})
@@ -362,7 +421,7 @@ func (s *laneStreamSenderSuite) TestLaneRetired_DropsDrainLimiter() {
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -395,7 +454,7 @@ func (s *laneStreamSenderSuite) TestSendDefaultTasks_SkipsLaneOwnedTasks() {
 
 func (s *laneStreamSenderSuite) TestSendDefaultTasks_LowPriorityIgnoresLanes() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -421,7 +480,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_WithoutLaneSupp
 		LogicalKey: namespaceLaneKey("ns-a"),
 		Scope:      queues.ToPersistenceScope(laneScope(namespaceLaneFilter("ns-a"), 700)),
 	}
-	registry, err := newSenderLaneRegistry(950, []*persistencespb.QueueReaderLane{persistedLane})
+	registry, err := newSenderLaneRegistry(950, []*persistencespb.QueueReaderLane{persistedLane}, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	// Without lane support, the stream never creates a policy.
@@ -450,7 +509,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_WithoutLaneSupp
 
 func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	// The stream creates its policy on the first ack, once.
@@ -459,6 +518,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 	policy := NewMockLaneStreamPolicy(s.controller)
 	factory.EXPECT().NewStreamPolicy(LaneStream{RemoteCluster: "target_cluster", ShardID: s.serverShardKey.ShardID}).Return(policy, nil)
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any()).AnyTimes()
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil).AnyTimes()
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(200)).AnyTimes()
 	readerID := shard.ReplicationReaderIDFromClusterShardID(int64(s.clientShardKey.ClusterID), s.clientShardKey.ShardID)
 	logicalKey := namespaceLaneKey("ns-a")
@@ -518,7 +578,7 @@ func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_ReconcilesLanes
 
 func (s *laneStreamSenderSuite) TestRecvLaneSyncReplicationState_LaneSupportChange() {
 	s.streamSender.isTieredStackEnabled = true
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(gomock.Any()).AnyTimes()
@@ -563,7 +623,7 @@ func (s *laneStreamSenderSuite) TestLaneCatchupBeginWatermark() {
 }
 
 func (s *laneStreamSenderSuite) TestSendReadyLaneRetirements() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
 	s.NoError(err)
 	lane, _, err := registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 100, nil)
 	s.NoError(err)
@@ -589,16 +649,49 @@ func (s *laneStreamSenderSuite) TestSendReadyLaneRetirements() {
 
 func (s *laneStreamSenderSuite) TestIsValid_SenderLanesEnabledChanged() {
 	s.streamSender.status = common.DaemonStatusStarted
-	s.streamSender.lanesEnabledSetting = false
-	s.streamSender.config.ReplicationStreamSenderLanesEnabled = dynamicconfig.GetBoolPropertyFn(false)
-	s.True(s.streamSender.IsValid())
+	for _, tc := range []struct {
+		name    string
+		created bool
+		current bool
+		valid   bool
+	}{
+		{name: "StillDisabled", created: false, current: false, valid: true},
+		{name: "Enabled", created: false, current: true, valid: false},
+		{name: "StillEnabled", created: true, current: true, valid: true},
+		{name: "Disabled", created: true, current: false, valid: false},
+	} {
+		s.Run(tc.name, func() {
+			s.streamSender.lanesEnabledSetting = tc.created
+			s.streamSender.config.ReplicationStreamSenderLanesEnabled = dynamicconfig.GetBoolPropertyFn(tc.current)
+			s.Equal(tc.valid, s.streamSender.IsValid())
+		})
+	}
+}
 
-	s.streamSender.config.ReplicationStreamSenderLanesEnabled = dynamicconfig.GetBoolPropertyFn(true)
-	s.False(s.streamSender.IsValid())
+func (s *laneStreamSenderSuite) TestReconcileLanes_HandoverLiftsRateLimits() {
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	policy := NewMockLaneStreamPolicy(s.controller)
+	s.streamSender.lanePolicy = policy
+	logicalKey := namespaceLaneKey("ns-a")
+	policy.EXPECT().Evaluate(gomock.Any()).Return([]DesiredLane{{Key: logicalKey, Filter: namespaceLaneFilter("ns-a")}}, nil).Times(2)
+	policy.EXPECT().Limiter(logicalKey).Return(&fakeLaneLimiter{})
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100)).AnyTimes()
+	attr := syncReplicationState(100, 100, 100)
+	attr.MaxLanes = 100
+
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, map[string]*historyservice.HandoverNamespaceInfo{"ns-b": {}}, nil)
+	s.NoError(s.streamSender.reconcileLanes(attr, false))
+	s.False(s.streamSender.laneShouldBeRateLimited(logicalKey))
+
+	s.shardContext.EXPECT().GetReplicationStatus([]string{"target_cluster"}).Return(nil, nil, nil)
+	s.NoError(s.streamSender.reconcileLanes(attr, false))
+	s.True(s.streamSender.laneShouldBeRateLimited(logicalKey))
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	s.streamSender.config.ReplicationStreamSenderMaxLanes = dynamicconfig.GetIntPropertyFn(2)
@@ -610,6 +703,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
 	}, nil)
 	policy.EXPECT().Limiter(gomock.Any()).Return(&fakeLaneLimiter{}).Times(2)
 	s.streamSender.lanePolicy = policy
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 	attr := syncReplicationState(100, 100, 100)
 	attr.MaxLanes = 100
@@ -623,7 +717,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_MaxLanesKeepsPolicyOrder() {
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 0, nil)
@@ -632,6 +726,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
 	policy := NewMockLaneStreamPolicy(s.controller)
 	policy.EXPECT().Evaluate(gomock.Any()).Return(nil, errors.New("invalid config"))
 	s.streamSender.lanePolicy = policy
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 
 	s.NoError(s.streamSender.reconcileLanes(syncReplicationState(100, 100, 100), false))
@@ -639,12 +734,13 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_PolicyErrorRetiresLanes() {
 }
 
 func (s *laneStreamSenderSuite) TestReconcileLanes_WithoutPolicy() {
-	registry, err := newSenderLaneRegistry(0, nil)
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	_, _, err = registry.Create(namespaceLaneKey("ns-a"), namespaceLaneFilter("ns-a"), 0, nil)
 	s.NoError(err)
 	s.streamSender.requestedLanes = map[string]struct{}{namespaceLaneKey("ns-a"): {}}
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 
 	s.NoError(s.streamSender.reconcileLanes(syncReplicationState(100, 100, 100), false))
@@ -707,7 +803,7 @@ func (s *laneStreamSenderSuite) TestAdmitDesiredLanes() {
 		},
 	} {
 		s.Run(tc.name, func() {
-			registry, err := newSenderLaneRegistry(0, nil)
+			registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
 			s.NoError(err)
 			for _, lane := range tc.existing {
 				_, _, err := registry.Create(lane.Key, lane.Filter, 0, nil)
@@ -727,7 +823,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_FirstAckDropsRestoredLanesOve
 			Scope:      queues.ToPersistenceScope(laneScope(namespaceLaneFilter(namespaceID), 100)),
 		})
 	}
-	registry, err := newSenderLaneRegistry(100, persisted)
+	registry, err := newSenderLaneRegistry(100, persisted, log.NewNoopLogger())
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	policy := NewMockLaneStreamPolicy(s.controller)
@@ -737,6 +833,7 @@ func (s *laneStreamSenderSuite) TestReconcileLanes_FirstAckDropsRestoredLanesOve
 		{Key: namespaceLaneKey("ns-a"), Filter: namespaceLaneFilter("ns-a")},
 	}, nil)
 	policy.EXPECT().Limiter(gomock.Any()).Return(&fakeLaneLimiter{}).Times(2)
+	s.shardContext.EXPECT().GetReplicationStatus(gomock.Any()).Return(nil, nil, nil)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(100))
 	attr := syncReplicationState(100, 100, 100)
 	attr.MaxLanes = 2
@@ -923,4 +1020,102 @@ func (s *laneStreamSenderSuite) TestStartLanePolicy_FactoryError() {
 
 	s.streamSender.startLanePolicy()
 	s.Nil(s.streamSender.lanePolicy)
+}
+
+func (s *laneStreamSenderSuite) TestRecordLaneLag() {
+	registry, err := newSenderLaneRegistry(0, nil, log.NewNoopLogger())
+	s.NoError(err)
+	behind, _, err := registry.Create(namespaceLaneKey("ns-behind"), namespaceLaneFilter("ns-behind"), 0, nil)
+	s.NoError(err)
+	current, _, err := registry.Create(namespaceLaneKey("ns-current"), namespaceLaneFilter("ns-current"), 0, nil)
+	s.NoError(err)
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		behind.id:  {InclusiveLowWatermark: 1, InclusiveLowWatermarkTime: timestamppb.New(time.Now().Add(-time.Hour))},
+		current.id: {InclusiveLowWatermark: 1, InclusiveLowWatermarkTime: timestamppb.New(time.Now())},
+	})
+	s.streamSender.laneRegistry = registry
+	s.streamSender.config.ReplicationLaneMaxLag = dynamicconfig.GetDurationPropertyFn(30 * time.Minute)
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.streamSender.metrics = captureHandler
+	// Only the lane over the limit is reported, with the shard's newest task for comparison.
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(500))
+
+	s.streamSender.recordLaneLag()
+	s.Len(capture.Snapshot()[metrics.ReplicationLaneLag.Name()], 2)
+	exceeded := capture.Snapshot()[metrics.ReplicationLaneMaxLagExceeded.Name()]
+	s.Len(exceeded, 1)
+	s.Equal(namespaceLaneKey("ns-behind"), exceeded[0].Tags["replication_lane"])
+	laneCount := capture.Snapshot()[metrics.ReplicationLaneCount.Name()]
+	s.Len(laneCount, 1)
+	s.Equal(int64(2), laneCount[0].Value)
+}
+
+func (s *laneStreamSenderSuite) TestRecordLanePauseChanges() {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.streamSender.metrics = captureHandler
+
+	s.streamSender.recordLanePauseChanges([]lanePauseChange{
+		{logicalKey: namespaceLaneKey("ns-a"), paused: true},
+		{logicalKey: namespaceLaneKey("ns-b"), paused: false},
+	})
+	paused := capture.Snapshot()[metrics.ReplicationLanePaused.Name()]
+	s.Len(paused, 1)
+	s.Equal(namespaceLaneKey("ns-a"), paused[0].Tags["replication_lane"])
+	resumed := capture.Snapshot()[metrics.ReplicationLaneResumed.Name()]
+	s.Len(resumed, 1)
+	s.Equal(namespaceLaneKey("ns-b"), resumed[0].Tags["replication_lane"])
+}
+
+func (s *laneStreamSenderSuite) TestRecordLaneLagBoundaries() {
+	for _, tc := range []struct {
+		name          string
+		sourceHigh    int64
+		retirementEnd int64
+		wantLag       bool
+	}{
+		{name: "IdleActiveLane", sourceHigh: 100},
+		{name: "UnsentBacklog", sourceHigh: 500, wantLag: true},
+		{name: "RetiringPrefixAcknowledged", sourceHigh: 500, retirementEnd: 100},
+		{name: "RetiringPrefixPending", sourceHigh: 500, retirementEnd: 200, wantLag: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			registry, err := newSenderLaneRegistry(100, nil, log.NewNoopLogger())
+			require.NoError(t, err)
+			lane, _, err := registry.Create("a", namespaceLaneFilter("ns-a"), 100, nil)
+			require.NoError(t, err)
+			if tc.retirementEnd != 0 {
+				registry.AdvanceLaneCursor(lane.id, tc.retirementEnd)
+				require.True(t, registry.RequestRetirement("a"))
+			}
+			registry.ObserveAcks(map[string]*replicationspb.ReplicationState{lane.id: {
+				InclusiveLowWatermark:     100,
+				InclusiveLowWatermarkTime: timestamppb.New(time.Now().Add(-time.Hour)),
+			}})
+			s.streamSender.laneRegistry = registry
+			s.streamSender.config.ReplicationLaneMaxLag = dynamicconfig.GetDurationPropertyFn(30 * time.Minute)
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+			s.streamSender.metrics = captureHandler
+			s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(tc.sourceHigh))
+
+			s.streamSender.recordLaneLag()
+
+			snapshot := capture.Snapshot()
+			lag := snapshot[metrics.ReplicationLaneLag.Name()]
+			require.Len(t, lag, 1)
+			if tc.wantLag {
+				require.GreaterOrEqual(t, lag[0].Value, time.Hour)
+				require.Len(t, snapshot[metrics.ReplicationLaneMaxLagExceeded.Name()], 1)
+			} else {
+				require.Equal(t, time.Duration(0), lag[0].Value)
+				require.Empty(t, snapshot[metrics.ReplicationLaneMaxLagExceeded.Name()])
+			}
+		})
+	}
 }

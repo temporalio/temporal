@@ -50,13 +50,15 @@ type laneStreamReceiver struct {
 	memberLaneMu      sync.Mutex
 	memberLanes       map[string]*memberLane
 	memberLanesClosed bool // set by Stop; late-created lanes are pre-cancelled
-	shutdownChan      channel.ShutdownOnce
-	logger            log.Logger
-	stream            Stream
-	taskConverter     ExecutableTaskConverter
-	receiverMode      ReceiverMode
-	flowController    ReceiverFlowController
-	recvSignalChan    chan struct{}
+	// pausedLanes holds the IDs of the lanes this receiver currently pauses.
+	pausedLanes    map[string]struct{}
+	shutdownChan   channel.ShutdownOnce
+	logger         log.Logger
+	stream         Stream
+	taskConverter  ExecutableTaskConverter
+	receiverMode   ReceiverMode
+	flowController ReceiverFlowController
+	recvSignalChan chan struct{}
 
 	slowSubmissionMu         sync.RWMutex
 	slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
@@ -90,6 +92,7 @@ func newLaneStreamReceiver(
 		maxLanes:                processToolBox.Config.ReplicationStreamReceiverMaxLanes(),
 		laneFeedback:            laneFeedback,
 		memberLanes:             make(map[string]*memberLane),
+		pausedLanes:             make(map[string]struct{}),
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
 		stream: newStream(
@@ -103,15 +106,7 @@ func newLaneStreamReceiver(
 		recvSignalChan:           make(chan struct{}, 1),
 	}
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
-	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
-		return &FlowControlSignal{
-			// Include the isolated per-namespace lane trackers: isolation splits the
-			// HIGH lane, so flow control protects against total HIGH backlog (default
-			// lane + member lanes).
-			taskTrackingCount:  receiver.highFamilyTrackingCount(),
-			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
-		}
-	}
+	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = receiver.highPriorityFlowControlSignal
 	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
 		return &FlowControlSignal{
 			taskTrackingCount:  lowPriorityTaskTracker.Size(),
@@ -306,6 +301,7 @@ func (r *laneStreamReceiver) ackMessage(
 			laneStates[laneID] = &replicationspb.ReplicationState{
 				InclusiveLowWatermark:     wm.Watermark,
 				InclusiveLowWatermarkTime: timestamppb.New(wm.Timestamp),
+				FlowControlCommand:        r.laneFlowControlCommand(laneID),
 			}
 		}
 	case ReceiverModeSingleStack:
@@ -518,7 +514,8 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 	defer r.memberLaneMu.Unlock()
 	lane, ok := r.memberLanes[laneID]
 	if !ok {
-		if open := r.openLaneCount(); open >= r.maxLanes {
+		open := r.openLaneCount()
+		if open >= r.maxLanes {
 			return nil, serviceerror.NewInvalidArgumentf("sender opened a replication lane beyond max_lanes %d with %d lanes open", r.maxLanes, open)
 		}
 		lane = &memberLane{tracker: NewExecutableTaskTracker(r.logger, r.MetricsHandler)}
@@ -528,6 +525,7 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 			lane.tracker.Cancel()
 		}
 		r.memberLanes[laneID] = lane
+		r.logger.Info("Opened a replication lane.", tag.NewStringTag("lane", laneID), tag.NewInt("open-lanes", open+1))
 	}
 	if !retire && lane.retiring {
 		// Non-retire traffic on a retired lane means the sender reused the lane
@@ -535,6 +533,7 @@ func (r *laneStreamReceiver) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 		// the stale retiring flag would delete an active lane at the first
 		// transient drain, dropping its watermark from the ack fold.
 		lane.retiring = false
+		r.logger.Warn("Reopened a retiring replication lane.", tag.NewStringTag("lane", laneID))
 	}
 	lane.tracking++
 	return lane.tracker, nil
@@ -566,9 +565,60 @@ func (r *laneStreamReceiver) finishLaneBatch(laneID string, retire bool) {
 		return
 	}
 	lane.tracking--
-	if retire {
+	if retire && !lane.retiring {
 		lane.retiring = true
+		r.logger.Info("Received the retirement marker of a replication lane.", tag.NewStringTag("lane", laneID))
 	}
+}
+
+// highFamilyTrackingCount is the total tracked-task count across the default HIGH lane
+// and all lanes (used for HIGH flow control — lanes split the HIGH lane).
+// highPriorityFlowControlSignal decides the pause of the default HIGH priority lane. It counts
+// only the default lane's tasks, so a lane that applies slowly pauses itself rather than the
+// default lane. Past ReplicationReceiverMaxTotalOutstandingTaskCount across the default lane and
+// every lane, it pauses HIGH anyway, and with it every lane.
+func (r *laneStreamReceiver) highPriorityFlowControlSignal() *FlowControlSignal {
+	count := r.highPriorityTaskTracker.Size()
+	if total := r.highFamilyTrackingCount(); total > r.Config.ReplicationReceiverMaxTotalOutstandingTaskCount() {
+		count = max(count, total, r.Config.ReplicationReceiverMaxOutstandingTaskCount()+1)
+	}
+	return &FlowControlSignal{
+		taskTrackingCount:  count,
+		lastSlowSubmission: r.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
+	}
+}
+
+// laneFlowControlCommand pauses a lane whose outstanding tasks pass
+// ReplicationReceiverLaneMaxOutstandingTaskCount, and resumes it otherwise. It logs when a
+// lane's command changes.
+func (r *laneStreamReceiver) laneFlowControlCommand(laneID string) enumsspb.ReplicationFlowControlCommand {
+	limit := r.Config.ReplicationReceiverLaneMaxOutstandingTaskCount()
+	r.memberLaneMu.Lock()
+	lane, ok := r.memberLanes[laneID]
+	outstanding := 0
+	if ok {
+		outstanding = lane.tracker.Size()
+	}
+	pause := outstanding > limit
+	_, wasPaused := r.pausedLanes[laneID]
+	if pause {
+		r.pausedLanes[laneID] = struct{}{}
+	} else {
+		delete(r.pausedLanes, laneID)
+	}
+	r.memberLaneMu.Unlock()
+	if pause != wasPaused {
+		tags := []tag.Tag{tag.NewStringTag("lane", laneID), tag.Counter(outstanding), tag.NewInt("limit", limit)}
+		if pause {
+			r.logger.Warn("Pausing a replication lane.", tags...)
+		} else {
+			r.logger.Info("Resuming a replication lane.", tags...)
+		}
+	}
+	if pause {
+		return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+	}
+	return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 }
 
 func (r *laneStreamReceiver) highFamilyTrackingCount() int {
@@ -605,7 +655,9 @@ func (r *laneStreamReceiver) memberLaneWatermarks() map[string]WatermarkInfo {
 		// ack fold.
 		if lane.retiring && lane.tracking == 0 && lane.tracker.Size() == 0 && wm != nil {
 			delete(r.memberLanes, ns)
+			delete(r.pausedLanes, ns)
 			r.memberLaneMu.Unlock()
+			r.logger.Info("Dropped a drained replication lane.", tag.NewStringTag("lane", ns), tag.NewInt64("lane-watermark", wm.Watermark))
 			continue
 		}
 		if wm != nil {

@@ -157,6 +157,7 @@ func TestSelectedStreamIsValid(t *testing.T) {
 		{name: "SameImplementation", implementation: streamImplementationLegacy, selected: streamImplementationLegacy, streamValid: true, expected: true},
 		{name: "StreamInvalid", implementation: streamImplementationLegacy, selected: streamImplementationLegacy, streamValid: false, expected: false},
 		{name: "ImplementationChanged", implementation: streamImplementationLegacy, selected: streamImplementationLane, streamValid: true, expected: false},
+		{name: "ValidRuleRollsLaneBack", implementation: streamImplementationLane, selected: streamImplementationLegacy, streamValid: true, expected: false},
 		{name: "InvalidRuleRollsLaneBack", implementation: streamImplementationLane, selected: streamImplementationLegacy, selectionErr: errors.New("invalid rule"), streamValid: true, expected: false},
 		{name: "InvalidRuleKeepsLegacy", implementation: streamImplementationLegacy, selected: streamImplementationLegacy, selectionErr: errors.New("invalid rule"), streamValid: true, expected: true},
 		{name: "IgnoredEntryKeepsLane", implementation: streamImplementationLane, selected: streamImplementationLane, selectionErr: errors.New("missing remote cluster"), streamValid: true, expected: true},

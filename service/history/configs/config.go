@@ -350,7 +350,10 @@ type Config struct {
 	ReplicationStreamReceiverLanesEnabled               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderLanesEnabled                 dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderMaxLanes                     dynamicconfig.IntPropertyFn
+	ReplicationLaneMaxLag                               dynamicconfig.DurationPropertyFn
 	ReplicationStreamReceiverMaxLanes                   dynamicconfig.IntPropertyFn
+	ReplicationReceiverLaneMaxOutstandingTaskCount      dynamicconfig.IntPropertyFn
+	ReplicationReceiverMaxTotalOutstandingTaskCount     dynamicconfig.IntPropertyFn
 	ReplicationStreamReceiverLaneFeedbackMaxBytes       dynamicconfig.IntPropertyFn
 	ReplicationLaneDrainTasksPerSecond                  dynamicconfig.FloatPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
@@ -711,7 +714,10 @@ func NewConfig(
 		ReplicationStreamReceiverLanesEnabled:               dynamicconfig.ReplicationStreamReceiverLanesEnabled.Get(dc),
 		ReplicationStreamSenderLanesEnabled:                 dynamicconfig.ReplicationStreamSenderLanesEnabled.Get(dc),
 		ReplicationStreamSenderMaxLanes:                     dynamicconfig.ReplicationStreamSenderMaxLanes.Get(dc),
+		ReplicationLaneMaxLag:                               dynamicconfig.ReplicationLaneMaxLag.Get(dc),
 		ReplicationStreamReceiverMaxLanes:                   dynamicconfig.ReplicationStreamReceiverMaxLanes.Get(dc),
+		ReplicationReceiverLaneMaxOutstandingTaskCount:      dynamicconfig.ReplicationReceiverLaneMaxOutstandingTaskCount.Get(dc),
+		ReplicationReceiverMaxTotalOutstandingTaskCount:     dynamicconfig.ReplicationReceiverMaxTotalOutstandingTaskCount.Get(dc),
 		ReplicationStreamReceiverLaneFeedbackMaxBytes:       dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(dc),
 		ReplicationLaneDrainTasksPerSecond:                  dynamicconfig.ReplicationLaneDrainTasksPerSecond.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),

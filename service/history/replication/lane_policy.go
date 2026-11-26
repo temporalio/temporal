@@ -48,9 +48,9 @@ type (
 
 	// LaneStreamPolicy decides the lanes of one stream. The stream never calls it from two
 	// goroutines at once, and it must answer from memory, without blocking or I/O. Whatever it
-	// answers, the stream enforces lane limits and valid, disjoint filters. If a method or one
-	// of the policy's limiters panics, the stream calls nothing more on the policy except Close,
-	// and runs without lanes until it restarts.
+	// answers, the stream enforces lane limits, valid and disjoint filters, and lifts lane rate
+	// limits during a handover. If a method or one of the policy's limiters panics, the stream
+	// calls nothing more on the policy except Close, and runs without lanes until it restarts.
 	LaneStreamPolicy interface {
 		// Evaluate returns the lanes the stream should have, in priority order: when there
 		// are more than the stream allows, the first ones win. The stream calls it on each
@@ -105,6 +105,9 @@ type (
 		// DefaultAcked is the receiver's acknowledged HIGH priority position. New lanes start
 		// here.
 		DefaultAcked int64
+		// HandoverInProgress is whether a namespace handover is in progress on the shard.
+		// Lanes then send without rate limits, whatever the policy answers.
+		HandoverInProgress bool
 		// Lanes are the stream's current lanes, including retiring ones.
 		Lanes []LaneStatus
 	}
@@ -124,6 +127,8 @@ type (
 		// LastRefused is when the lane's limiter last refused a send, or zero if it never did.
 		// The policy chooses how long that observation remains relevant.
 		LastRefused time.Time
+		// Paused is whether the receiver has paused the lane.
+		Paused bool
 		// PolicyState is the state last saved with the lane.
 		PolicyState []byte
 	}
@@ -216,9 +221,19 @@ func (p *manualLaneStreamPolicy) Evaluate(LaneSignals) ([]DesiredLane, error) {
 	return lanes, nil
 }
 
+// setRates replaces the lane rates, and logs each lane whose rate changed. Lanes added or
+// withdrawn are logged by the sender lane registry when they are created or retire.
 func (p *manualLaneStreamPolicy) setRates(rates map[string]float64) {
 	p.ratesMu.Lock()
 	defer p.ratesMu.Unlock()
+	for key, tasksPerSecond := range rates {
+		if previous, ok := p.rates[key]; ok && previous != tasksPerSecond {
+			p.logger.Info("Changed the rate of a replication lane.",
+				tag.NewStringTag("lane-key", key),
+				tag.NewFloat64("previous-tasks-per-second", previous),
+				tag.NewFloat64("tasks-per-second", tasksPerSecond))
+		}
+	}
 	p.rates = rates
 }
 

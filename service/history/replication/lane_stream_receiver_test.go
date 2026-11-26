@@ -22,6 +22,8 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -253,6 +255,39 @@ func (s *laneStreamReceiverSuite) TestMemberLane_NonRetireTrafficRevivesRetiring
 	s.streamReceiver.finishLaneBatch("ns-a", false)
 }
 
+// TestMemberLane_LogsLaneLifecycle checks that the receiver logs each change of a lane once: opened,
+// retirement marker received, reopened while retiring, and dropped once drained.
+func (s *laneStreamReceiverSuite) TestMemberLane_LogsLaneLifecycle() {
+	core, logs := observer.New(zap.InfoLevel)
+	s.streamReceiver.logger = log.NewZapLogger(zap.New(core))
+
+	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("lane-a", false)
+	// A retirement marker, a duplicate marker, then traffic that reopens the lane.
+	for _, retire := range []bool{true, true, false} {
+		_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", retire)
+		s.NoError(err)
+		s.streamReceiver.finishLaneBatch("lane-a", retire)
+	}
+	// Retired again and drained, the lane is dropped.
+	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", true)
+	s.NoError(err)
+	tracker.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("lane-a", true)
+	s.streamReceiver.memberLaneWatermarks()
+	s.NotContains(s.streamReceiver.memberLanes, "lane-a")
+
+	s.Equal([]loggedEvent{
+		{message: "Opened a replication lane.", fields: map[string]any{"lane": "lane-a", "open-lanes": int64(1)}},
+		{message: "Received the retirement marker of a replication lane.", fields: map[string]any{"lane": "lane-a"}},
+		{message: "Reopened a retiring replication lane.", fields: map[string]any{"lane": "lane-a"}},
+		{message: "Received the retirement marker of a replication lane.", fields: map[string]any{"lane": "lane-a"}},
+		{message: "Dropped a drained replication lane.", fields: map[string]any{"lane": "lane-a", "lane-watermark": int64(200)}},
+	}, loggedEvents(logs, []string{"lane", "open-lanes", "lane-watermark"}))
+}
+
 func (s *laneStreamReceiverSuite) TestMemberLane_RetireBatchMidTrackSurvivesAckSnapshot() {
 	// A lane whose retire batch has been resolved but not yet tracked must survive
 	// the ack loop's snapshot; once the (watermark-only) retire batch is tracked
@@ -416,8 +451,71 @@ func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_FoldsMemberLaneWate
 		"lane-a": {
 			InclusiveLowWatermark:     laneWatermark.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+			FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 		},
 	}, state.LaneStates)
+}
+
+func (s *laneStreamReceiverSuite) TestLaneFlowControlCommand() {
+	s.streamReceiver.Config.ReplicationReceiverLaneMaxOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(2)
+	_, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	taskID := int64(0)
+	trackTasks := func(laneID string, count int) {
+		s.streamReceiver.memberLaneMu.Lock()
+		tracker := s.streamReceiver.memberLanes[laneID].tracker
+		s.streamReceiver.memberLaneMu.Unlock()
+		for range count {
+			taskID++
+			task := NewMockTrackableExecutableTask(s.controller)
+			task.EXPECT().TaskID().Return(taskID).AnyTimes()
+			tracker.TrackTasks(WatermarkInfo{Watermark: taskID + 1, Timestamp: time.Now()}, task)
+		}
+	}
+
+	core, logs := observer.New(zap.InfoLevel)
+	s.streamReceiver.logger = log.NewZapLogger(zap.New(core))
+
+	trackTasks("lane-a", 2)
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, s.streamReceiver.laneFlowControlCommand("lane-a"))
+	trackTasks("lane-a", 1)
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, s.streamReceiver.laneFlowControlCommand("lane-a"))
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, s.streamReceiver.laneFlowControlCommand("lane-a"))
+	s.streamReceiver.Config.ReplicationReceiverLaneMaxOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(10)
+	s.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, s.streamReceiver.laneFlowControlCommand("lane-a"))
+
+	// Only changes of a lane's command are logged.
+	s.Equal([]loggedEvent{
+		{message: "Pausing a replication lane.", fields: map[string]any{"lane": "lane-a", "limit": int64(2)}},
+		{message: "Resuming a replication lane.", fields: map[string]any{"lane": "lane-a", "limit": int64(10)}},
+	}, loggedEvents(logs, []string{"lane", "limit"}))
+}
+
+func (s *laneStreamReceiverSuite) TestHighPriorityFlowControlSignal() {
+	s.streamReceiver.Config.ReplicationReceiverMaxOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(500)
+	s.streamReceiver.Config.ReplicationReceiverMaxTotalOutstandingTaskCount = dynamicconfig.GetIntPropertyFn(1000)
+	_, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
+	s.NoError(err)
+	laneTracker := NewMockExecutableTaskTracker(s.controller)
+	s.streamReceiver.memberLanes["lane-a"].tracker = laneTracker
+	for _, tc := range []struct {
+		name             string
+		defaultCount     int
+		laneCount        int
+		expectedSignaled int
+	}{
+		// A slow lane counts toward its own pause, not the default lane's.
+		{name: "LaneBacklogDoesNotPauseDefault", defaultCount: 10, laneCount: 900, expectedSignaled: 10},
+		{name: "DefaultBacklog", defaultCount: 600, laneCount: 0, expectedSignaled: 600},
+		// Past the total, the signal is over ReplicationReceiverMaxOutstandingTaskCount, so HIGH pauses.
+		{name: "TotalBackstop", defaultCount: 10, laneCount: 1000, expectedSignaled: 1010},
+	} {
+		s.Run(tc.name, func() {
+			s.highPriorityTaskTracker.EXPECT().Size().Return(tc.defaultCount).Times(2)
+			laneTracker.EXPECT().Size().Return(tc.laneCount)
+			s.Equal(tc.expectedSignaled, s.streamReceiver.highPriorityFlowControlSignal().taskTrackingCount)
+		})
+	}
 }
 
 func (s *laneStreamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNamespaces() {
@@ -527,6 +625,7 @@ func (s *laneStreamReceiverSuite) TestAckMessage_LanesEnabled_ReportsLaneLimitAn
 					"lane-a": {
 						InclusiveLowWatermark:     laneWatermark.Watermark,
 						InclusiveLowWatermarkTime: timestamppb.New(laneWatermark.Timestamp),
+						FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 					},
 				},
 				LaneProtocolVersion: replicationLaneProtocolVersion,
@@ -685,14 +784,29 @@ func (s *laneStreamReceiverSuite) TestAckMessage_LaneProtocolVersion() {
 	}
 }
 
-func (s *laneStreamReceiverSuite) TestIsValid_LanesEnabledChanged() {
+func (s *laneStreamReceiverSuite) TestIsValid_LaneSettingsChanged() {
 	s.streamReceiver.status = common.DaemonStatusStarted
-	s.streamReceiver.lanesEnabled = false
-	s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(false)
-	s.True(s.streamReceiver.IsValid())
-
-	s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(true)
-	s.False(s.streamReceiver.IsValid())
+	for _, tc := range []struct {
+		name            string
+		createdLanes    bool
+		currentLanes    bool
+		createdMaxLanes int
+		currentMaxLanes int
+		valid           bool
+	}{
+		{name: "Unchanged", createdLanes: true, currentLanes: true, createdMaxLanes: 4, currentMaxLanes: 4, valid: true},
+		{name: "LanesEnabled", createdLanes: false, currentLanes: true, createdMaxLanes: 4, currentMaxLanes: 4, valid: false},
+		{name: "LanesDisabled", createdLanes: true, currentLanes: false, createdMaxLanes: 4, currentMaxLanes: 4, valid: false},
+		{name: "MaxLanesChanged", createdLanes: true, currentLanes: true, createdMaxLanes: 4, currentMaxLanes: 2, valid: false},
+	} {
+		s.Run(tc.name, func() {
+			s.streamReceiver.lanesEnabled = tc.createdLanes
+			s.streamReceiver.maxLanes = tc.createdMaxLanes
+			s.streamReceiver.Config.ReplicationStreamReceiverLanesEnabled = dynamicconfig.GetBoolPropertyFn(tc.currentLanes)
+			s.streamReceiver.Config.ReplicationStreamReceiverMaxLanes = dynamicconfig.GetIntPropertyFn(tc.currentMaxLanes)
+			s.Equal(tc.valid, s.streamReceiver.IsValid())
+		})
+	}
 }
 
 func (s *laneStreamReceiverSuite) TestProcessMessage_LaneBatchUsesLaneTracker() {
