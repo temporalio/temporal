@@ -1601,3 +1601,16 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 	}, sqlplugin.MatchingTaskVersion1)
 	require.ErrorIs(t, err, gosql.ErrNoRows)
 }
+
+func TestSQLiteShardStoreSuite(t *testing.T) {
+	t.Parallel()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*NewSQLiteMemoryConfig(), resolver.NewNoopResolver(), testSQLiteClusterName,
+		logger, metrics.NoopMetricsHandler, serialization.NewSerializer(),
+	)
+	t.Cleanup(factory.Close)
+	store, err := factory.NewShardStore()
+	require.NoError(t, err)
+	suite.Run(t, NewShardSuite(t, store, serialization.NewSerializer(), logger))
+}

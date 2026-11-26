@@ -114,6 +114,7 @@ type Config struct {
 
 	// Namespace specific config
 	EnableNamespaceNotActiveAutoForwarding  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableNamespaceSoftDelete               dynamicconfig.BoolPropertyFn
 	ForceNamespaceSelectedAPIAutoForwarding dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceMinRetentionLocal              dynamicconfig.DurationPropertyFn
 	NamespaceMinRetentionGlobal             dynamicconfig.DurationPropertyFn
@@ -372,6 +373,7 @@ func NewConfig(
 		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
 		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
 		EnableNamespaceNotActiveAutoForwarding:   dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(dc),
+		EnableNamespaceSoftDelete:                dynamicconfig.EnableNamespaceSoftDelete.Get(dc),
 		ForceNamespaceSelectedAPIAutoForwarding:  dynamicconfig.ForceNamespaceSelectedAPIAutoForwarding.Get(dc),
 		NamespaceMinRetentionLocal:               dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 		NamespaceMinRetentionGlobal:              dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),

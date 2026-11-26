@@ -430,10 +430,12 @@ func (s *scheduler) run() error {
 			}
 			// Log/metric-only branch: no commands or state differ, so it is replay- and rollback-safe
 			// without a version bump.
-			if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok && appErr.Type() == errTypeMigrationDeferredBackfill {
-				s.logger.Info("schedule migration to CHASM deferred: backfill in progress",
+			if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok &&
+				(appErr.Type() == errTypeMigrationDeferredBackfill || appErr.Type() == errTypeMigrationDeferredRunningWorkflows) {
+				s.logger.Info("schedule migration to CHASM deferred",
 					"namespace", s.State.Namespace,
 					"schedule-id", s.State.ScheduleId,
+					"reason", appErr.Type(),
 				)
 				s.metrics.WithTags(map[string]string{
 					metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,

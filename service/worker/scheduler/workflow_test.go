@@ -21,6 +21,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -3729,5 +3730,89 @@ func (s *workflowSuite) TestAutoMigrateDeferredUntilBackfillCompletes() {
 	s.Require().Equal(baseStartTime.Add(time.Hour), migratedAt)
 	s.Require().Equal(3, deferrals, "BackfillsPerIteration=10 drains 24 slots in 3 iterations")
 	s.Require().Equal(int64(deferrals), s.metrics.counter(metrics.ScheduleMigrationDeferred.Name()))
+	s.Require().Zero(s.metrics.counter(metrics.ScheduleMigrationFailed.Name()))
+}
+
+// A deferral leaves PendingMigration set, and the workflow checks running workflows only when
+// setting it. With running workflows disallowed, a backfill-launched run must still block
+// migration after the backfill drains.
+func (s *workflowSuite) TestAutoMigrateDeferredWhileBackfillRunIsRunning() {
+	runEnd := baseStartTime.Add(150 * time.Minute)
+
+	var starts []time.Time
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+			starts = append(starts, s.now())
+			return &schedulespb.StartWorkflowResponse{RunId: uuid.NewString(), RealStartTime: timestamppb.New(s.now())}, nil
+		})
+	// Completion is discovered by refresh, like a missed watcher. The +3h refresh is after
+	// runEnd, but the workflow checks migration before it refreshes, so +4h is the first clean
+	// attempt.
+	s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Maybe().Return(
+		func(context.Context, *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+			if s.now().Before(runEnd) {
+				return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+			}
+			return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		})
+	for _, at := range []time.Duration{time.Hour, 3 * time.Hour, 4 * time.Hour} {
+		s.env.RegisterDelayedCallback(func() { s.env.SignalWorkflow(SignalNameRefresh, nil) }, at)
+	}
+
+	// Run the real gate against the request the workflow actually builds.
+	gate := newTestActivities(&mockSchedulerClient{}, "mynsid")
+	gate.autoMigrationSelected = func(string) bool { return true }
+	gate.migrateWithRunningWorkflows = func() bool { return false }
+	deferrals := map[string]int{}
+	var migratedAt time.Time
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+			err := gate.MigrateScheduleToChasm(ctx, req)
+			if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
+				deferrals[appErr.Type()]++
+				return err
+			}
+			s.Require().NoError(err)
+			s.Require().False(hasRunningWorkflows(req.GetState()), "migrated with a running workflow")
+			migratedAt = s.now()
+			return nil
+		})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			schedulerDynamicConfig{enableCHASMMigration: func() bool { return true }, migrateWithRunningWorkflows: func() bool { return false }})
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				// Daily, so the backfilled run is the only one in the window.
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(24 * time.Hour)}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:         "myns",
+			NamespaceId:       "mynsid",
+			ScheduleId:        "myschedule",
+			ConflictToken:     InitialConflictToken,
+			LastProcessedTime: timestamppb.New(baseStartTime),
+			OngoingBackfills: []*schedulepb.BackfillRequest{{
+				// Covers the previous day's slot only.
+				StartTime:     timestamppb.New(baseStartTime.Add(-24*time.Hour - 30*time.Minute)),
+				EndTime:       timestamppb.New(baseStartTime.Add(-24*time.Hour + 30*time.Minute)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			}},
+		},
+	})
+
+	s.Require().True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError())
+	s.Require().Len(starts, 1, "only the backfilled run starts before migration")
+	s.Require().Equal(1, deferrals[errTypeMigrationDeferredBackfill])
+	s.Require().Equal(2, deferrals[errTypeMigrationDeferredRunningWorkflows])
+	s.Require().Equal(baseStartTime.Add(4*time.Hour), migratedAt, "migrates once V1 sees the backfilled run complete")
+	s.Require().Equal(int64(deferrals[errTypeMigrationDeferredBackfill]+deferrals[errTypeMigrationDeferredRunningWorkflows]),
+		s.metrics.counter(metrics.ScheduleMigrationDeferred.Name()))
 	s.Require().Zero(s.metrics.counter(metrics.ScheduleMigrationFailed.Name()))
 }
