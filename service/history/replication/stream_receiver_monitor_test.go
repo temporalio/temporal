@@ -80,7 +80,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
-		NewStreamReceiverFactory(),
+		NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()),
 		true,
 	)
 	streamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -413,7 +413,7 @@ func (s *streamReceiverMonitorSuite) TestStop_SkipsInboundStreamsWhenFlagDisable
 			Logger:          log.NewNoopLogger(),
 			DLQWriter:       NoopDLQWriter{},
 		}),
-		NewStreamReceiverFactory(),
+		NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()),
 		true,
 	)
 
@@ -826,7 +826,7 @@ func (s *streamReceiverMonitorSuite) TestMonitorStreamStatus_RecoversPanic() {
 func (s *streamReceiverMonitorSuite) TestStreamReceiverMonitorProvider_GlobalNamespace() {
 	for _, globalNamespaceEnabled := range []bool{true, false} {
 		s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(globalNamespaceEnabled)
-		monitor := streamReceiverMonitorProvider(s.processToolBox, NewExecutableTaskConverter(s.processToolBox), NewStreamReceiverFactory())
+		monitor := streamReceiverMonitorProvider(s.processToolBox, NewExecutableTaskConverter(s.processToolBox), NewStreamReceiverFactory(NewNoopLaneFeedbackProvider()))
 		s.Equal(globalNamespaceEnabled, monitor.(*StreamReceiverMonitorImpl).enableStreaming)
 	}
 }
