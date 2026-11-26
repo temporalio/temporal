@@ -1215,6 +1215,7 @@ var (
 	ReplicationStreamError                  = NewCounterDef("replication_stream_error")
 	ReplicationServiceError                 = NewCounterDef("replication_service_error")
 	ReplicationStreamStuck                  = NewCounterDef("replication_stream_stuck")
+	ReplicationLanePolicyFailures           = NewCounterDef("replication_lane_policy_failures")
 	ReplicationStreamImplementationSelected = NewCounterDef(
 		"replication_stream_implementation_selected",
 		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
@@ -1222,6 +1223,10 @@ var (
 	ReplicationLaneFeedbackDropped = NewCounterDef(
 		"replication_lane_feedback_dropped",
 		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
+	)
+	ReplicationLaneDrainCapped = NewCounterDef(
+		"replication_lane_drain_capped",
+		WithDescription("The number of sends a withdrawn replication lane deferred under ReplicationLaneDrainTasksPerSecond while it drained."),
 	)
 	ReplicationStreamChannelFull = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend         = NewCounterDef("replication_tasks_send")

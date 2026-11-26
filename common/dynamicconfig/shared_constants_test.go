@@ -245,3 +245,69 @@ history.ReplicationStreamImplementation:
 		require.Equal(t, []ReplicationStreamImplementationRule{laneB}, settings.Receiver)
 	})
 }
+
+func TestConvertReplicationLaneIsolationEntries(t *testing.T) {
+	t.Parallel()
+	good := map[string]any{"RemoteCluster": "good", "NamespaceID": "ns-a", "TasksPerSecond": 10}
+	goodEntry := ReplicationLaneIsolationEntry{RemoteCluster: "good", NamespaceID: "ns-a", TasksPerSecond: 10}
+	value := []any{good, map[string]any{"RemoteCluster": "bad", "NamespaceID": "ns-b", "TasksPerSecond": "10"}}
+
+	entries, err := convertReplicationLaneIsolationEntries(value)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	require.Equal(t, goodEntry, entries[0])
+	require.Equal(t, "bad", entries[1].RemoteCluster)
+	require.Error(t, entries[1].DecodeError)
+	require.Equal(t, ReplicationLaneIsolationEntry{RemoteCluster: "bad", DecodeError: entries[1].DecodeError}, entries[1])
+
+	// The collection keeps the entries that decode instead of falling back to the default.
+	collection := NewCollection(StaticClient{ReplicationLaneIsolation.Key(): value}, log.NewNoopLogger())
+	require.Equal(t, goodEntry, ReplicationLaneIsolation.Get(collection)()[0])
+
+	entries, err = convertReplicationLaneIsolationEntries(good)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, "good", entries[0].RemoteCluster)
+	require.ErrorContains(t, entries[0].DecodeError, "not a list")
+
+	typed := []ReplicationLaneIsolationEntry{goodEntry}
+	entries, err = convertReplicationLaneIsolationEntries(typed)
+	require.NoError(t, err)
+	require.Equal(t, typed, entries)
+}
+
+func TestReplicationLaneIsolationFromYAMLFile(t *testing.T) {
+	t.Parallel()
+	valid := []ReplicationLaneIsolationEntry{
+		{RemoteCluster: "cluster-b", NamespaceID: "ns-a", TasksPerSecond: 2.5},
+		{RemoteCluster: "cluster-b", NamespaceID: "ns-b", TasksPerSecond: 10},
+	}
+	const validYAML = `
+history.ReplicationLaneIsolation:
+  - value:
+      - RemoteCluster: cluster-b
+        NamespaceID: ns-a
+        TasksPerSecond: 2.5
+      - remoteCluster: cluster-b
+        namespaceID: ns-b
+        tasksPerSecond: 10
+`
+	require.Equal(t, valid, ReplicationLaneIsolation.Get(loadYAMLFile(t, validYAML))())
+
+	// A valid value decodes exactly as it did with ConvertStructure.
+	loaded := LoadYamlFile([]byte(validYAML))
+	require.NoError(t, loaded.Err())
+	previous, err := ConvertStructure([]ReplicationLaneIsolationEntry(nil))(loaded.Map[ReplicationLaneIsolation.Key()][0].Value)
+	require.NoError(t, err)
+	require.Equal(t, valid, previous)
+
+	entries := ReplicationLaneIsolation.Get(loadYAMLFile(t, validYAML+`      - RemoteCluster: cluster-c
+        NamespaceID: ns-c
+        TasksPerSecond: "10"
+`))()
+	require.Len(t, entries, 3)
+	require.Equal(t, valid, entries[:2])
+	require.Equal(t, "cluster-c", entries[2].RemoteCluster)
+	require.Error(t, entries[2].DecodeError)
+	require.Empty(t, entries[2].NamespaceID)
+}

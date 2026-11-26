@@ -3266,6 +3266,43 @@ Changing the implementation selected for a stream restarts that stream.`,
 A lane stream receiver advertises lane support to its sender only when this is true. It has no
 effect on legacy stream receivers. Changing it restarts lane stream receivers.`,
 	)
+	ReplicationStreamSenderLanesEnabled = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderLanesEnabled",
+		false,
+		`ReplicationStreamSenderLanesEnabled allows lane stream senders to send replication lanes.
+A lane stream sender sends a lane only when this is true, the stream's lane policy asks for the
+lane, and the receiver advertises lane support. It has no effect on legacy stream senders.
+Changing it restarts lane stream senders.`,
+	)
+	ReplicationLaneIsolation = NewGlobalTypedSettingWithConverter(
+		"history.ReplicationLaneIsolation",
+		convertReplicationLaneIsolationEntries,
+		([]ReplicationLaneIsolationEntry)(nil),
+		`ReplicationLaneIsolation lists the namespaces whose HIGH priority replication traffic lane
+stream senders move onto their own lanes, when the open-source lane policy is in use. Each entry
+has RemoteCluster, NamespaceID, and TasksPerSecond. TasksPerSecond is the lane's send rate limit
+on each source shard's stream, not a total for the namespace: a namespace whose traffic
+concentrates on one shard sends at most this rate there. Invalid entries, including entries with
+a value of the wrong type, withdraw isolation only for their RemoteCluster. Entries without
+RemoteCluster are ignored with a diagnostic.`,
+	)
+	ReplicationLaneDrainTasksPerSecond = NewGlobalFloatSetting(
+		"history.ReplicationLaneDrainTasksPerSecond",
+		3,
+		`ReplicationLaneDrainTasksPerSecond caps how fast a replication lane whose isolation entry was
+removed drains its backlog before it retires, on each source shard's stream. The lane may send as
+fast as its namespace's tasks arrive on the shard, averaged over the last several seconds, plus this
+many tasks a second, so it catches up with the default lane and retires however fast the namespace
+writes. An uncapped drain sends a throttled lane's backlog as fast as the stream allows, which can
+flood the receiver and slow every namespace there. Non-positive values leave the drain uncapped.`,
+	)
+	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderMaxLanes",
+		4,
+		`ReplicationStreamSenderMaxLanes is the maximum number of lanes on one lane stream sender. The
+sender ignores requests for more lanes, keeping the lanes the policy lists first. The open-source
+policy lists lanes in namespace ID order.`,
+	)
 	ReplicationStreamReceiverMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamReceiverMaxLanes",
 		8,

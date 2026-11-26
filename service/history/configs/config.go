@@ -348,8 +348,11 @@ type Config struct {
 	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamImplementation                     dynamicconfig.TypedPropertyFn[dynamicconfig.ReplicationStreamImplementationSettings]
 	ReplicationStreamReceiverLanesEnabled               dynamicconfig.BoolPropertyFn
+	ReplicationStreamSenderLanesEnabled                 dynamicconfig.BoolPropertyFn
+	ReplicationStreamSenderMaxLanes                     dynamicconfig.IntPropertyFn
 	ReplicationStreamReceiverMaxLanes                   dynamicconfig.IntPropertyFn
 	ReplicationStreamReceiverLaneFeedbackMaxBytes       dynamicconfig.IntPropertyFn
+	ReplicationLaneDrainTasksPerSecond                  dynamicconfig.FloatPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
@@ -706,8 +709,11 @@ func NewConfig(
 		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		ReplicationStreamImplementation:                     dynamicconfig.ReplicationStreamImplementation.Get(dc),
 		ReplicationStreamReceiverLanesEnabled:               dynamicconfig.ReplicationStreamReceiverLanesEnabled.Get(dc),
+		ReplicationStreamSenderLanesEnabled:                 dynamicconfig.ReplicationStreamSenderLanesEnabled.Get(dc),
+		ReplicationStreamSenderMaxLanes:                     dynamicconfig.ReplicationStreamSenderMaxLanes.Get(dc),
 		ReplicationStreamReceiverMaxLanes:                   dynamicconfig.ReplicationStreamReceiverMaxLanes.Get(dc),
 		ReplicationStreamReceiverLaneFeedbackMaxBytes:       dynamicconfig.ReplicationStreamReceiverLaneFeedbackMaxBytes.Get(dc),
+		ReplicationLaneDrainTasksPerSecond:                  dynamicconfig.ReplicationLaneDrainTasksPerSecond.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
