@@ -14,20 +14,39 @@ func Execute[T any](src Source, key Key[T]) (T, bool) {
 		return zero, false
 	}
 	registry := src.Failpoints()
-	if registry == nil {
+	if registry == nil || !registry.MayFire() {
 		return zero, false
 	}
-	fp, ok := registry.lookup(key.id())
-	if !ok {
-		return zero, false
+	if fp, ok := registry.lookup(key.id()); ok {
+		typed, ok := fp.(*Failpoint[T])
+		if !ok {
+			// A failpoint of another type, registered under the name of the key, can't have been
+			// configured for this call site.
+			return zero, false
+		}
+		return typed.Execute()
 	}
-	typed, ok := fp.(*Failpoint[T])
-	if !ok {
-		// A failpoint of another type, registered under the name of the key, can't have been
-		// configured for this call site.
-		return zero, false
+	return executeFallback(registry, key)
+}
+
+// executeFallback returns the error that the active fallback of registry injects for key, which
+// has no failpoint registered, if T is error.
+func executeFallback[T any](registry *Registry, key Key[T]) (value T, set bool) {
+	errorKey, isError := any(key).(Key[error])
+	if !isError {
+		return value, false
 	}
-	return typed.Execute()
+	fallback := registry.ActiveFallback()
+	if fallback == nil {
+		return value, false
+	}
+	err := fallback.Error(errorKey)
+	if err == nil {
+		return value, false
+	}
+	// T is error, as checked above.
+	value, set = any(err).(T)
+	return value, set
 }
 
 // CheckError executes an error failpoint for key in the registry of src and returns its error.

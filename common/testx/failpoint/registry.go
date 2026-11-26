@@ -39,6 +39,12 @@ type Registry struct {
 	// count is the number of failpoints. It is updated under mu, and read without it by Get and
 	// lookup, so a lookup in an empty registry doesn't take the lock.
 	count atomic.Int64
+
+	// fallback is the installed fallback and fallbackActive whether it is on. Both are guarded by
+	// mu. mayFire caches MayFire and is updated under mu.
+	fallback       Fallback
+	fallbackActive bool
+	mayFire        atomic.Bool
 }
 
 // Source provides the registry that Execute uses. Each component that provides its own Source,
@@ -77,9 +83,71 @@ func (r *Registry) Len() int {
 	return int(r.count.Load())
 }
 
-// setCountLocked updates count after a change of the failpoints. The caller must hold r.mu.
+// MayFire reports whether any failpoint is registered or an active fallback is installed (see
+// Fallback). Like Len, it doesn't take the registry's lock, so call sites that do work before
+// they execute a failpoint can skip it cheaply while it is false.
+func (r *Registry) MayFire() bool {
+	return r.mayFire.Load()
+}
+
+// setCountLocked updates count and mayFire after a change of the failpoints. The caller must hold
+// r.mu.
 func (r *Registry) setCountLocked() {
 	r.count.Store(int64(len(r.failpoints)))
+	r.updateMayFireLocked()
+}
+
+// updateMayFireLocked publishes mayFire after a change of the failpoints or of the fallback. The
+// caller must hold r.mu.
+func (r *Registry) updateMayFireLocked() {
+	r.mayFire.Store(len(r.failpoints) > 0 || (r.fallback != nil && r.fallbackActive))
+}
+
+// Fallback returns the installed fallback, active or not, or nil.
+func (r *Registry) Fallback() Fallback {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.fallback
+}
+
+// SetFallbackIfAbsent installs f as the fallback of the registry if it has none, and returns the
+// installed fallback, f or the one that was already installed. A fallback starts inactive, see
+// SetFallbackActive. A fallback must be comparable, such as a pointer.
+func (r *Registry) SetFallbackIfAbsent(f Fallback) Fallback {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fallback == nil {
+		r.fallback = f
+		r.fallbackActive = false
+		r.updateMayFireLocked()
+	}
+	return r.fallback
+}
+
+// SetFallbackActive turns the fallback f on or off, and reports whether it did. It does
+// nothing if f is not the installed fallback. An inactive fallback is not consulted and doesn't
+// make the registry MayFire.
+func (r *Registry) SetFallbackActive(f Fallback, active bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fallback == nil || r.fallback != f {
+		return false
+	}
+	r.fallbackActive = active
+	r.updateMayFireLocked()
+	return true
+}
+
+// ActiveFallback returns the installed fallback while it is active, else nil. Code that
+// decides like the fallback, such as a branch at a call site, checks it, so it agrees with the
+// executions that consult the fallback.
+func (r *Registry) ActiveFallback() Fallback {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fallbackActive {
+		return r.fallback
+	}
+	return nil
 }
 
 // lookup returns the failpoint registered for key or, for a scoped key, for the unscoped key,

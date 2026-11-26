@@ -7,4 +7,5 @@ import "go.temporal.io/testx/failpoint"
 var (
 	key1   = failpoint.NewKey[error]("test.key1")
 	intKey = failpoint.NewKey[int]("test.int")
+	anyKey = failpoint.NewKey[any]("test.any")
 )

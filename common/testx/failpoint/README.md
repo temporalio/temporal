@@ -56,3 +56,12 @@ require.EqualError(t, svc.Charge(ctx), "card declined")
 
 Use `fp.On()` for switch-style failpoints, `fp.Disable()` to turn a failpoint off, and
 `registry.Delete(key)` to detach it from the registry.
+
+## Fallback
+
+A registry can have a `Fallback` that decides for executions of keys with nothing registered, for
+the key or its unscoped key. `registry.SetFallbackIfAbsent(f)` installs it and
+`registry.SetFallbackActive(f, true)` turns it on. `Execute` and `CheckError` then consult
+`f.Error(key)`. A registered failpoint always takes precedence, even after `Disable`. While
+nothing is registered and no fallback is active, `registry.MayFire()` is false and executions cost
+one atomic load.
