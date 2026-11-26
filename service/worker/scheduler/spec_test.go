@@ -244,6 +244,35 @@ func (s *specSuite) TestSpecIntervalPhase() {
 	)
 }
 
+func (s *specSuite) TestSpecIntervalPhaseSubsecond() {
+	spec := &schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{
+			{
+				Interval: durationpb.New(120 * time.Second),
+				Phase:    durationpb.New(63*time.Second + 123456*time.Microsecond),
+			},
+		},
+	}
+
+	// Sub-second parts of the phase must be kept: the lattice is
+	// 13:51:03.123456, 13:53:03.123456, 13:55:03.123456, ...
+	s.checkSequenceRaw(
+		spec,
+		time.Date(2022, 3, 23, 13, 49, 30, 500000000, time.UTC),
+		time.Date(2022, 3, 23, 13, 51, 3, 123456000, time.UTC),
+		time.Date(2022, 3, 23, 13, 53, 3, 123456000, time.UTC),
+		time.Date(2022, 3, 23, 13, 55, 3, 123456000, time.UTC),
+	)
+
+	// A time exactly on a lattice point must yield the strictly following point.
+	s.checkSequenceFull(
+		"",
+		spec,
+		time.Date(2022, 3, 23, 13, 51, 3, 123456000, time.UTC),
+		time.Date(2022, 3, 23, 13, 53, 3, 123456000, time.UTC),
+	)
+}
+
 func (s *specSuite) TestSpecIntervalMultiple() {
 	s.checkSequenceRaw(
 		&schedulepb.ScheduleSpec{
