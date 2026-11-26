@@ -251,6 +251,26 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 	s.NoError(s.task.HandleErr(err))
 }
 
+func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_WorkflowDeletedInSource() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+	err := serviceerrors.NewRetryReplication(
+		"",
+		s.task.NamespaceID,
+		s.task.WorkflowID,
+		s.task.RunID,
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+	)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, nil)
+
+	s.NoError(s.task.HandleErr(err))
+}
+
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
 	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
