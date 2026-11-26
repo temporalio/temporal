@@ -1,3 +1,6 @@
+// Opt-in: go test -tags property_tests ./chasm/lib/scheduler/schedulertest/...
+//go:build property_tests
+
 package schedulertest_test
 
 import (
