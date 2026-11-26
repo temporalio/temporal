@@ -94,7 +94,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	expectedTaskType := queues.GetTaskTypeTagValue(task, true, chasm.NewRegistry(log.NewTestLogger()))
 	require.Equal(t, expectedTaskType, recordings[0].Tags[metrics.TaskTypeTagName])
 	require.Equal(t, expectedTaskType, recordings[0].Tags[metrics.OperationTagName])
-	require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+	require.Equal(t, chasm.WorkflowArchetype, recordings[0].Tags[metrics.ArchetypeTagName])
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
@@ -146,7 +146,7 @@ func TestDLQWriter_Ok(t *testing.T) {
 	expectedTaskType := queues.GetTaskTypeTagValue(task, true, chasmReg)
 	require.Equal(t, expectedTaskType, recordings[0].Tags[metrics.TaskTypeTagName])
 	require.Equal(t, expectedTaskType, recordings[0].Tags[metrics.OperationTagName])
-	require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+	require.Equal(t, chasm.WorkflowArchetype, recordings[0].Tags[metrics.ArchetypeTagName])
 }
 
 func TestDLQWriter_ConcurrentWrites(t *testing.T) {
