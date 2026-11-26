@@ -369,6 +369,9 @@ func (v *visibilityArchiver) queryPrefix(
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
+		if request.parsedQuery.status != nil && record.Status != *request.parsedQuery.status {
+			continue
+		}
 		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())

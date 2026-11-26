@@ -42,8 +42,23 @@ Supported column names are
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
+- ExecutionStatus *String or integer*
 
 WorkflowId or WorkflowType is required. WorkflowTypeName is still accepted as a legacy alias. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
+
+`ExecutionStatus` accepts `Completed`, `Failed`, `Canceled`, `Terminated`,
+`ContinuedAsNew`, and `TimedOut`, ignoring case and surrounding whitespace.
+`continued_as_new` and `timed_out` are also accepted, as are the corresponding
+enum values 2 through 7. Only `=` is supported, and a status may be specified
+once per query. For example:
+
+`WorkflowType = 'payment' AND ExecutionStatus = 'Failed'`
+
+The status is filtered after reading each record and does not reduce the
+objects scanned. A page can be short or empty and still contain a next-page
+token. Continue requesting pages until the token is empty. Queries without
+`ExecutionStatus` retain their existing behavior and stored records need no
+migration.
 
 Searching for a record will be done in times in the UTC timezone
 

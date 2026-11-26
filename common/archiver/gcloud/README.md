@@ -54,8 +54,23 @@ Supported column names are
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
+- ExecutionStatus *String or integer*
 
 One of these fields are required, StartTime or CloseTime and they are mutually exclusive and also SearchPrecision.
+
+`ExecutionStatus` accepts `Completed`, `Failed`, `Canceled`, `Terminated`,
+`ContinuedAsNew`, and `TimedOut`, ignoring case and surrounding whitespace.
+`continued_as_new` and `timed_out` are also accepted, as are the corresponding
+enum values 2 through 7. Only `=` is supported. Repeated equal statuses are
+allowed; conflicting statuses return no records. For example:
+
+`CloseTime = '2026-11-02T00:00:00Z' AND SearchPrecision = 'Day' AND ExecutionStatus = 'Failed'`
+
+The time and precision fields remain required. The status is filtered after
+reading each record and does not reduce the objects scanned. A page can be
+short or empty and still contain a next-page token. Continue requesting pages
+until the token is empty. Queries without `ExecutionStatus` retain their
+existing filtering behavior and stored records need no migration.
 
 Searching for a record will be done in times in the UTC timezone
 
