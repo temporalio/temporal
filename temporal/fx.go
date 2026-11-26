@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.temporal.io/testx/failpoint"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	expmaps "golang.org/x/exp/maps"
@@ -127,6 +128,8 @@ type (
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
+		// FailpointRegistry holds the failpoint registry, or nil if it's not enabled.
+		FailpointRegistry *failpoint.Registry
 	}
 )
 
@@ -233,6 +236,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			dcClient = dynamicconfig.NewNoopClient()
 		}
 	}
+	// A registry from an option takes precedence over the static config switch.
+	failpointRegistry := so.failpointRegistry
+	if failpointRegistry == nil {
+		failpointRegistry = newFailpointRegistryIfEnabled(so.config.Failpoints.Enabled, logger)
+	}
 
 	testHooks := testhooks.NewTestHooks()
 	if so.testHooks != nil {
@@ -311,7 +319,20 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		MetricsHandler:             metricHandler,
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
+		FailpointRegistry:          failpointRegistry,
 	}, nil
+}
+
+// newFailpointRegistryIfEnabled returns the failpoint registry that the server's services share, or
+// nil if enabled is false. When enabled, it logs a warning. The caller resolves whether an option
+// or the static config switch applies; this function only takes the resulting bool.
+func newFailpointRegistryIfEnabled(enabled bool, logger log.Logger) *failpoint.Registry {
+	if !enabled {
+		return nil
+	}
+	logger.Warn("FAILPOINTS ARE ENABLED (failpoints.enabled in the static config): tests and tools can change the behavior of " +
+		"this server. This is not meant for production use.")
+	return failpoint.NewRegistry()
 }
 
 // Start temporal server.
@@ -379,6 +400,7 @@ type (
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		TestHooks                       testhooks.TestHooks
+		FailpointRegistry               *failpoint.Registry
 	}
 )
 
@@ -459,6 +481,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
+			},
+			func() *failpoint.Registry {
+				return params.FailpointRegistry
 			},
 		),
 		fx.Decorate(func() testhooks.TestHooks {
