@@ -1,7 +1,7 @@
 # Syntax is here:
 # https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
 
-*                @temporalio/server @temporalio/cgs @temporalio/nexus
+*                @temporalio/server @temporalio/cgs @temporalio/replication-foundation @temporalio/nexus
 
 # CHASM
 
@@ -31,8 +31,8 @@
 
 /common/nexus/ @temporalio/act @temporalio/nexus
 
-/common/tasks/ @temporalio/oss-foundations @temporalio/cgs
-/common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
+/common/tasks/ @temporalio/oss-foundations @temporalio/cgs @temporalio/replication-foundation
+/common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/replication-foundation
 /common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/nexus
 
 # Legacy HSM implementations
@@ -49,7 +49,7 @@
 
 /proto/internal/temporal/server/api/archiver/ @temporalio/oss-foundations
 
-/proto/internal/temporal/server/api/replication/ @temporalio/cgs
+/proto/internal/temporal/server/api/replication/ @temporalio/cgs @temporalio/replication-foundation
 
 # DB Schema
 /schema/**/visibility/ @temporalio/oss-foundations
@@ -70,8 +70,8 @@
 /service/history/*statemachine* @temporalio/oss-foundations
 /service/history/*visibility* @temporalio/oss-foundations
 
-/service/history/ndc/ @temporalio/cgs
-/service/history/replication/ @temporalio/cgs
+/service/history/ndc/ @temporalio/cgs @temporalio/replication-foundation
+/service/history/replication/ @temporalio/cgs @temporalio/replication-foundation
 
 # Matching Service
 
@@ -93,19 +93,19 @@
 /service/worker/scanner/build_ids/ @temporalio/oss-matching
 /service/worker/scanner/taskqueue/ @temporalio/oss-matching
 
-/service/worker/migration/ @temporalio/cgs
-/service/worker/replicator/ @temporalio/cgs
+/service/worker/migration/ @temporalio/cgs @temporalio/replication-foundation
+/service/worker/replicator/ @temporalio/cgs @temporalio/replication-foundation
 
 /service/worker/parentclosepolicy/ @temporalio/oss-foundations @temporalio/act
 
 /tools/ @temporalio/server
 
 # Generated code
-*.pb.go        @temporalio/server @temporalio/cgs @temporalio/nexus
-*.pb.mock.go   @temporalio/server @temporalio/cgs @temporalio/nexus
-*_mock.go      @temporalio/server @temporalio/cgs @temporalio/nexus
-*_gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
-*.gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
+*.pb.go        @temporalio/server @temporalio/cgs @temporalio/replication-foundation @temporalio/nexus
+*.pb.mock.go   @temporalio/server @temporalio/cgs @temporalio/replication-foundation @temporalio/nexus
+*_mock.go      @temporalio/server @temporalio/cgs @temporalio/replication-foundation @temporalio/nexus
+*_gen.go       @temporalio/server @temporalio/cgs @temporalio/replication-foundation @temporalio/nexus
+*.gen.go       @temporalio/server @temporalio/cgs @temporalio/replication-foundation @temporalio/nexus
 
 # This generated file has no code owner to allow automated updates by CI.
 /tests/testcore/shard_salt.txt
