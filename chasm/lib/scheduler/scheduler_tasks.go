@@ -9,6 +9,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -200,12 +201,15 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		return errors.New("scheduler component was nil after read")
 	}
 
-	// Attach callbacks and check workflow status.
+	// Attach callbacks and check workflow status. One start's failure must not
+	// block the others.
 	results := make(map[string]*watchResult, len(starts))
+	var errs []error
 	for _, start := range starts {
 		result, err := r.watchRunningStart(ctx, scheduler, start, componentRef)
 		if err != nil {
-			return err
+			errs = append(errs, fmt.Errorf("buffered start %s: %w", start.RequestId, err))
+			continue
 		}
 		results[start.RequestId] = result
 	}
@@ -234,9 +238,15 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 
 			s.getOrCreateEventLog(ctx).LogEvent(ctx,
 				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
+			if len(errs) > 0 {
+				s.getOrCreateEventLog(ctx).LogEvent(ctx,
+					fmt.Sprintf("failed to resolve %d migrated workflow(s), will retry: %v", len(errs), errors.Join(errs...)))
+			}
 
-			// Now that running workflow state has been refreshed, scheduler tasks can be
-			// fired.
+			// Fire scheduler tasks even if some starts are unresolved: they still occupy
+			// their overlap slot (as a failing V1 watcher leaves RunningWorkflows), and
+			// withholding generation risks a permanently stuck schedule once this task
+			// exhausts its retries.
 			invoker.addTasks(ctx)
 			generator.Generate(ctx)
 
@@ -259,59 +269,42 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 			metrics.OutcomeTag(outcome),
 			metrics.ReasonTag(result.reason))
 	}
+	if len(errs) > 0 {
+		metrics.ScheduleCallbackReattach.With(metricsHandler).Record(int64(len(errs)),
+			metrics.OutcomeTag(outcomeReattachFailed),
+			metrics.ReasonTag(reasonNone))
+	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
-// watchRunningStart will attach a Nexus completion callback to a running
-// BufferedStart. If the start's workflow has already closed, the start is updated
-// to indicate it has completed. Intended for migration/anti-entropy cases.
+const (
+	// maxReattachAttempts bounds re-resolution when the chain's tail closes or
+	// continues-as-new between Describe and attach.
+	maxReattachAttempts = 3
+	// maxChainFollowHops bounds walking close events of a chain that is no
+	// longer current.
+	maxChainFollowHops = 100
+)
+
+// chainTail is the latest execution in a buffered start's execution chain.
+type chainTail struct {
+	runID string
+	// completed is nil while the tail is still open.
+	completed *schedulespb.CompletedResult
+	reason    metrics.ReasonString
+}
+
+// watchRunningStart will attach a Nexus completion callback to the open tail of
+// a BufferedStart's execution chain. If the chain has already closed, the start
+// is updated to indicate it has completed. Intended for migration/anti-entropy
+// cases.
 func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 	schedulerRef []byte,
 ) (*watchResult, error) {
-	// Describe the workflow to ensure it exists and is still running.
-	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: scheduler.NamespaceId,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: scheduler.Namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: start.WorkflowId,
-				RunId:      start.RunId,
-			},
-		},
-	})
-	if err != nil {
-		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-			return &watchResult{
-				completed: &schedulespb.CompletedResult{
-					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-					CloseTime: timestamppb.Now(),
-				},
-				reason: reasonReattachNotFound,
-			}, nil
-		}
-		return nil, err
-	}
-
-	wfInfo := descResp.GetWorkflowExecutionInfo()
-	completed, err := completedResultFromWorkflowInfo(wfInfo)
-	if err != nil {
-		return nil, err
-	}
-	if completed != nil {
-		return &watchResult{
-			completed: completed,
-			reason:    reasonReattachAlreadyClosed,
-		}, nil
-	}
-
-	// Workflow is still running. Attach a Nexus completion callback by issuing
-	// a StartWorkflowExecution with USE_EXISTING conflict policy. REJECT_DUPLICATE
-	// reuse policy prevents accidentally starting a new workflow if the original
-	// completes between the describe and this call.
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
 	// Pack this start's request ID into the callback token so completions are matched from the token
@@ -321,30 +314,182 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		return nil, err
 	}
 
-	_, err = r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                scheduler.Namespace,
-		WorkflowId:               start.WorkflowId,
-		RequestId:                start.RequestId,
-		Identity:                 scheduler.identity(),
-		WorkflowType:             requestSpec.GetWorkflowType(),
-		TaskQueue:                requestSpec.GetTaskQueue(),
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		CompletionCallbacks:      []*commonpb.Callback{callback},
-		OnConflictOptions: &workflowpb.OnConflictOptions{
-			AttachRequestId:           true,
-			AttachCompletionCallbacks: true,
+	for range maxReattachAttempts {
+		tail, err := r.resolveChainTail(ctx, scheduler, start)
+		if err != nil {
+			return nil, err
+		}
+		if tail.completed != nil {
+			return &watchResult{completed: tail.completed, reason: tail.reason}, nil
+		}
+
+		// USE_EXISTING attaches to whatever run is current for the workflow ID;
+		// REJECT_DUPLICATE prevents starting a new workflow if it has closed.
+		resp, err := r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:                scheduler.Namespace,
+			WorkflowId:               start.WorkflowId,
+			RequestId:                start.RequestId,
+			Identity:                 scheduler.identity(),
+			WorkflowType:             requestSpec.GetWorkflowType(),
+			TaskQueue:                requestSpec.GetTaskQueue(),
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			CompletionCallbacks:      []*commonpb.Callback{callback},
+			OnConflictOptions: &workflowpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
+		if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); ok {
+			// The tail closed before attach; re-resolve to observe its outcome.
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if runID := resp.GetRunId(); runID != "" && runID != tail.runID {
+			// Attached to a different run: a CAN successor (re-resolving confirms it,
+			// and the re-attach dedupes on request ID) or, if ours closed, an unrelated
+			// run (re-resolving records our outcome; the stray callback is ignored).
+			continue
+		}
+		return &watchResult{reason: reasonNone}, nil
+	}
+	return nil, fmt.Errorf("execution chain kept changing across %d callback attach attempts", maxReattachAttempts)
+}
+
+// resolveChainTail mirrors the V1 watcher: check the current run for the
+// workflow ID, accepting it only if it belongs to start's chain. Otherwise the
+// chain is closed and is followed from start.RunId by NewExecutionRunId.
+func (r *SchedulerCallbacksTaskHandler) resolveChainTail(
+	ctx context.Context,
+	scheduler *Scheduler,
+	start *schedulespb.BufferedStart,
+) (*chainTail, error) {
+	info, err := r.describeExecution(ctx, scheduler, start.WorkflowId, "")
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok && err != nil {
+		return nil, err
+	}
+	if err == nil && (info.GetFirstRunId() == start.RunId || info.GetExecution().GetRunId() == start.RunId) {
+		if info.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+			return nil, fmt.Errorf("current run %s is continued-as-new", info.GetExecution().GetRunId())
+		}
+		completed, err := completedResultFromWorkflowInfo(info)
+		if err != nil {
+			return nil, err
+		}
+		return &chainTail{runID: info.GetExecution().GetRunId(), completed: completed, reason: reasonReattachAlreadyClosed}, nil
+	}
+	return r.followClosedChain(ctx, scheduler, start)
+}
+
+// followClosedChain walks start's chain by close events. An open run is always
+// the current one, so reaching here means the chain has closed and only its
+// final status is missing.
+func (r *SchedulerCallbacksTaskHandler) followClosedChain(
+	ctx context.Context,
+	scheduler *Scheduler,
+	start *schedulespb.BufferedStart,
+) (*chainTail, error) {
+	runID := start.RunId
+	for range maxChainFollowHops {
+		info, err := r.describeExecution(ctx, scheduler, start.WorkflowId, runID)
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			return unobservedChainTail(runID, reasonReattachNotFound), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		status := info.GetStatus()
+		if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+			// Raced with the current-run check; let attach sort it out.
+			return &chainTail{runID: runID}, nil
+		}
+
+		histResp, err := r.frontendClient.GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:              scheduler.Namespace,
+			Execution:              &commonpb.WorkflowExecution{WorkflowId: start.WorkflowId, RunId: runID},
+			MaximumPageSize:        1,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+			SkipArchival:           true,
+		})
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			return unobservedChainTail(runID, reasonReattachNotFound), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		events := histResp.GetHistory().GetEvents()
+		if len(events) == 0 {
+			return nil, fmt.Errorf("no close event for run %s", runID)
+		}
+		if next := newExecutionRunID(events[len(events)-1]); next != "" {
+			runID = next
+			continue
+		}
+		if status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+			return nil, fmt.Errorf("continued-as-new run %s has no successor", runID)
+		}
+		completed, err := completedResultFromWorkflowInfo(info)
+		if err != nil {
+			return nil, err
+		}
+		return &chainTail{runID: runID, completed: completed, reason: reasonReattachAlreadyClosed}, nil
+	}
+	// The chain isn't current, so it's closed; give up on its exact status
+	// rather than leave the start occupying its overlap slot forever.
+	return unobservedChainTail(runID, reasonReattachChainUnresolved), nil
+}
+
+// unobservedChainTail synthesizes TERMINATED for a closed chain whose outcome
+// can't be observed. TERMINATED doesn't trigger pause-on-failure, matching V1,
+// which treats a vanished workflow as closed with no status.
+func unobservedChainTail(runID string, reason metrics.ReasonString) *chainTail {
+	return &chainTail{
+		runID: runID,
+		completed: &schedulespb.CompletedResult{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			CloseTime: timestamppb.Now(),
+		},
+		reason: reason,
+	}
+}
+
+func (r *SchedulerCallbacksTaskHandler) describeExecution(
+	ctx context.Context,
+	scheduler *Scheduler,
+	workflowID string,
+	runID string,
+) (*workflowpb.WorkflowExecutionInfo, error) {
+	resp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: scheduler.NamespaceId,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: scheduler.Namespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		},
 	})
 	if err != nil {
-		// CONSIDER(scheduler): When this is WorkflowExecutionAlreadyStarted after a
-		// continued-as-new successor closes, retrying describes the predecessor and
-		// cannot observe the successor's terminal status. Follow the chain instead.
 		return nil, err
 	}
+	return resp.GetWorkflowExecutionInfo(), nil
+}
 
-	// Callback attached successfully.
-	return &watchResult{reason: reasonNone}, nil
+// newExecutionRunID returns the run a close event hands off to (continue-as-new,
+// retry, or cron), or "" if the chain ends here.
+func newExecutionRunID(event *historypb.HistoryEvent) string {
+	if attrs := event.GetWorkflowExecutionContinuedAsNewEventAttributes(); attrs != nil {
+		return attrs.GetNewExecutionRunId()
+	}
+	if attrs := event.GetWorkflowExecutionCompletedEventAttributes(); attrs != nil {
+		return attrs.GetNewExecutionRunId()
+	}
+	if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs != nil {
+		return attrs.GetNewExecutionRunId()
+	}
+	if attrs := event.GetWorkflowExecutionTimedOutEventAttributes(); attrs != nil {
+		return attrs.GetNewExecutionRunId()
+	}
+	return ""
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(
