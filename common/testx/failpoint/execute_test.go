@@ -85,6 +85,103 @@ func (s *executeSuite) TestExecute() {
 	}
 }
 
+func (s *executeSuite) TestExecuteInOrder() {
+	errFirst := errors.New("first")
+	errSecond := errors.New("second")
+	errUnscoped := errors.New("unscoped")
+	fired := func(err error) failpoint.Result[error] {
+		return failpoint.Result[error]{Value: err, Set: true, Fired: true}
+	}
+
+	s.Run("nil registry", func(s *executeSuite) {
+		s.Equal(failpoint.Result[error]{}, failpoint.ExecuteInOrder((*failpoint.Registry)(nil), failpoint.ExecuteOptions{}, key1))
+	})
+
+	s.Run("runs keys in order and passes argument", func(s *executeSuite) {
+		registry := failpoint.NewRegistry()
+		registry.Set(failpoint.NewFailpoint(key2))
+		var args []any
+		callback := failpoint.NewFailpoint(key3)
+		callback.CallWithArg(func(arg any) error {
+			args = append(args, arg)
+			return nil
+		})
+		registry.Set(callback)
+		fp := failpoint.NewFailpoint(key4)
+		fp.Return(errSecond)
+		registry.Set(fp)
+
+		// A failpoint that fires without an error ends the execution.
+		got := failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{Arg: "arg"}, key1, key2, key3, key4)
+		s.Equal(failpoint.Result[error]{Set: true, Fired: true}, got)
+		s.Equal([]any{"arg"}, args)
+	})
+
+	s.Run("stops at first key that fired", func(s *executeSuite) {
+		registry := failpoint.NewRegistry()
+		first := failpoint.NewFailpoint(key2.ForScope("ns"))
+		first.Return(errFirst)
+		registry.Set(first)
+		second := failpoint.NewFailpoint(key3)
+		second.Return(errSecond)
+		registry.Set(second)
+
+		s.Equal(fired(errFirst), failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, key1, key2.ForScope("ns"), key3))
+		s.Equal(fired(errSecond), failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, key1, key2.ForScope("other"), key3.ForScope("ns")))
+	})
+
+	s.Run("scope precedence within same key name", func(s *executeSuite) {
+		registry := failpoint.NewRegistry()
+		unscoped := failpoint.NewFailpoint(key1)
+		unscoped.Return(errUnscoped)
+		registry.Set(unscoped)
+
+		keys := []failpoint.Key[error]{key1.ForScope("id"), key1.ForScope("name")}
+		s.Equal(fired(errUnscoped), failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, keys...))
+
+		byName := failpoint.NewFailpoint(key1.ForScope("name"))
+		byName.Return(errSecond)
+		registry.Set(byName)
+		s.Equal(fired(errSecond), failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, keys...))
+
+		byID := failpoint.NewFailpoint(key1.ForScope("id"))
+		byID.Return(errFirst)
+		registry.Set(byID)
+		s.Equal(fired(errFirst), failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, keys...))
+
+		// A disabled failpoint at a higher-precedence scope shadows lower scopes of the same key.
+		byID.Disable()
+		s.Equal(failpoint.Result[error]{}, failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, keys...))
+	})
+
+	s.Run("reports pause and block as fired without value", func(s *executeSuite) {
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint(key1)
+		fp.Pause(time.Nanosecond)
+		registry.Set(fp)
+		s.Equal(failpoint.Result[error]{Fired: true}, failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, key1))
+
+		fp.Block()
+		got := make(chan failpoint.Result[error], 1)
+		go func() {
+			got <- failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, key1)
+		}()
+		s.NoError(fp.Wait(s.Context()))
+		fp.Disable()
+		s.Equal(failpoint.Result[error]{Fired: true}, s.Rcv(got))
+	})
+
+	s.Run("ignores failpoint of another type", func(s *executeSuite) {
+		registry := failpoint.NewRegistry()
+		fp := failpoint.NewFailpoint(failpoint.UndeclaredKey[int]("other.type.order"))
+		fp.Return(1)
+		registry.Set(fp)
+
+		got := failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{}, failpoint.UndeclaredKey[error]("other.type.order"))
+		s.Equal(failpoint.Result[error]{}, got)
+	})
+}
+
 func (s *executeSuite) TestExecuteIgnoresFailpointOfAnotherType() {
 	// Typed keys keep this from happening by accident: the two keys have the same name.
 	registry := failpoint.NewRegistry()

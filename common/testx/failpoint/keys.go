@@ -2,6 +2,8 @@ package failpoint
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -41,14 +43,69 @@ func (k keyID) String() string {
 	return fmt.Sprintf("%s@%s", k.name, k.scope)
 }
 
+// reservedPrefix is a prefix that ReserveKeyPrefix reserved, and the value type of every key under
+// it.
+type reservedPrefix struct {
+	prefix string
+	typ    reflect.Type
+}
+
 var (
-	keysMu       sync.Mutex
-	declaredKeys = map[string]struct{}{}
+	keysMu           sync.Mutex
+	declaredKeys     = map[string]struct{}{}
+	reservedPrefixes []reservedPrefix
 )
+
+// KeyPrefix builds the keys of the failpoints that code names at run time, such as from the method
+// of a request. All its keys have the value type T. Get one from ReserveKeyPrefix.
+type KeyPrefix[T any] struct {
+	prefix string
+}
+
+// ReserveKeyPrefix reserves a prefix for the names of keys that code builds at run time, such as
+// from the method of a request, with KeyPrefix.Key. NewKey panics on a name with a reserved
+// prefix, so a declared key can't collide with them. It is meant for init functions and package
+// variables.
+//
+// ReserveKeyPrefix panics if the prefix is empty, if a key declared with NewKey already has it,
+// or if it overlaps a prefix reserved with another type. Reserving a prefix again with the same
+// type returns the same KeyPrefix.
+func ReserveKeyPrefix[T any](prefix string) KeyPrefix[T] {
+	if prefix == "" {
+		//nolint:forbidigo // an empty prefix is a programming error
+		panic("failpoint: empty key prefix")
+	}
+	typ := reflect.TypeFor[T]()
+	keysMu.Lock()
+	defer keysMu.Unlock()
+	for name := range declaredKeys {
+		if strings.HasPrefix(name, prefix) {
+			//nolint:forbidigo // a conflicting declaration is a programming error
+			panic(fmt.Sprintf("failpoint: key %q is already declared and has the prefix %q", name, prefix))
+		}
+	}
+	for _, p := range reservedPrefixes {
+		if p.prefix == prefix && p.typ == typ {
+			return KeyPrefix[T]{prefix: prefix}
+		}
+		if strings.HasPrefix(p.prefix, prefix) || strings.HasPrefix(prefix, p.prefix) {
+			//nolint:forbidigo // a conflicting reservation is a programming error
+			panic(fmt.Sprintf("failpoint: key prefix %q of type %v overlaps the prefix %q of type %v", prefix, typ, p.prefix, p.typ))
+		}
+	}
+	reservedPrefixes = append(reservedPrefixes, reservedPrefix{prefix: prefix, typ: typ})
+	return KeyPrefix[T]{prefix: prefix}
+}
+
+// Key returns the key whose name is the prefix followed by suffix. Scope it with ForScope.
+func (p KeyPrefix[T]) Key(suffix string) Key[T] {
+	return Key[T]{name: p.prefix + suffix}
+}
 
 // NewKey returns the key for the named failpoint, whose value has type T. Each name must be
 // non-empty and can only be declared once; NewKey panics on an empty or duplicate name so that
-// zero-value keys are always invalid and two failpoints cannot share a name by accident.
+// zero-value keys are always invalid and two failpoints cannot share a name by accident. It also
+// panics on a name with a reserved prefix, see ReserveKeyPrefix.
 func NewKey[T any](name string) Key[T] {
 	if name == "" {
 		//nolint:forbidigo // an empty key name is a programming error
@@ -56,6 +113,12 @@ func NewKey[T any](name string) Key[T] {
 	}
 	keysMu.Lock()
 	defer keysMu.Unlock()
+	for _, p := range reservedPrefixes {
+		if strings.HasPrefix(name, p.prefix) {
+			//nolint:forbidigo // a reserved name is a programming error
+			panic(fmt.Sprintf("failpoint: key %q has the reserved prefix %q", name, p.prefix))
+		}
+	}
 	if _, ok := declaredKeys[name]; ok {
 		//nolint:forbidigo // duplicate key is a programming error
 		panic(fmt.Sprintf("failpoint: duplicate key %q", name))

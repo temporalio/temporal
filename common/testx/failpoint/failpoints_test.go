@@ -292,6 +292,26 @@ func (s *failpointSuite) TestCall() {
 		}
 	})
 
+	s.Run("call with arg", func(s *failpointSuite) {
+		fp := failpoint.NewFailpoint[error](key1)
+		var args []any
+		fp.CallWithArg(func(arg any) error {
+			args = append(args, arg)
+			return nil
+		})
+
+		_, fired := fp.Execute()
+		s.True(fired)
+
+		registry := failpoint.NewRegistry()
+		registry.Set(fp)
+		res := failpoint.ExecuteInOrder(registry, failpoint.ExecuteOptions{Arg: "request"}, key1)
+		s.True(res.Fired)
+		s.True(res.Set)
+		s.NoError(res.Value)
+		s.Equal([]any{nil, "request"}, args)
+	})
+
 	s.Run("concurrent executions overlap", func(s *failpointSuite) {
 		f := failpoint.NewFailpoint[int](failpoint.UndeclaredKey[int]("overlap"))
 		arrived := make(chan struct{})
