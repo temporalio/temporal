@@ -51,13 +51,13 @@ func resetStickyTaskQueue(mutableState historyi.MutableState) (*api.UpdateWorkfl
 	}
 	// Forgetting a bound worker unbinds the workflow, which also moves its session activities to the normal queue.
 	if workerQueue := mutableState.SessionWorkerQueue(); workerQueue != "" {
-		unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue, nil)
+		unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue)
 		if err != nil {
 			return nil, err
 		}
 		return &api.UpdateWorkflowAction{Noop: !unbound}, nil
 	}
-	mutableState.ClearStickyTaskQueue()
+	mutableState.ClearStickyTaskQueue(historyi.StickyClearForResetStickyTaskQueue)
 	return &api.UpdateWorkflowAction{
 		Noop:               true,
 		CreateWorkflowTask: false,

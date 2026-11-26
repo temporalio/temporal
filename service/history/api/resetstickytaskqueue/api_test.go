@@ -23,7 +23,7 @@ func TestResetStickyTaskQueue(t *testing.T) {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		ms.EXPECT().SessionWorkerQueue().Return("")
-		ms.EXPECT().ClearStickyTaskQueue()
+		ms.EXPECT().ClearStickyTaskQueue(historyi.StickyClearForResetStickyTaskQueue)
 
 		action, err := resetStickyTaskQueue(ms)
 		require.NoError(t, err)
@@ -34,7 +34,7 @@ func TestResetStickyTaskQueue(t *testing.T) {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		ms.EXPECT().SessionWorkerQueue().Return("worker-queue")
-		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", "worker-queue", nil).Return(true, nil)
+		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", "worker-queue").Return(true, nil)
 
 		action, err := resetStickyTaskQueue(ms)
 		require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestResetStickyTaskQueue(t *testing.T) {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		ms.EXPECT().SessionWorkerQueue().Return("stable-identity")
-		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", "stable-identity", nil).Return(false, nil)
+		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", "stable-identity").Return(false, nil)
 
 		action, err := resetStickyTaskQueue(ms)
 		require.NoError(t, err)

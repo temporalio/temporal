@@ -52,7 +52,7 @@ func TestUnbindWorkflowFromSessionWorker(t *testing.T) {
 			ms := historyi.NewMockMutableState(gomock.NewController(t))
 			ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 			ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
-			ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue, nil).Return(tc.unbound, nil)
+			ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(tc.unbound, nil)
 
 			action, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
 			require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestUnbindWorkflowFromSessionWorker(t *testing.T) {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
-		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue, nil).Return(false, errors.New("reschedule failed"))
+		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(false, errors.New("reschedule failed"))
 
 		_, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
 		require.EqualError(t, err, "reschedule failed")

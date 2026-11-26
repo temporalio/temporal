@@ -927,14 +927,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
-func (e *matchingEngineImpl) exclusiveWorkerAssigned(ctx context.Context, partition tqid.Partition) (bool, error) {
-	info, err := e.persistedTaskQueueInfo(ctx, partition)
-	if err != nil {
-		return false, err
-	}
-	return info.GetExclusiveWorkerAssignment() != nil, nil
-}
-
 // persistedTaskQueueInfo reads the partition's metadata from persistence without loading it, or nil if it has none.
 func (e *matchingEngineImpl) persistedTaskQueueInfo(ctx context.Context, partition tqid.Partition) (*persistencespb.TaskQueueInfo, error) {
 	queue := UnversionedQueueKey(partition)

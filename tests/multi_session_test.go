@@ -254,7 +254,7 @@ func (e *sessionMoveEnv) shutDownWorker(worker string) {
 		WorkerInstanceKey: e.instanceKey(worker), TaskQueue: e.tv.TaskQueue().GetName(),
 		WorkerHeartbeat: &workerpb.WorkerHeartbeat{
 			WorkerInstanceKey: e.instanceKey(worker), TaskQueue: e.tv.TaskQueue().GetName(), Status: enumspb.WORKER_STATUS_SHUTDOWN,
-			SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+			SessionOptions: multiSessionWorkerOptions(),
 		},
 	})
 	require.NoError(e.t, err)
@@ -267,7 +267,7 @@ func (e *sessionMoveEnv) recordHeartbeat(worker string) {
 		Namespace: e.env.Namespace().String(), Identity: "worker-" + worker,
 		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{{
 			WorkerInstanceKey: e.instanceKey(worker), TaskQueue: e.tv.TaskQueue().GetName(), Status: enumspb.WORKER_STATUS_RUNNING,
-			SessionOptions: multiSessionWorkerOptions(e.stickyQueue(worker).GetName()),
+			SessionOptions: multiSessionWorkerOptions(),
 		}},
 	})
 	require.NoError(e.t, err)
@@ -690,33 +690,82 @@ func TestWorkflowSessionActivityMoveReschedulesPendingWorkflowTask(t *testing.T)
 	require.Error(t, err)
 }
 
+/*
+TestWorkflowSessionInheritedByNextRun tests that a new run of the workflow keeps the session on its worker:
+ 1. Session worker Y starts the first workflow task, binding the workflow to Y, and closes the run with a
+    continue-as-new, a failure under a retry policy, or a completion under a cron schedule.
+ 2. The next run's first workflow task is delivered on Y's sticky queue instead of the normal queue, except for a
+    cron run, which starts unbound on the normal queue.
+*/
+func TestWorkflowSessionInheritedByNextRun(t *testing.T) {
+	t.Parallel()
+	for _, tc := range nextRunCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newSessionMoveEnvForNextRun(t, 10*time.Second, tc)
+			e.registerStickyPoller("Y")
+			err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{tc.command(e.tv)}, StickyAttributes: e.stickyAttributes("Y", 5*time.Second),
+				}, nil
+			})
+			require.NoError(t, err)
+
+			if tc.unbound {
+				e.requireNextRunOn("", e.tv.TaskQueue())
+				return
+			}
+			e.requireNextRunOn("Y", e.stickyQueue("Y"))
+		})
+	}
+}
+
+/*
+TestWorkflowSessionInheritedBindingFallsBackWhenWorkerGone tests a next run whose inherited worker is gone:
+ 1. Worker Y binds the workflow from the normal queue but never polls its sticky queue, so Matching treats it as gone.
+ 2. Y continues the workflow as new; the next run inherits the binding to Y.
+ 3. Its first workflow task falls back to the normal queue, where any worker can start it.
+*/
+func TestWorkflowSessionInheritedBindingFallsBackWhenWorkerGone(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{continueAsNewCmd(e.tv.WorkflowType(), e.tv.TaskQueue())}, StickyAttributes: e.stickyAttributes("Y", time.Second),
+		}, nil
+	})
+	require.NoError(t, err)
+
+	e.requireNextRunOn("", e.tv.TaskQueue())
+}
+
+// nextRunCase is one way a workflow starts its next run, for tests of what the next run inherits.
+type nextRunCase struct {
+	name         string
+	retryPolicy  *commonpb.RetryPolicy
+	cronSchedule string
+	// unbound is true when the next run does not inherit the binding: a cron run starts unbound.
+	unbound bool
+	// command closes the first run.
+	command func(tv *testvars.TestVars) *commandpb.Command
+}
+
+func nextRunCases() []nextRunCase {
+	return []nextRunCase{
+		{name: "continue-as-new", command: func(tv *testvars.TestVars) *commandpb.Command {
+			return continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())
+		}},
+		{name: "retry", retryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), BackoffCoefficient: 1, MaximumAttempts: 2},
+			command: func(*testvars.TestVars) *commandpb.Command { return failCmd("retry me") }},
+		{name: "cron", cronSchedule: "@every 1s", unbound: true, command: func(*testvars.TestVars) *commandpb.Command { return completeCmd() }},
+	}
+}
+
 // multiSessionWorkerOptions are a multi-session worker's session options. Its sticky queue is named after its instance key.
 func multiSessionWorkerOptions() *sessionpb.WorkerSessionOptions {
 	return &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
 		MultiSession: &sessionpb.MultiSessionOptions{},
 	}}
-}
-
-/*
-TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
-versioning override:
- 1. Worker A binds the session and is alive on its sticky queue.
- 2. UpdateWorkflowExecutionOptions pinning the workflow to a version is rejected.
- 3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
-*/
-func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
-	t.Parallel()
-	e := newSessionMoveEnv(t, 10*time.Second)
-	e.bindToA(time.Second)
-	e.registerStickyPoller("A")
-
-	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
-	var invalidArgument *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArgument)
-	require.ErrorContains(t, err, "bound to a worker servicing sessions")
-
-	e.signal()
-	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
 }
 
 /*
@@ -818,16 +867,6 @@ func resetToLastWorkflowTask(e *sessionMoveEnv) string {
 	return resetWorkflowTo(e.t, e.env, e.tv.WorkflowExecution(), lastCompleted)
 }
 
-// resetWorkflowTo resets execution to workflowTaskFinishEventID and returns the reset run's ID.
-func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, workflowTaskFinishEventID int64) string {
-	response, err := env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test",
-		WorkflowTaskFinishEventId: workflowTaskFinishEventID, RequestId: uuid.NewString(),
-	})
-	require.NoError(t, err)
-	return response.GetRunId()
-}
-
 // requireStartedEventRecordsBinding requires the last workflow task started event to record the binding mutable state
 // holds, so a rebuild from history restores it.
 func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) {
@@ -855,73 +894,34 @@ func requireStartedEventRecordsBinding(t *testing.T, env *testcore.TestEnv, exec
 	protorequire.ProtoEqual(t, want, recorded)
 }
 
-/*
-TestWorkflowSessionInheritedByNextRun tests that a new run of the workflow keeps the session on its worker:
- 1. Session worker Y starts the first workflow task, binding the workflow to Y, and closes the run with a
-    continue-as-new, a failure under a retry policy, or a completion under a cron schedule.
- 2. The next run's first workflow task is delivered on Y's sticky queue instead of the normal queue, except for a
-    cron run, which starts unbound on the normal queue.
-*/
-func TestWorkflowSessionInheritedByNextRun(t *testing.T) {
-	t.Parallel()
-	for _, tc := range nextRunCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			e := newSessionMoveEnvForNextRun(t, 10*time.Second, tc)
-			e.registerStickyPoller("Y")
-			err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{tc.command(e.tv)}, StickyAttributes: e.stickyAttributes("Y", 5*time.Second),
-				}, nil
-			})
-			require.NoError(t, err)
-
-			if tc.unbound {
-				e.requireNextRunOn("", e.tv.TaskQueue())
-				return
-			}
-			e.requireNextRunOn("Y", e.stickyQueue("Y"))
-		})
-	}
-}
-
-/*
-TestWorkflowSessionInheritedBindingFallsBackWhenWorkerGone tests a next run whose inherited worker is gone:
- 1. Worker Y binds the workflow from the normal queue but never polls its sticky queue, so Matching treats it as gone.
- 2. Y continues the workflow as new; the next run inherits the binding to Y.
- 3. Its first workflow task falls back to the normal queue, where any worker can start it.
-*/
-func TestWorkflowSessionInheritedBindingFallsBackWhenWorkerGone(t *testing.T) {
-	t.Parallel()
-	e := newSessionMoveEnv(t, 10*time.Second)
-	err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), 30*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{continueAsNewCmd(e.tv.WorkflowType(), e.tv.TaskQueue())}, StickyAttributes: e.stickyAttributes("Y", time.Second),
-		}, nil
+// resetWorkflowTo resets execution to workflowTaskFinishEventID and returns the reset run's ID.
+func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, workflowTaskFinishEventID int64) string {
+	response, err := env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: execution, Reason: "test",
+		WorkflowTaskFinishEventId: workflowTaskFinishEventID, RequestId: uuid.NewString(),
 	})
 	require.NoError(t, err)
-
-	e.requireNextRunOn("", e.tv.TaskQueue())
+	return response.GetRunId()
 }
 
-// nextRunCase is one way a workflow starts its next run, for tests of what the next run inherits.
-type nextRunCase struct {
-	name         string
-	retryPolicy  *commonpb.RetryPolicy
-	cronSchedule string
-	// unbound is true when the next run does not inherit the binding: a cron run starts unbound.
-	unbound bool
-	// command closes the first run.
-	command func(tv *testvars.TestVars) *commandpb.Command
-}
+/*
+TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
+versioning override:
+ 1. Worker A binds the session and is alive on its sticky queue.
+ 2. UpdateWorkflowExecutionOptions pinning the workflow to a version is rejected.
+ 3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
+*/
+func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToAWith(time.Second)
+	e.registerStickyPoller("A")
 
-func nextRunCases() []nextRunCase {
-	return []nextRunCase{
-		{name: "continue-as-new", command: func(tv *testvars.TestVars) *commandpb.Command {
-			return continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())
-		}},
-		{name: "retry", retryPolicy: &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second), BackoffCoefficient: 1, MaximumAttempts: 2},
-			command: func(*testvars.TestVars) *commandpb.Command { return failCmd("retry me") }},
-		{name: "cron", cronSchedule: "@every 1s", unbound: true, command: func(*testvars.TestVars) *commandpb.Command { return completeCmd() }},
-	}
+	err := updateWithPinnedOverride(t, e.env, e.tv.WorkflowExecution())
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	require.ErrorContains(t, err, "bound to a worker servicing sessions")
+
+	e.signal()
+	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
 }

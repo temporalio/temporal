@@ -2235,9 +2235,10 @@ func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
 				WorkflowRunTimeout:           tc.runTimeout,
 			}
 			if tc.bound {
-				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: !tc.nonExclusive, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "S"}}
+				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: !tc.nonExclusive}
+				info.StickyTaskQueue = "S"
 			}
-			ms.EXPECT().SessionWorkerQueue().Return(info.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue()).AnyTimes()
+			ms.EXPECT().SessionWorkerQueue().Return(info.GetStickyTaskQueue()).AnyTimes()
 			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 			ms.EXPECT().IsStickyTaskQueueSet().Return(true).AnyTimes()
 			ms.EXPECT().GetWorkflowKey().Return(key).AnyTimes()

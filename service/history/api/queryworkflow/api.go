@@ -420,8 +420,6 @@ func queryDirectlyThroughMatching(
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {
 			return nil, err
 		}
-		// TODO (Shivam): For a non-exclusive binding this unbinds the workflow even when its worker is alive but busy.
-		// Decide whether queries should move bindings (MTC-919).
 		if msResp.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			resetContext, cancel := rpc.ResetContextTimeout(ctx, 5*time.Second)
 			clearStickinessStartTime := time.Now().UTC()

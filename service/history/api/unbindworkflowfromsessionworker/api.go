@@ -50,7 +50,7 @@ func unbindWorkflowFromSessionWorker(mutableState historyi.MutableState, workerQ
 	if mutableState.SessionWorkerQueue() != workerQueue {
 		return &api.UpdateWorkflowAction{Noop: true}, nil
 	}
-	unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue, nil)
+	unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue)
 	if err != nil {
 		return nil, err
 	}

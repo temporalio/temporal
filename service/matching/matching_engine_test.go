@@ -7694,7 +7694,6 @@ func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 	addTask := func(ctx context.Context, tv *testvars.TestVars, taskType enumspb.TaskQueueType) error {
 		// The exclusive directive skips the bound-worker liveness check; nothing is assigned in persistence.
 		sessionDirective := &taskqueuespb.TaskSessionDirective{
-			BoundWorkerInfo:           &taskqueuespb.BoundWorkerInfo{WorkerQueue: tv.StickyTaskQueue().GetName()},
 			IsExclusiveWorkerAssigned: true,
 		}
 		var err error
@@ -7763,12 +7762,9 @@ func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 	})
 }
 
-/*
-TestQueryWorkflowAssignedStickyReadFailure tests the query path's assignment lookup:
-1. Make the sticky queue metadata read fail while dispatching a query.
-2. Verify Matching returns that error without loading a partition.
-*/
-func TestQueryWorkflowAssignedStickyReadFailure(t *testing.T) {
+// TestQueryWorkflowStickyWithoutExclusiveDirective tests that a sticky query for a workflow without an exclusive binding
+// fails at once when the queue has no recent poller, without reading the queue's metadata, as for any sticky query.
+func TestQueryWorkflowStickyWithoutExclusiveDirective(t *testing.T) {
 	t.Parallel()
 	tv := testvars.New(t)
 	for _, directive := range []*taskqueuespb.TaskSessionDirective{nil, {}} {
