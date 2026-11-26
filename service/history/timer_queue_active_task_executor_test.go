@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -1448,7 +1449,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 				activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
 			if tc.session && !tc.droppedSession {
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: "sticky-worker"}}
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			}
 			if tc.droppedSession {
 				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
@@ -1480,7 +1481,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			expectedRequest := func(taskQueue *taskqueuepb.TaskQueue) *matchingservice.AddActivityTaskRequest {
 				var sessionDirective *taskqueuespb.TaskSessionDirective
 				if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-					sessionDirective = &taskqueuespb.TaskSessionDirective{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: taskQueue.GetName()}}
+					sessionDirective = &taskqueuespb.TaskSessionDirective{}
 				}
 				return &matchingservice.AddActivityTaskRequest{
 					NamespaceId:            s.namespaceID.String(),

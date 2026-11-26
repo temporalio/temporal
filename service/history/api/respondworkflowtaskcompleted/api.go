@@ -364,7 +364,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				return nil, err
 			}
 			// A slow but alive bound worker keeps the binding; only its death moves the workflow.
-			ms.ClearStickyTaskQueueUnlessPartOfSession()
+			ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 			wtHeartbeatTimedOut = true
 		}
 	}
@@ -383,7 +383,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 		// The binding, not the worker's cache, decides where a bound workflow's tasks go.
-		ms.ClearStickyTaskQueueUnlessPartOfSession()
+		ms.ClearStickyTaskQueue(historyi.StickyClearForCacheDisabled)
 	} else {
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,

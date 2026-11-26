@@ -805,7 +805,7 @@ func (e *singleSessionEnv) requireNoWorkflowTaskOnNormalQueue() {
 		func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			require.FailNow(e.t, "a workflow bound to a single-session worker must not reach the normal queue")
 			return nil, nil
-		}, taskpoller.WithTimeout(2500*time.Millisecond))
+		}, taskpoller.WithTimeout(stickyPollTimeout))
 	require.Error(e.t, err)
 }
 

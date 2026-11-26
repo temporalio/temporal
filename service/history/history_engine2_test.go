@@ -887,7 +887,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 			ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 			if name == "replacement" {
-				ms.BindExclusiveWorker("S", "")
+				ms.BindExclusiveWorker("S")
 			}
 			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -5216,18 +5216,16 @@ TestRecordWorkflowTaskStartedBindsMultiSessionWorker tests a workflow task start
  1. Start from the normal queue, either for a workflow with no binding or one bound to worker X.
  2. The worker gets full history (sticky execution disabled), since a worker coming from the normal queue has
     nothing cached, even though the start binds the workflow to it.
- 3. The persisted state binds the workflow to the polling worker, with the sticky queue mirroring it and the
-    previous sticky schedule-to-start timeout (or the default) carried over.
+ 3. The persisted state binds the workflow to the polling worker: its sticky queue is the worker's queue, with no
+    sticky schedule-to-start timeout.
 */
 func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
 	for _, tc := range []struct {
-		name          string
-		boundTo       string
-		stickyTimeout time.Duration
-		wantTimeout   time.Duration
+		name    string
+		boundTo string
 	}{
-		{name: "first bind", wantTimeout: 5 * time.Second},
-		{name: "move from a dead worker", boundTo: "worker-x-sticky", stickyTimeout: 7 * time.Second, wantTimeout: 7 * time.Second},
+		{name: "first bind"},
+		{name: "move from a dead worker", boundTo: "worker-x-sticky"},
 	} {
 		s.Run(tc.name, func() {
 			s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
@@ -5249,9 +5247,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
 				we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 			addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "identity")
 			if tc.boundTo != "" {
-				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: tc.boundTo}}
+				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 				ms.GetExecutionInfo().StickyTaskQueue = tc.boundTo
-				ms.GetExecutionInfo().StickyScheduleToStartTimeout = durationpb.New(tc.stickyTimeout)
 			}
 			wt := addWorkflowTaskScheduledEvent(ms)
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
@@ -5272,20 +5269,19 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
 					TaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Identity:  "worker-y",
 					SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
-						MultiSession: &sessionpb.MultiSessionOptions{WorkerAddress: "worker-y-sticky"},
+						MultiSession: &sessionpb.MultiSessionOptions{},
 					}},
-					WorkerInstanceKey: "worker-y-instance",
+					WorkerInstanceKey: "worker-y-sticky",
 				},
 			})
 
 			s.Require().NoError(err)
 			s.False(response.GetStickyExecutionEnabled(), "a worker coming from the normal queue needs full history")
 			s.Require().NotNil(persisted)
-			s.Equal("worker-y-sticky", persisted.GetSessionState().GetBoundWorkerInfo().GetWorkerQueue())
-			s.Equal("worker-y-instance", persisted.GetSessionState().GetBoundWorkerInfo().GetInstanceKey())
-			s.False(persisted.GetSessionState().GetExclusiveWorker())
 			s.Equal("worker-y-sticky", persisted.GetStickyTaskQueue())
-			s.Equal(tc.wantTimeout, persisted.GetStickyScheduleToStartTimeout().AsDuration())
+			s.Require().NotNil(persisted.GetSessionState())
+			s.False(persisted.GetSessionState().GetExclusiveWorker())
+			s.Nil(persisted.GetStickyScheduleToStartTimeout())
 		})
 	}
 }
