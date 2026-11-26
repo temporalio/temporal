@@ -225,10 +225,7 @@ func (e *ExecutableTaskImpl) Abort() {
 		e.Abort() // retry abort
 	}
 
-	e.ThrottledLogger.Debug(fmt.Sprintf(
-		"replication task: %v encountered abort event",
-		e.taskID,
-	))
+	e.ThrottledLogger.Debug("replication task encountered abort event", tag.TaskID(e.taskID))
 	// should not emit metrics since abort means shutdown
 }
 
@@ -240,10 +237,7 @@ func (e *ExecutableTaskImpl) Cancel() {
 		e.Cancel() // retry cancel
 	}
 
-	e.ThrottledLogger.Debug(fmt.Sprintf(
-		"replication task: %v encountered cancellation event",
-		e.taskID,
-	))
+	e.ThrottledLogger.Debug("replication task encountered cancellation event", tag.TaskID(e.taskID))
 	now := time.Now().UTC()
 	e.emitFinishMetrics(now)
 }
@@ -253,10 +247,7 @@ func (e *ExecutableTaskImpl) Reschedule() {
 		return
 	}
 
-	e.ThrottledLogger.Info(fmt.Sprintf(
-		"replication task: %v scheduled for retry",
-		e.taskID,
-	))
+	e.ThrottledLogger.Info("replication task scheduled for retry", tag.TaskID(e.taskID))
 	atomic.AddInt32(&e.attempt, 1)
 }
 
@@ -389,11 +380,9 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		if processingLatency > 10*time.Second && e.replicationTask != nil {
 			namespaceID, workflowID, runID := e.workflowKeyFromTask()
 			if workflowID != "" {
-				e.ThrottledLogger.Warn(fmt.Sprintf(
-					"replication task latency is too long: queue=%.2fs processing=%.2fs",
-					queueLatency.Seconds(),
-					processingLatency.Seconds(),
-				),
+				e.ThrottledLogger.Warn("replication task latency is too long",
+					tag.NewDurationTag("queue-latency", queueLatency),
+					tag.NewDurationTag("processing-latency", processingLatency),
 					tag.WorkflowNamespace(e.NamespaceName()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
