@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/failpointadapter"
 	"go.temporal.io/server/common/testing/httpfailpoints"
+	"go.temporal.io/server/common/testing/persistencefailpoints"
 	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
 )
@@ -132,6 +133,12 @@ func TestReadStatic_OnlyListedKeysAreBuggified(t *testing.T) {
 	} {
 		require.Equal(t, want, static.Config.Activated(name), name)
 	}
+
+	target := config.FaultInjectionTarget{Store: config.ExecutionStoreName, Method: "UpdateWorkflowExecution"}
+	registry := failpoint.NewRegistry()
+	b := buggify.New(registry)
+	require.NoError(t, b.Set(static.Config))
+	require.NoError(t, persistencefailpoints.NewInjector(registry)(target))
 }
 
 // Outgoing HTTP requests whose paths differ only by an ID are one name to BUGGIFY, so the set of
@@ -196,9 +203,9 @@ func TestTraceLine(t *testing.T) {
 	require.Equal(t, `BUGGIFY event=fire key="grpc:/a.B/C" scope="ns" execution=3 action=Return`, line)
 
 	// Quoting keeps a line parseable when a name or scope has quotes or spaces.
-	line, ok = TraceLine(buggify.Event{Kind: buggify.EventFire, Name: `http:GET /a "b"`, Scope: "name:a b", Action: failpoint.ActionOn, ExecutionNumber: 1})
+	line, ok = TraceLine(buggify.Event{Kind: buggify.EventFire, Name: `http:GET /a "b"`, Scope: "name:a b", Action: failpoint.ActionPanic, ExecutionNumber: 1})
 	require.True(t, ok)
-	require.Equal(t, `BUGGIFY event=fire key="http:GET /a \"b\"" scope="name:a b" execution=1 action=On`, line)
+	require.Equal(t, `BUGGIFY event=fire key="http:GET /a \"b\"" scope="name:a b" execution=1 action=Panic`, line)
 
 	_, ok = TraceLine(buggify.Event{Kind: buggify.EventScopeLimit})
 	require.False(t, ok)

@@ -364,8 +364,8 @@ testcore.InjectFailpoint(env, multioperation.BetweenLockAndStartKey).Call(func()
 }, failpoint.Trigger{MaxFires: 1})
 ```
 
-Failpoints also run at the gRPC and HTTP fault injection points, without a declared key. The keys
-are in `serverfailpoints`:
+Failpoints also run at the gRPC, HTTP, and persistence fault injection points, without a declared
+key. The keys are in `serverfailpoints`:
 
 - `serverfailpoints.GRPCKey(fullMethod)` fires before the handler of a unary gRPC method on every
   service; `serverfailpoints.GRPCResponseKey(fullMethod)` fires after it. An error from the latter
@@ -382,17 +382,38 @@ are in `serverfailpoints`:
   request, if the failpoint of the method or request did not fire with any action (a pause or a
   callback that returns nil also counts). A `CallWithArg` callback receives the request before the
   handler, and a `*grpcfaults.Result` or `*httpfaults.Result` after it.
+- `serverfailpoints.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
+  persistence store method.
 
-gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has one (frontend
-resolves the namespace name of a request to its ID), so `testcore.InjectFailpoint` works for them
-on a shared cluster. A request that only carries a namespace name uses the ID if the service
-resolves it from its namespace cache, and otherwise is scoped to
+gRPC, HTTP, and persistence failpoints are scoped to the namespace ID of the request when it has
+one (frontend resolves the namespace name of a request to its ID), so `testcore.InjectFailpoint`
+works for them on a shared cluster. A request that only carries a namespace name uses the ID if the
+service resolves it from its namespace cache, and otherwise is scoped to
 `failpointadapter.NameScope(name)`; the `Inject*Fault` helpers of `TestEnv` register their faults
 for the ID and the name of the test's namespace. To inject a failpoint for a request that may not
 resolve, such as one that frontend sends to history or matching, scope its key with
-`failpointadapter.NameScope(name)` and use `testcore.InjectFailpointIn`. A failpoint without a scope applies to all namespaces, but only
-to requests whose namespace has no failpoint registered for the same key. A failpoint registered
-for the namespace takes precedence, even when it is disabled.
+`failpointadapter.NameScope(name)` and use `testcore.InjectFailpointIn`. A failpoint without a
+scope applies to all namespaces, but only to requests whose namespace has no failpoint registered
+for the same key. A failpoint registered for the namespace takes precedence, even when it is
+disabled.
+
+The visibility store has no persistence failpoints. Of the other store methods, only those that
+take a request after the context have one. The requests of the following methods have no namespace,
+so only failpoints without a scope fire for them:
+
+- `ShardStore`, `ClusterMetadataStore`, `Queue`, `QueueV2`, and `NexusEndpointStore`: all methods.
+- `ExecutionStore`: history branch methods (`AppendHistoryNodes`, `ReadHistoryBranch`, ...), history
+  task methods (`GetHistoryTasks`, `CompleteHistoryTask`, `RangeCompleteHistoryTasks`),
+  `ListConcreteExecutions`, and the replication DLQ methods except `PutReplicationTaskToDLQ`.
+- `MetadataStore`: `ListNamespaces`, `DeleteNamespaceByName`, and `GetNamespace` by name.
+- `TaskStore`: `ListTaskQueue`.
+
+The history branch methods are unscoped by choice, not because their requests carry no namespace
+information: the `Info` of `AppendHistoryNodes` and `ForkHistoryBranch` can hold the namespace ID,
+but the other branch requests have no such field, so no branch method is scoped.
+
+Inject failpoints for these methods with `testcore.InjectUnscopedFailpoint`, which requires a
+dedicated cluster. `common/persistence/request_namespace.go` maps each request type to its namespace.
 
 ### softassert package
 

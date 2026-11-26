@@ -7,7 +7,25 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/testx/failpoint"
 )
+
+// The failpoint error catalog gets the persistence errors that fault injection names too.
+func init() {
+	failpoint.RegisterError("ShardOwnershipLost", newShardOwnershipLostError)
+	failpoint.RegisterError("Timeout", newTimeoutError)
+	failpoint.RegisterError("ConditionFailed", func(msg string) error {
+		return &persistence.ConditionFailedError{Msg: msg}
+	})
+}
+
+func newShardOwnershipLostError(msg string) error {
+	return &persistence.ShardOwnershipLostError{Msg: msg}
+}
+
+func newTimeoutError(msg string) error {
+	return &persistence.TimeoutError{Msg: msg}
+}
 
 type (
 	fault struct {
@@ -32,17 +50,17 @@ func newFault(errName string, errRate float64, methodName string) fault {
 	header := fmt.Sprintf("fault injection error at %s with %.2f rate", methodName, errRate)
 	switch errName {
 	case "ShardOwnershipLost":
-		return newFaultFromError(&persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("%s: persistence.ShardOwnershipLostError", header)}, errRate)
+		return newFaultFromError(newShardOwnershipLostError(fmt.Sprintf("%s: persistence.ShardOwnershipLostError", header)), errRate)
 	case "DeadlineExceeded":
 		// Real persistence store never returns context.DeadlineExceeded error. It returns persistence.TimeoutError instead.
 		// Therefor "DeadlineExceeded" shouldn't be used with fault injection. Use "Timeout" instead.
 		return newFaultFromError(fmt.Errorf("%s: %w", header, context.DeadlineExceeded), errRate)
 	case "Timeout":
-		return newFaultFromError(&persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}, errRate)
+		return newFaultFromError(newTimeoutError(fmt.Sprintf("%s: persistence.TimeoutError", header)), errRate)
 	case "ExecuteAndTimeout":
 		// Special error which emulates case, when caller got a Timeout error,
 		// but operation actually reached persistence and was executed successfully.
-		f := newFaultFromError(&persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}, errRate)
+		f := newFaultFromError(newTimeoutError(fmt.Sprintf("%s: persistence.TimeoutError", header)), errRate)
 		f.execOp = true
 		return f
 	case "ResourceExhausted":

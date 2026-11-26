@@ -20,11 +20,13 @@ type (
 func newStoreFaultInjector(
 	storeName config.DataStoreName,
 	cfg *config.FaultInjectionDataStoreConfig,
-	injector config.FaultInjector,
+	runtimeInjectors ...config.FaultInjector,
 ) (*storeFaultInjector, bool) {
 	var injectors []faultInjector
-	if injector != nil {
-		injectors = append(injectors, runtimeFaultInjector(injector))
+	for _, injector := range runtimeInjectors {
+		if injector != nil {
+			injectors = append(injectors, runtimeFaultInjector(injector))
+		}
 	}
 	if len(cfg.Methods) > 0 {
 		injectors = append(injectors, configuredFaultInjector(cfg))
