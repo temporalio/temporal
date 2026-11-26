@@ -3639,7 +3639,8 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 	// Phase 1: Write sentinel to V1 key space (dummy workflow) to prevent a
 	// concurrent V1 CreateSchedule from succeeding for the same schedule ID.
 	if wh.scheduleSentinelsEnabled(request.Namespace) {
-		if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
+		err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request)
+		if err != nil {
 			if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); !ok {
 				return nil, err
 			}
@@ -3799,11 +3800,42 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 		}
 		return nil, err
 	}
+	// History returns success for a new run and for a repeated request ID, and
+	// the response has no workflow type. Accept the start only when the current
+	// workflow is the scheduler.
+	if err := wh.rejectUnlessV1Scheduler(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
+		return nil, err
+	}
 	token := make([]byte, 8)
 	binary.BigEndian.PutUint64(token, scheduler.InitialConflictToken)
 	return &workflowservice.CreateScheduleResponse{
 		ConflictToken: token,
 	}, nil
+}
+
+// scheduleSentinelRequestIDMark keeps the sentinel start from using the caller's
+// request ID. History returns success for a repeated request ID on the same
+// workflow ID, whichever workflow type the later start asked for.
+const scheduleSentinelRequestIDMark = "~sentinel"
+
+func scheduleSentinelRequestID(requestID string, maxLen int) string {
+	if maxLen <= len(scheduleSentinelRequestIDMark) {
+		maxLen = len(scheduleSentinelRequestIDMark) + 1
+	}
+	if len(requestID)+len(scheduleSentinelRequestIDMark) <= maxLen {
+		return requestID + scheduleSentinelRequestIDMark
+	}
+	keep := maxLen - len(scheduleSentinelRequestIDMark)
+	if keep > len(requestID) {
+		keep = len(requestID)
+	}
+	candidate := requestID[:keep] + scheduleSentinelRequestIDMark
+	// A max-length caller ID that already ends with the mark would otherwise
+	// truncate back to itself.
+	if candidate == requestID && keep > 0 {
+		candidate = "s" + candidate[1:]
+	}
+	return candidate
 }
 
 // writeSchedulerWorkflowSentinel starts a dummy workflow to reserve the V1
@@ -3820,7 +3852,7 @@ func (wh *WorkflowHandler) writeSchedulerWorkflowSentinel(
 		WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Identity:                 request.Identity,
-		RequestId:                request.RequestId,
+		RequestId:                scheduleSentinelRequestID(request.GetRequestId(), wh.config.MaxIDLengthLimit()),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		// Set TemporalNamespaceDivision so the dummy is hidden from
@@ -3854,12 +3886,16 @@ func (wh *WorkflowHandler) writeSchedulerCHASMSentinel(
 	return err
 }
 
-// isRealSchedulerInV1KeySpace checks if a running V1 scheduler workflow (not a
-// dummy sentinel) exists for the given schedule ID.
-func (wh *WorkflowHandler) isRealSchedulerInV1KeySpace(
+type v1ScheduleExecution struct {
+	workflowType string
+	status       enumspb.WorkflowExecutionStatus
+	found        bool
+}
+
+func (wh *WorkflowHandler) describeV1ScheduleExecution(
 	ctx context.Context,
 	namespaceID, namespaceName, scheduleID string,
-) (bool, error) {
+) (v1ScheduleExecution, error) {
 	workflowID := scheduler.WorkflowIDPrefix + scheduleID
 	descResp, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
@@ -3870,16 +3906,52 @@ func (wh *WorkflowHandler) isRealSchedulerInV1KeySpace(
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-			return false, nil
+			return v1ScheduleExecution{}, nil
 		}
+		return v1ScheduleExecution{}, err
+	}
+	info := descResp.GetWorkflowExecutionInfo()
+	return v1ScheduleExecution{
+		workflowType: info.GetType().GetName(),
+		status:       info.GetStatus(),
+		found:        true,
+	}, nil
+}
+
+// isRealSchedulerInV1KeySpace checks if a running V1 scheduler workflow (not a
+// dummy sentinel) exists for the given schedule ID.
+func (wh *WorkflowHandler) isRealSchedulerInV1KeySpace(
+	ctx context.Context,
+	namespaceID, namespaceName, scheduleID string,
+) (bool, error) {
+	execution, err := wh.describeV1ScheduleExecution(ctx, namespaceID, namespaceName, scheduleID)
+	if err != nil || !execution.found {
 		return false, err
 	}
-
-	info := descResp.GetWorkflowExecutionInfo()
-	if info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if execution.status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return false, nil
 	}
-	return info.GetType().GetName() != dummy.DummyWFTypeName, nil
+	return execution.workflowType != dummy.DummyWFTypeName, nil
+}
+
+func (wh *WorkflowHandler) rejectUnlessV1Scheduler(
+	ctx context.Context,
+	namespaceID, namespaceName, scheduleID string,
+) error {
+	execution, err := wh.describeV1ScheduleExecution(ctx, namespaceID, namespaceName, scheduleID)
+	if err != nil {
+		return err
+	}
+	if execution.workflowType == scheduler.WorkflowType {
+		return nil
+	}
+	wh.logger.Warn(
+		"CreateSchedule start matched a workflow that is not the scheduler",
+		tag.ScheduleID(scheduleID),
+		tag.WorkflowType(execution.workflowType),
+	)
+	return serviceerror.NewWorkflowExecutionAlreadyStarted(
+		fmt.Sprintf("schedule %q: concurrent creation detected", scheduleID), "", "")
 }
 
 func (wh *WorkflowHandler) CreateSchedule(
