@@ -199,6 +199,9 @@ global:
         broadcastAddress: "{{ default "" (env "TEMPORAL_BROADCAST_ADDRESS") }}"
     pprof:
         port: {{ default "0" (env "PPROF_PORT") }}
+    goMemoryLimit:
+        ratio: {{ default "0" (env "TEMPORAL_GO_MEMORY_LIMIT_RATIO") }}
+        refreshInterval: {{ default "0s" (env "TEMPORAL_GO_MEMORY_LIMIT_REFRESH_INTERVAL") }}
     tls:
         refreshInterval: {{ default "0s" (env "TEMPORAL_TLS_REFRESH_INTERVAL") }}
         expirationChecks:
