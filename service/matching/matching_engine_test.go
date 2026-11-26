@@ -7593,6 +7593,72 @@ func (s *matchingEngineSuite) TestSingleSessionOfflineWorkflowAdmission() {
 	}
 }
 
+/*
+TestDescribeStickyTaskQueueStats tests the sticky backlog a worker controller reads for an absent session worker:
+ 1. Spool one exclusive session task to a sticky queue without pollers.
+ 2. Describe the sticky queue with ReportStats and its normal name: it reports that backlog, from the sticky partition.
+ 3. Unload the sticky queue and describe it again: the describe loads it and reports the same backlog.
+ 4. A non-root normal partition still rejects ReportStats.
+*/
+func (s *matchingEngineSuite) TestDescribeStickyTaskQueueStats() {
+	s.mockMatchingClient.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *matchingservice.DescribeTaskQueuePartitionRequest, _ ...grpc.CallOption) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			return s.matchingEngine.DescribeTaskQueuePartition(ctx, request)
+		}).AnyTimes()
+	describe := func(ctx context.Context, tv *testvars.TestVars, queue *taskqueuepb.TaskQueue, taskType enumspb.TaskQueueType) (*workflowservice.DescribeTaskQueueResponse, error) {
+		resp, err := s.matchingEngine.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			DescRequest: &workflowservice.DescribeTaskQueueRequest{TaskQueue: queue, TaskQueueType: taskType, ReportStats: true},
+		})
+		return resp.GetDescResponse(), err
+	}
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		s.Run(taskType.String(), func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			sessionDirective := &taskqueuespb.TaskSessionDirective{
+				IsExclusiveWorkerAssigned: true,
+			}
+			var syncMatch bool
+			var err error
+			if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				_, syncMatch, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+					NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+					ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute), SessionDirective: sessionDirective,
+				})
+			} else {
+				_, syncMatch, err = s.matchingEngine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+					NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+					ScheduledEventId: 7, ScheduleToStartTimeout: durationpb.New(time.Minute), SessionDirective: sessionDirective,
+				})
+			}
+			require.NoError(t, err)
+			require.False(t, syncMatch)
+
+			resp, err := describe(ctx, tv, tv.StickyTaskQueue(), taskType)
+			require.NoError(t, err)
+			require.Equal(t, int64(1), resp.GetStats().GetApproximateBacklogCount())
+
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+			require.NoError(t, err)
+			s.matchingEngine.unloadTaskQueuePartition(pm, unloadCauseUnspecified)
+			resp, err = describe(ctx, tv, tv.StickyTaskQueue(), taskType)
+			require.NoError(t, err)
+			require.Equal(t, int64(1), resp.GetStats().GetApproximateBacklogCount())
+		})
+	}
+	s.Run("non-root normal partition", func() {
+		t := s.T()
+		tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+		partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+		_, err := describe(t.Context(), tv, &taskqueuepb.TaskQueue{Name: partition.RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+		require.ErrorContains(t, err, "root partition or a sticky task queue")
+	})
+}
+
 // TestQueryWorkflowStickyWithoutExclusiveDirective tests that a sticky query for a workflow without an exclusive binding
 // fails at once when the queue has no recent poller, without reading the queue's metadata, as for any sticky query.
 func TestQueryWorkflowStickyWithoutExclusiveDirective(t *testing.T) {

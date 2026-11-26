@@ -305,8 +305,11 @@ func TestSingleSessionConcurrentAcquisition(t *testing.T) {
 TestSingleSessionWorkflowBacklogWithoutPollers tests offline backlog and queue reload:
 1. Acquire A through S and complete its first workflow task.
 2. Unload S and signal A without starting another poller.
-3. Verify Matching reloads S with a backlog and no pollers, with no normal backlog or recorded schedule-to-start timeout.
-4. Unload S again and poll it to resume the original workflow task at attempt 1.
+3. Verify Matching reloads S with a backlog and no pollers, with no normal backlog or recorded schedule-to-start timeout,
+and DescribeTaskQueue on S (as a worker controller calls it) reports that backlog.
+4. Unload S again, verify DescribeTaskQueue on S still reports the backlog, and resume the original workflow task at
+attempt 1 from a replacement worker process (same stable identity, new instance key).
+5. Verify the backlog drains to zero.
 */
 func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	t.Parallel()
@@ -351,6 +354,14 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// A worker controller reads the sticky backlog by the worker's stable identity, with the normal task queue name.
+	describeSticky := func(ctx context.Context, t require.TestingT) int64 {
+		response, err := client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: namespace, TaskQueue: tv.StickyTaskQueue(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, ReportStats: true,
+		})
+		require.NoError(t, err)
+		return response.GetStats().GetApproximateBacklogCount()
+	}
 	// After unloading the sticky task queue partition, the newly scheduled workflow task shall be spooled by loading the task queue partition again.
 	await.Require(t.Context(), t, func(t *await.T) {
 		history := env.SdkClient().GetWorkflowHistory(t.Context(), tv.WorkflowID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
@@ -381,6 +392,7 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 		physical := response.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo()
 		require.Empty(t, physical.GetPollers())
 		require.Positive(t, physical.GetTaskQueueStats().GetApproximateBacklogCount())
+		require.Equal(t, physical.GetTaskQueueStats().GetApproximateBacklogCount(), describeSticky(t.Context(), t))
 		normal, err := client.DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace: namespace, TaskQueue: tv.TaskQueue(), TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, ReportStats: true,
 		})
@@ -392,12 +404,19 @@ func TestSingleSessionWorkflowBacklogWithoutPollers(t *testing.T) {
 		NamespaceId: env.NamespaceID().String(), TaskQueuePartition: partition,
 	})
 	require.NoError(t, err)
-	_, err = poller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	require.Positive(t, describeSticky(t.Context(), t), "describing the unloaded sticky queue loads it and reports its backlog")
+	replacement := taskpoller.New(t, client, namespace).PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: session, WorkerInstanceKey: "replacement-" + tv.WorkerInstanceKey(),
+	})
+	_, err = replacement.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 		require.Equal(t, int32(1), task.GetAttempt(), "the original workflow task resumes without a retry")
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	}, taskpoller.WithContext(t.Context()))
 	require.NoError(t, err)
+	await.Require(t.Context(), t, func(t *await.T) {
+		require.Zero(t, describeSticky(t.Context(), t))
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 /*
