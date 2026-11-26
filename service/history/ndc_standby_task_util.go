@@ -200,6 +200,7 @@ type (
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
+		sessionState                       *persistencespb.SessionState
 	}
 
 	verifyCompletionRecordedPostActionInfo struct {
@@ -242,6 +243,7 @@ func newActivityTaskPostActionInfo(
 		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 		priority:                           priority,
+		sessionState:                       common.CloneProto(mutableState.GetExecutionInfo().GetSessionState()),
 	}, nil
 }
 

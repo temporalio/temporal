@@ -14,6 +14,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
@@ -59,6 +60,7 @@ type Updater struct {
 	workflowTaskStamp                             int32
 	bufferedForWorkflowHeartbeatNotification      bool
 	firstBufferedForWorkflowHeartbeatNotification bool
+	sessionState                                  *persistencespb.SessionState
 	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
@@ -255,6 +257,7 @@ func (u *Updater) applyRequest(
 	}
 
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
+	u.sessionState = common.CloneProto(ms.GetExecutionInfo().GetSessionState())
 	u.priority = common.CloneProto(ms.GetExecutionInfo().Priority)
 	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
@@ -504,6 +507,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 			RunId:      u.wfKey.RunID,
 		},
 		TaskQueue:              u.taskQueue,
+		SessionDirective:       workflow.TaskSessionDirective(u.sessionState, u.taskQueue),
 		ScheduledEventId:       u.scheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,

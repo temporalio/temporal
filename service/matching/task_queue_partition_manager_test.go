@@ -2033,10 +2033,11 @@ type capturingTaskMatchHook struct {
 }
 
 type capturedTaskMatchDetails struct {
-	TaskQueueName     string
-	TaskQueueType     enumspb.TaskQueueType
-	SyncMatchOutcome  hooks.SyncMatchOutcome
-	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
+	TaskQueueName        string
+	TaskQueueType        enumspb.TaskQueueType
+	SyncMatchOutcome     hooks.SyncMatchOutcome
+	DeploymentVersion    *deploymentpb.WorkerDeploymentVersion
+	SingleSessionOptions hooks.SingleSessionOptions
 }
 
 func (h *capturingTaskMatchHook) Create(details *hooks.TaskHookFactoryCreateDetails) hooks.TaskHook {
@@ -2055,9 +2056,10 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	details := capturedTaskMatchDetails{
-		TaskQueueName:    h.taskQueueName,
-		TaskQueueType:    h.taskQueueType,
-		SyncMatchOutcome: event.SyncMatchOutcome,
+		TaskQueueName:        h.taskQueueName,
+		TaskQueueType:        h.taskQueueType,
+		SyncMatchOutcome:     event.SyncMatchOutcome,
+		SingleSessionOptions: event.SingleSessionOptions,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -2266,6 +2268,106 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRec
 	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
 	s.False(exists, "No recordings should exist when there are no recent pollers")
 	s.Empty(recordings, "Metric should not be emitted when there are recent pollers")
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_SingleSession() {
+	for _, tc := range []struct {
+		name      string
+		taskType  enumspb.TaskQueueType
+		syncMatch bool
+		general   bool
+	}{
+		{name: "workflow sync match", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, syncMatch: true},
+		{name: "workflow backlog", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{name: "activity sync match", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, syncMatch: true},
+		{name: "activity backlog", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		{name: "general workflow sync match", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, syncMatch: true, general: true},
+		{name: "general workflow backlog", taskType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, general: true},
+		{name: "general activity sync match", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, syncMatch: true, general: true},
+		{name: "general activity backlog", taskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY, general: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithBuildIDNumber(1)
+			current := tv.WithBuildIDNumber(2)
+			pm := s.newEagerDispatchPartitionManager(0, nil)
+			pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), tc.taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			pm.userDataManager = &mockUserDataManager{data: &persistencespb.VersionedTaskQueueUserData{
+				Data: &persistencespb.TaskQueueUserData{
+					PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+						int32(tc.taskType): {
+							DeploymentData: &persistencespb.DeploymentData{
+								DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+									tv.DeploymentSeries(): {RoutingConfig: &deploymentpb.RoutingConfig{
+										CurrentDeploymentVersion:  current.ExternalDeploymentVersion(),
+										CurrentVersionChangedTime: timestamppb.Now(),
+									}},
+								},
+							},
+						},
+					},
+				},
+			}}
+			queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+			queue.EXPECT().QueueKey().Return(UnversionedQueueKey(pm.partition)).AnyTimes()
+			queue.EXPECT().HasPollerAfter(gomock.Any()).Return(true).AnyTimes()
+			outcome := syncMatchNoPoller
+			hookOutcome := hooks.SyncMatchOutcomeNotMatched
+			if tc.syncMatch {
+				outcome = syncMatchSuccess
+				hookOutcome = hooks.SyncMatchOutcomeSuccess
+			} else {
+				queue.EXPECT().SpoolTask(gomock.Any()).Return(nil)
+			}
+			queue.EXPECT().TrySyncMatch(gomock.Any(), gomock.Any()).Return(outcome, nil)
+			queue.EXPECT().RecordTaskAdd(gomock.Any(), false, enumspb.VERSIONING_BEHAVIOR_PINNED)
+			hook := &capturingTaskMatchHook{}
+			pm.taskHooks = []hooks.TaskHook{hook.Create(&hooks.TaskHookFactoryCreateDetails{Namespace: pm.ns, Partition: pm.partition})}
+			pm.engine.updateTaskQueue(pm.partition, pm)
+			defer func() {
+				pm.engine.partitionsLock.Lock()
+				delete(pm.engine.partitions, pm.partition.Key())
+				pm.engine.partitionsLock.Unlock()
+			}()
+			options := hooks.SingleSessionOptions{WorkerStableIdentity: tv.StickyTaskQueue().GetName()}
+			if tc.general {
+				options = hooks.SingleSessionOptions{}
+			}
+			sessionDirective := &taskqueuespb.TaskSessionDirective{
+				IsExclusiveWorkerAssigned: !tc.general,
+			}
+			directive := &taskqueuespb.TaskVersionDirective{
+				Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: tv.DeploymentVersion(),
+			}
+			var matched bool
+			var err error
+			if tc.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				_, matched, err = pm.engine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+					NamespaceId: namespaceID, Execution: tv.WorkflowExecution(), TaskQueue: tv.StickyTaskQueue(),
+					VersionDirective: directive, SessionDirective: sessionDirective,
+				})
+			} else {
+				_, matched, err = pm.engine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+					NamespaceId: namespaceID, Execution: tv.WorkflowExecution(), TaskQueue: tv.StickyTaskQueue(),
+					VersionDirective: directive, SessionDirective: sessionDirective,
+				})
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.syncMatch, matched)
+			calls := hook.getCalls()
+			require.Len(t, calls, 1)
+			require.Equal(t, tc.taskType, calls[0].TaskQueueType)
+			require.Equal(t, hookOutcome, calls[0].SyncMatchOutcome)
+			require.Equal(t, options, calls[0].SingleSessionOptions)
+			if tc.general {
+				require.Nil(t, calls[0].DeploymentVersion)
+			} else {
+				protorequire.ProtoEqual(t, tv.ExternalDeploymentVersion(), calls[0].DeploymentVersion)
+			}
+		})
+	}
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
@@ -2636,6 +2738,40 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQ
 			return false
 		}
 	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_ReportsSingleSession() {
+	for _, assigned := range []bool{true, false} {
+		s.Run(fmt.Sprintf("assigned=%v", assigned), func() {
+			hook := &capturingTaskMatchHook{}
+			pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+			defer cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			req := newTestQueryWorkflowRequest(nil)
+			req.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: assigned}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = pm.DispatchQueryTask(ctx, "task-id-1", req)
+			}()
+
+			await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+			calls := hook.getCalls()
+			s.Require().Len(calls, 1)
+			expected := hooks.SingleSessionOptions{}
+			if assigned {
+				// A single-session worker's sticky queue is named after its stable identity.
+				expected.WorkerStableIdentity = pm.Partition().RpcName()
+			}
+			s.Equal(expected, calls[0].SingleSessionOptions)
+
+			cancel()
+			<-done
+		})
+	}
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireWithRecentPoller() {
