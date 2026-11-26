@@ -108,6 +108,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: "{{ default .Env.POSTGRES_USER "" }}"
                 password: "{{ default .Env.POSTGRES_PWD "" }}"
+                {{- if .Env.SQL_CONNECT_TIMEOUT }}
+                connectAttributes:
+                    connect_timeout: "{{ .Env.SQL_CONNECT_TIMEOUT }}"
+                {{- end }}
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
@@ -134,6 +138,10 @@ persistence:
                 connectProtocol: "tcp"
                 user: "{{ $visibility_user }}"
                 password: "{{ $visibility_pwd }}"
+                {{- if .Env.SQL_CONNECT_TIMEOUT }}
+                connectAttributes:
+                    connect_timeout: "{{ .Env.SQL_CONNECT_TIMEOUT }}"
+                {{- end }}
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
