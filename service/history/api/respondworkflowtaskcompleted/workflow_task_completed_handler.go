@@ -608,8 +608,8 @@ func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
 			continue
 		}
 		if !candidate.granted {
-			// Matching grants are best-effort. On a denial or any matching failure, generate the
-			// activity task normally instead of failing workflow task completion.
+			// Matching denied the grant, answered with an error, or sent a malformed response. Generate
+			// the activity task normally instead of failing workflow task completion.
 			if err := handler.mutableState.GenerateActivityTask(candidate.activityInfo.GetScheduledEventId()); err != nil {
 				return nil, err
 			}
@@ -669,7 +669,17 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 		},
 		Items: items,
 	})
-	if err != nil || len(response.GetItems()) != len(items) {
+	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+			// Matching did not answer, so it neither granted nor denied these activities. Dispatch them
+			// eagerly: an activity task generated here goes to the Matching that just failed.
+			for _, candidateIndex := range candidateIndexes {
+				handler.eagerActivityCandidates[candidateIndex].granted = true
+			}
+		}
+		return
+	}
+	if len(response.GetItems()) != len(items) {
 		return
 	}
 	for index, item := range response.GetItems() {

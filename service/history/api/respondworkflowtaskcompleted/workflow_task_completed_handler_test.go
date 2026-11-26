@@ -710,10 +710,39 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			granted: []bool{true, false},
 		},
 		{
-			name:     "matching error",
-			response: nil,
-			err:      errors.New("matching unavailable"),
-			granted:  []bool{false, false},
+			name:    "deadline exceeded",
+			err:     serviceerror.NewDeadlineExceeded("deadline exceeded"),
+			granted: []bool{true, true},
+		},
+		{
+			name:    "context deadline exceeded",
+			err:     context.DeadlineExceeded,
+			granted: []bool{true, true},
+		},
+		{
+			name:    "canceled",
+			err:     serviceerror.NewCanceled("canceled"),
+			granted: []bool{true, true},
+		},
+		{
+			name:    "unavailable",
+			err:     serviceerror.NewUnavailable("matching unavailable"),
+			granted: []bool{false, false},
+		},
+		{
+			name:    "unimplemented",
+			err:     serviceerror.NewUnimplemented("unknown method GrantEagerDispatch"),
+			granted: []bool{false, false},
+		},
+		{
+			name:    "resource exhausted",
+			err:     &serviceerror.ResourceExhausted{Message: "matching rate limit exceeded"},
+			granted: []bool{false, false},
+		},
+		{
+			name:    "invalid argument",
+			err:     serviceerror.NewInvalidArgument("invalid deployment version"),
+			granted: []bool{false, false},
 		},
 		{
 			name:     "missing response item",
@@ -1030,6 +1059,64 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 	require.Len(t, mutations, 1)
 }
 
+func TestHandleEagerActivityCandidatesGrantUnanswered(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:   "activity-id",
+		ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+	}
+	activityInfo := &persistencespb.ActivityInfo{
+		ScheduledEventId: 11,
+		ActivityId:       attr.GetActivityId(),
+		Attempt:          1,
+		TaskQueue:        "activity-task-queue",
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id", WorkflowId: "workflow-id"}
+	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
+	ms.EXPECT().GetExecutionInfo().Return(executionInfo).Times(2)
+	ms.EXPECT().GetAssignedBuildId().Return("")
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		activityInfo, int64(11), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,
+	).Return(&historypb.HistoryEvent{EventId: 12}, nil)
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: "run-id"})
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow-type"})
+	shardCtx.EXPECT().NewVectorClock().Return(clock, nil)
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewDeadlineExceeded("deadline exceeded"))
+
+	handler := &workflowTaskCompletedHandler{
+		identity:        "worker",
+		mutableState:    ms,
+		shard:           shardCtx,
+		tokenSerializer: tasktoken.NewSerializer(),
+		logger:          log.NewNoopLogger(),
+		metricsHandler:  metrics.NoopMetricsHandler,
+		matchingClient:  matchingClient,
+		config:          newEagerActivityDispatchTestConfig(true),
+		eagerActivityCandidates: []eagerActivityCandidate{
+			{scheduledEventID: activityInfo.GetScheduledEventId(), attr: attr},
+		},
+	}
+
+	// GenerateActivityTask has no expectation, so the activity must not also go to Matching as a task.
+	mutations, err := handler.handleEagerActivityCandidates(context.Background())
+	require.NoError(t, err)
+	require.Len(t, mutations, 1)
+	response := &historyservice.RespondWorkflowTaskCompletedResponse{}
+	require.NoError(t, mutations[0](response))
+	require.Len(t, response.GetActivityTasks(), 1)
+	require.Equal(t, attr.GetActivityId(), response.GetActivityTasks()[0].GetActivityId())
+}
+
 func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 	t.Parallel()
 
@@ -1046,7 +1133,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 		},
 		{
 			name:        "matching error",
-			matchingErr: errors.New("matching unavailable"),
+			matchingErr: &serviceerror.ResourceExhausted{Message: "matching rate limit exceeded"},
 		},
 		{
 			name:     "malformed response",
