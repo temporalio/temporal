@@ -46,8 +46,9 @@ func executePolicyError[T any](policy Policy, key Key[T]) (value T, set bool) {
 }
 
 // Trip executes the failpoint for key in registry, as Execute does, and
-// reports whether it fired. Trip-style call sites use it with failpoints configured with On.
-// When no failpoint is registered, Trip consults the registry's Policy with key.Scope().
+// reports whether it fired with a value. Trip-style call sites use it with failpoints configured
+// with On; a failpoint that pauses, or blocks and is released, returns false. When no failpoint is
+// registered, Trip consults the registry's Policy with key.Scope().
 func (k Key[T]) Trip(registry *Registry) bool {
 	return k.TripWithPolicyScope(registry, k.Scope())
 }

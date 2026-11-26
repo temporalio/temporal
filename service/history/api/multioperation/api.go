@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -23,6 +22,17 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.temporal.io/testx/failpoint"
+)
+
+// Failpoints of Update-with-Start. Each key documents where it fires and what tests use it for.
+var (
+	// BetweenLockAndStartKey fires after Update-with-Start released the workflow lock and before it
+	// starts the workflow. Tests use Call to start a conflicting workflow in this window.
+	BetweenLockAndStartKey = failpoint.NewKey[error]("history.updateWithStart.betweenLockAndStart")
+	// ClosingWorkflowRetryKey fires before Update-with-Start retries after its update was aborted by
+	// a closing workflow. Tests use Call to start a new workflow before the retry.
+	ClosingWorkflowRetryKey = failpoint.NewKey[error]("history.updateWithStart.closingWorkflowRetry")
 )
 
 var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
@@ -42,7 +52,7 @@ type (
 		shardContext       historyi.ShardContext
 		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
-		testHooks          testhooks.TestHooks
+		failpointRegistry  *failpoint.Registry
 
 		updateReq *historyservice.UpdateWorkflowExecutionRequest
 		startReq  *historyservice.StartWorkflowExecutionRequest
@@ -62,7 +72,7 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
-	testHooks testhooks.TestHooks,
+	failpointRegistry *failpoint.Registry,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
 	if err != nil {
@@ -89,7 +99,7 @@ func Invoke(
 			shardContext:       shardContext,
 			namespaceId:        namespace.ID(req.NamespaceId),
 			consistencyChecker: workflowConsistencyChecker,
-			testHooks:          testHooks,
+			failpointRegistry:  failpointRegistry,
 			updateReq:          updateReq,
 			startReq:           startReq,
 		}
@@ -143,7 +153,11 @@ func Invoke(
 			return nil, err
 		}
 
-		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry, uws.namespaceId)
+		if uws.failpointRegistry != nil {
+			if err, _ := ClosingWorkflowRetryKey.ForScope(uws.namespaceId.String()).Execute(uws.failpointRegistry); err != nil {
+				return nil, err
+			}
+		}
 
 		res, err = uws.Invoke(ctx)
 		if err != nil {
@@ -243,7 +257,12 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
+	// The registry is nil unless failpoints are enabled; without it the key is not built.
+	if uws.failpointRegistry != nil {
+		if err, _ := BetweenLockAndStartKey.ForScope(uws.namespaceId.String()).Execute(uws.failpointRegistry); err != nil {
+			return nil, err
+		}
+	}
 
 	// Workflow does not exist or requires a new run - start and update it!
 	return uws.startAndUpdateWorkflow(ctx)

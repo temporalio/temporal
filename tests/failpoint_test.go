@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -17,8 +18,26 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/testx/failpoint"
 	"go.temporal.io/testx/failpoint/buggify"
 )
+
+func TestFailpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("test cluster registers a failpoint for the test namespace", func(t *testing.T) {
+		t.Parallel()
+		env := testcore.NewEnv(t)
+		registry := testcore.FailpointRegistry(env.GetTestCluster())
+		require.NotNil(t, registry, "test clusters enable failpoints with the startup switch")
+
+		key := matching.ForwardTaskKey.ForScope(env.NamespaceID().String())
+		require.Nil(t, registry.Get(key))
+		testcore.InjectFailpoint(env, matching.ForwardTaskKey, testcore.MayNotFire()).Return(errors.New("injected"), failpoint.Trigger{MaxFires: 1})
+		require.NotNil(t, registry.Get(key))
+		require.Nil(t, registry.Get(matching.ForwardTaskKey), "the failpoint is scoped to the test namespace")
+	})
+}
 
 // TestBuggify runs a dedicated cluster with BUGGIFY enabled through the testing.buggify dynamic
 // config setting and verifies that matching.SkipSyncMatchKey is activated and fires
@@ -104,9 +123,13 @@ func completeWorkflows(t *testing.T, env *testcore.TestEnv) {
 func TestSkipSyncMatch(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t)
-	testcore.InjectFailpoint(env, matching.SkipSyncMatchKey).On()
+	fp := testcore.InjectFailpoint(env, matching.SkipSyncMatchKey)
+	fp.On()
 
 	completeWorkflows(t, env)
+
+	_, fires := fp.Stats()
+	require.Positive(t, fires, "matching skipped the sync match")
 }
 
 // TestBuggifiableSettings completes workflows with each value that BUGGIFY picks for its settings,
