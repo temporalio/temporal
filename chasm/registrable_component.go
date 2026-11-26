@@ -32,6 +32,23 @@ type (
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
 		contextValues map[any]any
+
+		speculativeOptions SpeculativeOptions
+	}
+
+	// SpeculativeOptions configures how executions of an archetype handle [WithSpeculative]
+	// transitions.
+	SpeculativeOptions struct {
+		// AutoPersist persists a pending speculative transition after a while. Nil leaves it
+		// pending until the next normal transition.
+		AutoPersist *AutoPersistOptions
+	}
+
+	// AutoPersistOptions configures [SpeculativeOptions.AutoPersist].
+	AutoPersistOptions struct {
+		// MaxUnpersistedDuration is how long a speculative transition may stay unpersisted before it is
+		// persisted. It is a soft max: persisting can take slightly longer. Must be positive.
+		MaxUnpersistedDuration time.Duration
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -87,6 +104,14 @@ func (rc *RegistrableComponent) IsDetached() bool {
 func WithRecordPrincipals() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.recordPrincipals = true
+	}
+}
+
+// WithSpeculativeOptions sets how executions of this archetype handle [WithSpeculative] transitions.
+// It only has an effect on a component registered as the root of an execution.
+func WithSpeculativeOptions(options SpeculativeOptions) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.speculativeOptions = options
 	}
 }
 

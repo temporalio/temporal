@@ -264,6 +264,20 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		require.Contains(t, err.Error(), "name must follow golang identifier rules")
 	})
 
+	for name, maxUnpersistedDuration := range map[string]time.Duration{"zero": 0, "negative": -time.Second} {
+		s.Run("auto persist MaxUnpersistedDuration must be positive: "+name, func() {
+			lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+				chasm.NewRegistrableComponent[*chasm.MockComponent]("AutoPersistComponent",
+					chasm.WithSpeculativeOptions(chasm.SpeculativeOptions{
+						AutoPersist: &chasm.AutoPersistOptions{MaxUnpersistedDuration: maxUnpersistedDuration},
+					})),
+			})
+			r := chasm.NewRegistry(s.logger)
+			err := r.Register(lib)
+			s.Require().ErrorContains(err, "auto persist MaxUnpersistedDuration")
+		})
+	}
+
 	s.Run("component field must not use a reserved name", func() {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
 			chasm.NewRegistrableComponent[*testComponentWithReservedFieldName]("ComponentWithReservedField"),

@@ -1151,15 +1151,19 @@ func (t *timerQueueActiveTaskExecutor) executeChasmMemoryWakeup(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	_, ms, release, err := t.loadCachedChasmExecution(ctx, task)
+	wfCtx, ms, release, err := t.loadCachedChasmExecution(ctx, task)
 	if err != nil || ms == nil {
 		return err
 	}
 	defer func() { release(retErr) }()
 
 	tree := ms.ChasmTree()
-	if _, err := tree.RunMemoryWakeup(ctx, task, ms.Now()); err != nil {
+	result, err := tree.RunMemoryWakeup(ctx, task, ms.Now())
+	if err != nil {
 		return err
+	}
+	if result.PersistNow {
+		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 	}
 	return tree.ArmMemoryWakeup()
 }

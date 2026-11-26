@@ -47,6 +47,9 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 	opts := []chasm.RegistrableComponentOption{
 		chasm.WithBusinessIDAlias("PayloadStoreId"),
 		chasm.WithRecordPrincipals(),
+		chasm.WithSpeculativeOptions(chasm.SpeculativeOptions{
+			AutoPersist: &chasm.AutoPersistOptions{MaxUnpersistedDuration: time.Second},
+		}),
 		chasm.WithSearchAttributes(
 			PayloadTotalCountSearchAttribute,
 			PayloadTotalSizeSearchAttribute,

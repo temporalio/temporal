@@ -4597,6 +4597,126 @@ func (s *nodeSuite) TestCloseTransaction_CancelsMemoryWakeups() {
 	s.Equal(ctasks.TaskStateCancelled, armed[0].State())
 }
 
+func (s *nodeSuite) TestAutoPersist_Disabled() {
+	root, _ := s.cleanTestComponentTree()
+	s.nodeBackend.HandleAddMemoryWakeup = func(time.Time) (*tasks.ChasmMemoryWakeupTask, error) {
+		s.FailNow("no wake-up expected")
+		return nil, nil
+	}
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.timeSource.Update(start)
+
+	s.applySpeculativeChange(root, "a")
+	s.NoError(root.ArmMemoryWakeup())
+
+	s.timeSource.Update(start.Add(time.Hour))
+	s.applySpeculativeChange(root, "b")
+	decision, err := root.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.False(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestAutoPersist_FirstTransitionSetsDeadline() {
+	root, _ := s.cleanTestComponentTree()
+	s.enableAutoPersist(5 * time.Second)
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.timeSource.Update(start)
+
+	s.applySpeculativeChange(root, "a")
+	decision, err := root.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.False(decision.PersistNow)
+	s.NoError(root.ArmMemoryWakeup())
+
+	// A later transition before the deadline keeps the deadline and arms nothing new.
+	s.timeSource.Update(start.Add(2 * time.Second))
+	s.applySpeculativeChange(root, "b")
+	decision, err = root.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.False(decision.PersistNow)
+	s.NoError(root.ArmMemoryWakeup())
+
+	armed := s.armedMemoryWakeups(root)
+	s.Require().Len(armed, 1)
+	s.Equal(start.Add(5*time.Second+autoPersistWakeupBuffer), armed[0].VisibilityTimestamp)
+}
+
+func (s *nodeSuite) TestAutoPersist_TransitionAfterDeadlinePersists() {
+	root, _ := s.cleanTestComponentTree()
+	s.enableAutoPersist(5 * time.Second)
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.timeSource.Update(start)
+	s.applySpeculativeChange(root, "a")
+
+	s.timeSource.Update(start.Add(5 * time.Second))
+	s.applySpeculativeChange(root, "b")
+	decision, err := root.SpeculativeTransitionDecision(context.Background())
+	s.NoError(err)
+	s.True(decision.PersistNow)
+}
+
+func (s *nodeSuite) TestAutoPersist_WakeupPersistsWhenDue() {
+	root, _ := s.cleanTestComponentTree()
+	s.enableAutoPersist(5 * time.Second)
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.timeSource.Update(start)
+	s.applySpeculativeChange(root, "a")
+	s.NoError(root.ArmMemoryWakeup())
+	wakeup := s.armedMemoryWakeups(root)[0]
+
+	result, err := root.RunMemoryWakeup(context.Background(), wakeup, start.Add(time.Second))
+	s.NoError(err)
+	s.False(result.PersistNow)
+
+	result, err = root.RunMemoryWakeup(context.Background(), wakeup, start.Add(5*time.Second))
+	s.NoError(err)
+	s.True(result.PersistNow)
+}
+
+func (s *nodeSuite) TestAutoPersist_CloseStartsNewWindow() {
+	root, _ := s.cleanTestComponentTree()
+	s.enableAutoPersist(5 * time.Second)
+	start := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.timeSource.Update(start)
+	s.applySpeculativeChange(root, "a")
+	s.NoError(root.ArmMemoryWakeup())
+	firstWakeup := s.armedMemoryWakeups(root)[0]
+
+	_, err := root.CloseTransaction(context.Background(), true)
+	s.NoError(err)
+	s.Equal(ctasks.TaskStateCancelled, firstWakeup.State())
+	_, ok := root.nextMemoryWakeupTime()
+	s.False(ok)
+
+	// The old wake-up finds nothing to persist.
+	result, err := root.RunMemoryWakeup(context.Background(), firstWakeup, start.Add(time.Hour))
+	s.NoError(err)
+	s.False(result.PersistNow)
+
+	next := start.Add(3 * time.Second)
+	s.timeSource.Update(next)
+	s.applySpeculativeChange(root, "b")
+	s.NoError(root.ArmMemoryWakeup())
+	armed := s.armedMemoryWakeups(root)
+	s.Require().Len(armed, 1)
+	s.Equal(next.Add(5*time.Second+autoPersistWakeupBuffer), armed[0].VisibilityTimestamp)
+}
+
+// enableAutoPersist sets AutoPersist on the test library's root component for this test's registry.
+func (s *nodeSuite) enableAutoPersist(maxUnpersistedDuration time.Duration) {
+	rc, ok := s.registry.ComponentFor(&TestComponent{})
+	s.Require().True(ok)
+	rc.speculativeOptions.AutoPersist = &AutoPersistOptions{MaxUnpersistedDuration: maxUnpersistedDuration}
+}
+
+func (s *nodeSuite) applySpeculativeChange(root *Node, requestID string) {
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: requestID}
+	s.NoError(root.ApplySpeculativeTransition(context.Background()))
+}
+
 func (s *nodeSuite) armedMemoryWakeups(root *Node) []*tasks.ChasmMemoryWakeupTask {
 	var armed []*tasks.ChasmMemoryWakeupTask
 	for _, w := range root.memory.wakeups {

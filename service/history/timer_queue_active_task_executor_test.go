@@ -2951,3 +2951,24 @@ func (s *timerQueueActiveTaskExecutorSuite) TestChasmMemoryWakeup_RunsAndRearms(
 	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
 	s.NoError(resp.ExecutionErr)
 }
+
+func (s *timerQueueActiveTaskExecutorSuite) TestChasmMemoryWakeup_PersistNow() {
+	executor, mockCache, wakeup := s.newChasmMemoryWakeupTest()
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).Times(1)
+	s.expectChasmMemoryWakeupLoad(mockCache, wfCtx).Times(1)
+
+	gomock.InOrder(
+		chasmTree.EXPECT().RunMemoryWakeup(gomock.Any(), wakeup, s.now).Return(chasm.MemoryWakeupResult{PersistNow: true}, nil),
+		wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.mockShard).Return(nil),
+	)
+	// The write leaves nothing pending, so nothing is armed.
+	chasmTree.EXPECT().ArmMemoryWakeup().Times(0)
+
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(wakeup))
+	s.NoError(resp.ExecutionErr)
+}

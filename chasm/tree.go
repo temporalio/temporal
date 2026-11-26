@@ -196,6 +196,10 @@ type (
 		// speculativeTransitionFailoverVersion is the namespace failover version of the pending
 		// speculative transition.
 		speculativeTransitionFailoverVersion int64
+		// autoPersistDeadline is when the pending speculative transition must be persisted, in the
+		// execution's logical time. Zero when nothing is pending or the archetype has no
+		// [SpeculativeOptions.AutoPersist].
+		autoPersistDeadline time.Time
 		// wakeups are the armed in-memory wake-ups, latest fire time first. CloseTransaction cancels them.
 		wakeups []memoryWakeup
 	}
@@ -206,7 +210,10 @@ type (
 	}
 
 	// MemoryWakeupResult is what [Node.RunMemoryWakeup] leaves for the caller to do.
-	MemoryWakeupResult struct{}
+	MemoryWakeupResult struct {
+		// PersistNow requires the caller to persist the pending speculative transition.
+		PersistNow bool
+	}
 
 	taskWithAttributes struct {
 		task       any
@@ -1991,9 +1998,34 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 		}
 	}
 
+	if !n.memory.speculativeTransitionPending {
+		if autoPersist := n.autoPersistOptions(); autoPersist != nil {
+			n.memory.autoPersistDeadline = n.backend.Now().Add(autoPersist.MaxUnpersistedDuration)
+		}
+	}
 	n.memory.speculativeTransitionPending = true
 	n.memory.speculativeTransitionFailoverVersion = n.backend.GetCurrentVersion()
 	return nil
+}
+
+// autoPersistOptions returns the [SpeculativeOptions.AutoPersist] of the execution's archetype.
+func (n *Node) autoPersistOptions() *AutoPersistOptions {
+	archetypeID := n.ArchetypeID()
+	if archetypeID == UnspecifiedArchetypeID {
+		return nil
+	}
+	rc, ok := n.registry.ComponentByID(archetypeID)
+	if !ok {
+		return nil
+	}
+	return rc.speculativeOptions.AutoPersist
+}
+
+// autoPersistDue reports whether the pending speculative transition has reached its auto persist
+// deadline.
+func (n *Node) autoPersistDue(now time.Time) bool {
+	deadline := n.memory.autoPersistDeadline
+	return n.memory.speculativeTransitionPending && !deadline.IsZero() && !deadline.After(now)
 }
 
 // SpeculativeTransitionFailoverVersion returns the namespace failover version of the pending speculative
@@ -2001,6 +2033,10 @@ func (n *Node) ApplySpeculativeTransition(_ context.Context) error {
 func (n *Node) SpeculativeTransitionFailoverVersion() (int64, bool) {
 	return n.memory.speculativeTransitionFailoverVersion, n.memory.speculativeTransitionPending
 }
+
+// autoPersistWakeupBuffer delays the auto persist wake-up past the deadline, so a busy execution's
+// next speculative transition persists before the wake-up competes for the execution lock.
+const autoPersistWakeupBuffer = 200 * time.Millisecond
 
 // memoryWakeupGracePeriod is how long past its fire time an armed wake-up is still expected to run.
 // Older entries may have been lost, so they no longer block arming.
@@ -2016,8 +2052,8 @@ func (n *Node) ArmMemoryWakeup() error {
 	return n.armMemoryWakeupAt(fireTime)
 }
 
-// RunMemoryWakeup handles a fired in-memory wake-up. The caller does what the result asks, then
-// calls [Node.ArmMemoryWakeup].
+// RunMemoryWakeup handles a fired in-memory wake-up. The caller does what the result asks. When
+// it doesn't persist, the caller then calls [Node.ArmMemoryWakeup].
 func (n *Node) RunMemoryWakeup(
 	_ context.Context,
 	wakeup *tasks.ChasmMemoryWakeupTask,
@@ -2034,14 +2070,16 @@ func (n *Node) RunMemoryWakeup(
 		w.task.Cancel()
 		return true
 	})
-	return MemoryWakeupResult{}, nil
+	return MemoryWakeupResult{PersistNow: n.autoPersistDue(now)}, nil
 }
 
 // nextMemoryWakeupTime returns when the execution next has in-memory work. The bool is false when
 // it has none.
 func (n *Node) nextMemoryWakeupTime() (time.Time, bool) {
-	// Returns false until a feature adds in-memory work.
-	return time.Time{}, false
+	if !n.memory.speculativeTransitionPending || n.memory.autoPersistDeadline.IsZero() {
+		return time.Time{}, false
+	}
+	return n.memory.autoPersistDeadline.Add(autoPersistWakeupBuffer), true
 }
 
 // armMemoryWakeupAt schedules a wake-up at fireTime unless an armed wake-up fires at or before it.
@@ -2091,7 +2129,10 @@ func (n *Node) SpeculativeTransitionDecision(ctx context.Context) (TransitionDec
 	if err != nil {
 		return TransitionDecision{}, err
 	}
-	return TransitionDecision{PersistNow: closes, NotifyPollers: true}, nil
+	return TransitionDecision{
+		PersistNow:    closes || n.autoPersistDue(n.backend.Now()),
+		NotifyPollers: true,
+	}, nil
 }
 
 // speculativeTransitionClosesExecution reports whether the root is closed in memory while the
@@ -3001,6 +3042,7 @@ func (n *Node) cleanupTransaction() {
 	n.needsPointerResolution = false
 	n.totalTimeSkippedUpdatedInPassive = false
 	n.memory.speculativeTransitionPending = false
+	n.memory.autoPersistDeadline = time.Time{}
 	// A persisted transaction leaves no in-memory work, and armed fire times may use an old
 	// time-skipping offset.
 	n.cancelMemoryWakeups()
