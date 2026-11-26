@@ -1199,24 +1199,73 @@ var (
 		"describe_workflow_signal_backlinks",
 		WithDescription("The number of signal backlinks resolved from the CHASM IncomingSignals map in DescribeWorkflow responses."),
 	)
-	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
-	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
-	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
-	WorkflowDelayedStartBackoffTimerCount = NewCounterDef("workflow_delayed_start_backoff_timer")
-	WorkflowCleanupDeleteCount            = NewCounterDef("workflow_cleanup_delete")
-	WorkflowSuccessCount                  = NewCounterDef("workflow_success")
-	WorkflowCancelCount                   = NewCounterDef("workflow_cancel")
-	WorkflowFailedCount                   = NewCounterDef("workflow_failed")
-	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
-	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
-	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
-	WorkflowScheduleToCloseLatency        = NewTimerDef("workflow_schedule_to_close_latency")
-	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
-	ReplicationStreamError                = NewCounterDef("replication_stream_error")
-	ReplicationServiceError               = NewCounterDef("replication_service_error")
-	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
-	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
-	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	WorkflowBackoffCount                    = NewCounterDef("workflow_backoff_timer")
+	WorkflowRetryBackoffTimerCount          = NewCounterDef("workflow_retry_backoff_timer")
+	WorkflowCronBackoffTimerCount           = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowDelayedStartBackoffTimerCount   = NewCounterDef("workflow_delayed_start_backoff_timer")
+	WorkflowCleanupDeleteCount              = NewCounterDef("workflow_cleanup_delete")
+	WorkflowSuccessCount                    = NewCounterDef("workflow_success")
+	WorkflowCancelCount                     = NewCounterDef("workflow_cancel")
+	WorkflowFailedCount                     = NewCounterDef("workflow_failed")
+	WorkflowTimeoutCount                    = NewCounterDef("workflow_timeout")
+	WorkflowTerminateCount                  = NewCounterDef("workflow_terminate")
+	WorkflowContinuedAsNewCount             = NewCounterDef("workflow_continued_as_new")
+	WorkflowScheduleToCloseLatency          = NewTimerDef("workflow_schedule_to_close_latency")
+	ReplicationStreamPanic                  = NewCounterDef("replication_stream_panic")
+	ReplicationStreamError                  = NewCounterDef("replication_stream_error")
+	ReplicationServiceError                 = NewCounterDef("replication_service_error")
+	ReplicationStreamStuck                  = NewCounterDef("replication_stream_stuck")
+	ReplicationLanePolicyFailures           = NewCounterDef("replication_lane_policy_failures")
+	ReplicationStreamImplementationSelected = NewCounterDef(
+		"replication_stream_implementation_selected",
+		WithDescription("The number of replication streams created, tagged by the implementation selected for each."),
+	)
+	ReplicationLaneCreated = NewCounterDef(
+		"replication_lane_created",
+		WithDescription("The number of replication lanes created by lane stream senders."),
+	)
+	ReplicationLaneRetired = NewCounterDef(
+		"replication_lane_retired",
+		WithDescription("The number of replication lanes retired by lane stream senders."),
+	)
+	ReplicationLaneLag = NewTimerDef(
+		"replication_lane_lag",
+		WithDescription("How far a replication lane is behind: the age of its oldest task that the receiver has not acknowledged."),
+	)
+	ReplicationLaneMaxLagExceeded = NewCounterDef(
+		"replication_lane_max_lag_exceeded",
+		WithDescription("The number of acks for which a replication lane's lag exceeded history.ReplicationLaneMaxLag."),
+	)
+	ReplicationLaneTasksSent = NewCounterDef(
+		"replication_lane_tasks_sent",
+		WithDescription("The number of replication tasks sent on replication lanes."),
+	)
+	ReplicationLaneTasksSkippedByDefault = NewCounterDef(
+		"replication_lane_tasks_skipped_by_default",
+		WithDescription("The number of HIGH priority replication tasks the default lane skipped because a replication lane owns them. Over time this should match replication_lane_tasks_sent, apart from re-sends after reconnects."),
+	)
+	ReplicationLanePaused = NewCounterDef(
+		"replication_lane_paused",
+		WithDescription("The number of times a receiver paused a replication lane, as seen by the lane stream sender."),
+	)
+	ReplicationLaneResumed = NewCounterDef(
+		"replication_lane_resumed",
+		WithDescription("The number of times a receiver resumed a paused replication lane, as seen by the lane stream sender."),
+	)
+	ReplicationLaneCount = NewDimensionlessHistogramDef(
+		"replication_lane_count",
+		WithDescription("The number of replication lanes a lane stream sender holds, including pending and retiring lanes, recorded at each receiver ack."),
+	)
+	ReplicationLaneFeedbackDropped = NewCounterDef(
+		"replication_lane_feedback_dropped",
+		WithDescription("The number of receiver lane feedback payloads omitted because their serialized size exceeds the configured byte limit."),
+	)
+	ReplicationLaneDrainCapped = NewCounterDef(
+		"replication_lane_drain_capped",
+		WithDescription("The number of sends a withdrawn replication lane deferred under ReplicationLaneDrainTasksPerSecond while it drained."),
+	)
+	ReplicationStreamChannelFull = NewCounterDef("replication_stream_channel_full")
+	ReplicationTasksSend         = NewCounterDef("replication_tasks_send")
 	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
 	// shard's read-through buffer; ReplicationStreamReadBufferMisses counts pages that fell
 	// through to persistence while the buffer was enabled. With N streams/lanes scanning the

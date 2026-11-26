@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -29,6 +30,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
@@ -36,10 +38,14 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -56,6 +62,7 @@ type (
 		serializer    serialization.Serializer
 		generator     test.Generator
 		once          sync.Once
+		laneStreams   bool
 	}
 )
 
@@ -64,6 +71,7 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
+		laneStreams             bool
 	}{
 		{
 			name:                    "DisableTransitionHistory",
@@ -73,10 +81,16 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 			name:                    "EnableTransitionHistory",
 			enableTransitionHistory: true,
 		},
+		{
+			name:                    "EnableTransitionHistory_LaneStreams",
+			enableTransitionHistory: true,
+			laneStreams:             true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &streamBasedReplicationTestSuite{
 				namespaceName: "replication-test-" + common.GenerateRandomString(5),
+				laneStreams:   tc.laneStreams,
 			}
 			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
@@ -92,6 +106,10 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
 		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
 	}
+	if s.laneStreams {
+		// Replication lanes split HIGH priority traffic, which requires the tiered stack.
+		s.dynamicConfigOverrides[dynamicconfig.EnableReplicationTaskTieredProcessing.Key()] = true
+	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 
@@ -100,6 +118,56 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		testcore.WithClusterHistoryTaskRecorder(),
 		testcore.WithReplicationStreamRecorder(),
 	)
+	if s.laneStreams {
+		s.switchToLaneStreams()
+	}
+}
+
+// switchToLaneStreams selects the lane stream implementation for every stream between the
+// clusters, with lanes enabled on both ends, and waits until each cluster has created lane
+// senders and receivers.
+func (s *streamBasedReplicationTestSuite) switchToLaneStreams() {
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		captures[i] = captureHandler.StartCapture()
+		s.T().Cleanup(func() { captureHandler.StopCapture(captures[i]) })
+	}
+	for _, c := range s.clusters {
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverLanesEnabled, true)
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamSenderLanesEnabled, true)
+		s.selectStreamImplementations(c, "lane", "lane")
+	}
+	// SetupSuite's T lives for the whole suite, so wait on a background context: a context
+	// bound to the suite's T would fail the suite once the suite outlasts its timeout.
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.laneStreamsCreated(captures), "clusters did not create lane stream senders and receivers")
+	}, 30*time.Second, 200*time.Millisecond)
+}
+
+// laneStreamsCreated reports whether every capture recorded both a lane stream sender and a
+// lane stream receiver.
+func (s *streamBasedReplicationTestSuite) laneStreamsCreated(captures []*metricstest.Capture) bool {
+	for _, capture := range captures {
+		var laneSender, laneReceiver bool
+		for _, recording := range capture.SnapshotMetric(metrics.ReplicationStreamImplementationSelected.Name()) {
+			if recording.Tags["replication_stream_implementation"] != "lane" {
+				continue
+			}
+			switch recording.Tags["operation"] {
+			case laneTestSenderOperation:
+				laneSender = true
+			case laneTestReceiverOperation:
+				laneReceiver = true
+			default:
+			}
+		}
+		if !laneSender || !laneReceiver {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
@@ -1441,4 +1509,689 @@ func (s *streamBasedReplicationTestSuite) dumpRecorders() {
 			s.T().Logf("Wrote cluster %d replication stream to %s", i, replicationFile)
 		}
 	}
+}
+
+// TestLaneIsolation isolates the suite's namespace onto a replication lane, checks that its
+// tasks replicate on the lane, and checks that the lane retires once the namespace is no
+// longer isolated.
+func (s *streamBasedReplicationTestSuite) TestLaneIsolation() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	stopIsolating := s.isolateSuiteNamespace(1000)
+	workflowIDs := s.startWorkflowsUntilLaneSendsTasks()
+	s.requireWorkflowsReplicated(workflowIDs[len(workflowIDs)-1:])
+
+	stopIsolating()
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.sawLaneMessage(s.clusters[0], func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo().GetRetire()
+		}), "the lane did not retire")
+	}, 60*time.Second, time.Second)
+}
+
+// TestLaneKillSwitch_SenderLanesDisabled turns sender lanes off while a lane has a backlog.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_SenderLanesDisabled() {
+	s.runLaneKillSwitchDrill(func() {
+		for _, c := range s.clusters {
+			c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamSenderLanesEnabled, false)
+		}
+	})
+}
+
+// TestLaneKillSwitch_LegacySender switches senders back to the legacy implementation while
+// a lane has a backlog.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_LegacySender() {
+	s.runLaneKillSwitchDrill(func() {
+		for _, c := range s.clusters {
+			s.selectStreamImplementations(c, "legacy", "lane")
+		}
+	})
+}
+
+// TestLaneKillSwitch_LegacyReceiver switches receivers back to the legacy implementation while a
+// lane has a backlog, as when the receiving cluster rolls back to a binary without the lane
+// implementation.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_LegacyReceiver() {
+	s.runLaneKillSwitchDrill(func() {
+		for _, c := range s.clusters {
+			s.selectStreamImplementations(c, "lane", "legacy")
+		}
+	})
+}
+
+// TestLaneKillSwitch_OneCluster applies each kill switch only on the cluster that runs the side
+// it controls, as an operator overriding a single cell would: sender switches on the active
+// cluster, receiver switches on the standby.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_OneCluster() {
+	for _, killSwitch := range []laneKillSwitch{
+		s.senderLanesDisabled(),
+		s.legacySender(),
+		s.receiverLanesDisabled(),
+		s.legacyReceiver(),
+	} {
+		s.Run(killSwitch.name, func() {
+			s.runLaneKillSwitchDrill(func() {
+				s.applyAndAwaitRestart(killSwitch)
+			})
+		})
+	}
+}
+
+// TestLaneKillSwitch_Sequences applies every kill switch, one after another, while a lane has a
+// backlog: in the runbook's order, and in reverse, as an operator starting from the receiver
+// would. Each step that restarts a stream waits for the restart, so every intermediate config
+// runs before the next step.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_Sequences() {
+	awaited := func(killSwitch laneKillSwitch) func() {
+		return func() { s.applyAndAwaitRestart(killSwitch) }
+	}
+	for _, tc := range []struct {
+		name  string
+		steps func(stopIsolating func()) []func()
+	}{
+		{
+			name: "Runbook",
+			steps: func(stopIsolating func()) []func() {
+				return []func(){
+					stopIsolating,
+					awaited(s.senderLanesDisabled()),
+					awaited(s.legacySender()),
+					awaited(s.receiverLanesDisabled()),
+				}
+			},
+		},
+		{
+			name: "Reversed",
+			steps: func(stopIsolating func()) []func() {
+				return []func(){
+					awaited(s.receiverLanesDisabled()),
+					awaited(s.legacySender()),
+					// The sender is legacy by now, and the lane setting does not restart it.
+					func() { s.senderLanesDisabled().apply() },
+					stopIsolating,
+				}
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			workflowIDs, stopIsolating := s.startLaneBacklog()
+			defer stopIsolating()
+			for _, step := range tc.steps(stopIsolating) {
+				step()
+			}
+			s.requireWorkflowsReplicated(workflowIDs)
+		})
+	}
+}
+
+// TestLaneKillSwitch_Flapping turns a sender or receiver kill switch on and off again several
+// times while a lane has a backlog, waiting for each restart, and ends with the switch on.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_Flapping() {
+	for _, killSwitch := range []laneKillSwitch{s.senderLanesDisabled(), s.legacySender(), s.receiverLanesDisabled(), s.legacyReceiver()} {
+		s.Run(killSwitch.name, func() {
+			workflowIDs, stopIsolating := s.startLaneBacklog()
+			defer stopIsolating()
+			for range 3 {
+				revert := s.applyAndAwaitRestart(killSwitch)
+				s.awaitStreamRestart(killSwitch.cluster, killSwitch.operation, revert)
+				workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+			}
+			s.applyAndAwaitRestart(killSwitch)
+			s.requireWorkflowsReplicated(workflowIDs)
+		})
+	}
+}
+
+// TestLaneReenableAfterLegacySender switches the sender to legacy while a lane has a backlog,
+// then back to the lane implementation. A new lane must form from the reader state that the
+// legacy sender persisted, and no workflow may be lost across either switch.
+func (s *streamBasedReplicationTestSuite) TestLaneReenableAfterLegacySender() {
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	legacySender := s.legacySender()
+	restoreLaneSender := s.applyAndAwaitRestart(legacySender)
+	s.requireWorkflowsReplicated(workflowIDs)
+
+	stopSlowLane()
+	// Isolating again clears the recorded messages, so a lane message seen below was sent after
+	// the lane implementation came back.
+	stopIsolating := s.isolateSuiteNamespace(1000)
+	defer stopIsolating()
+	s.awaitStreamRestart(legacySender.cluster, legacySender.operation, restoreLaneSender)
+	workflowIDs = append(workflowIDs, s.startWorkflowsUntilLaneSendsTasks()...)
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneShardReload reloads every history shard on both clusters, first while a lane is active
+// and then while a lane has a backlog. The active lane must keep sending after the reload, and a
+// kill switch applied after the reload must still recover the backlog.
+func (s *streamBasedReplicationTestSuite) TestLaneShardReload() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	active := s.clusters[0]
+	s.Run("ActiveLane", func() {
+		stopIsolating := s.isolateSuiteNamespace(1000)
+		defer stopIsolating()
+		workflowIDs := s.startWorkflowsUntilLaneSendsTasks()
+		s.awaitStreamRestart(active, laneTestSenderOperation, s.reloadHistoryShards)
+		for _, c := range s.clusters {
+			c.GetReplicationStreamRecorder().Clear()
+		}
+		workflowIDs = append(workflowIDs, s.startWorkflowsUntilLaneSendsTasks()...)
+		s.requireWorkflowsReplicated(workflowIDs)
+	})
+	s.Run("Backlog", func() {
+		s.runLaneKillSwitchDrill(func() {
+			s.awaitStreamRestart(active, laneTestSenderOperation, s.reloadHistoryShards)
+			s.applyAndAwaitRestart(s.senderLanesDisabled())
+		})
+	})
+}
+
+// TestLaneKillSwitch_ReceiverLanesDisabled turns receiver lane support off while a lane has a
+// backlog, as when the receiving cluster rolls back to a binary without lanes.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_ReceiverLanesDisabled() {
+	s.runLaneKillSwitchDrill(func() {
+		for _, c := range s.clusters {
+			c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverLanesEnabled, false)
+		}
+	})
+}
+
+// TestLanePause makes the standby pause the suite namespace's lane on every ack. The lane must
+// hold its tasks without the standby ever pausing the default HIGH lane, and send them once the
+// standby resumes it.
+func (s *streamBasedReplicationTestSuite) TestLanePause() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	active, standby := s.clusters[0], s.clusters[1]
+	// A limit below zero pauses a lane even with no outstanding task.
+	resume := standby.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationReceiverLaneMaxOutstandingTaskCount, -1)
+	defer resume()
+	stopIsolating := s.isolateSuiteNamespace(1000)
+	defer stopIsolating()
+	// The lane sends its first task before the standby acks it, and pauses on that ack.
+	workflowIDs := s.startWorkflowsUntilLaneSendsTasks()
+	for range 5 {
+		workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+	}
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.sawLaneAckMatching(active, func(state *replicationspb.SyncReplicationState) bool {
+			for _, laneState := range state.GetLaneStates() {
+				if laneState.GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+					return true
+				}
+			}
+			return false
+		}), "the standby did not pause the lane")
+	}, 30*time.Second, 200*time.Millisecond)
+	s.False(s.sawLaneAckMatching(active, func(state *replicationspb.SyncReplicationState) bool {
+		return state.GetHighPriorityState().GetFlowControlCommand() == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+	}), "pausing the lane paused the default HIGH lane")
+	// The standby keeps acking, so the stream is live, yet the paused lane does not send the
+	// last workflow.
+	acks := s.ackCount(active)
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.GreaterOrEqual(t, s.ackCount(active), acks+3, "the standby stopped acking")
+	}, 30*time.Second, 200*time.Millisecond)
+	_, err := standby.FrontendClient().DescribeWorkflowExecution(context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespaceName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowIDs[len(workflowIDs)-1]},
+	})
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound, "a paused lane sent its tasks")
+
+	resume()
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneReceiverLimit sets the standby's lane limit to zero: a stream with no lane opens none,
+// and a stream with a lane backlog drops the lane and re-sends its tasks on the default lane.
+func (s *streamBasedReplicationTestSuite) TestLaneReceiverLimit() {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	active, standby := s.clusters[0], s.clusters[1]
+	acceptNoLanes := func() (revert func()) {
+		s.awaitStreamRestart(standby, laneTestReceiverOperation, func() {
+			revert = standby.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverMaxLanes, 0)
+		})
+		return revert
+	}
+	s.Run("NoLanes", func() {
+		revert := acceptNoLanes()
+		defer revert()
+		stopIsolating := s.isolateSuiteNamespace(1000)
+		defer stopIsolating()
+		var workflowIDs []string
+		for range 5 {
+			workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+		}
+		s.requireWorkflowsReplicated(workflowIDs)
+		s.False(s.sawLaneMessage(active, func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo() != nil
+		}), "the active cluster opened a lane that the standby does not accept")
+	})
+	s.Run("Backlog", func() {
+		var revert func()
+		defer func() { revert() }()
+		s.runLaneKillSwitchDrill(func() { revert = acceptNoLanes() })
+	})
+}
+
+// TestLaneRateChange raises the rate of a lane that holds a backlog it cannot send within the
+// test's wait. The new rate must apply on the lane's next send, without a stream restart.
+func (s *streamBasedReplicationTestSuite) TestLaneRateChange() {
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	defer stopSlowLane()
+	stopFastLane := s.isolateSuiteNamespace(1000)
+	defer stopFastLane()
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneInvalidConfig makes the isolation config invalid for each remote cluster while a lane
+// holds a backlog. The open-source policy then asks to retire every lane to that remote at once:
+// the lane must send its backlog without its rate limit and retire.
+func (s *streamBasedReplicationTestSuite) TestLaneInvalidConfig() {
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	defer stopSlowLane()
+	var reverts []func()
+	defer func() {
+		for _, revert := range reverts {
+			revert()
+		}
+	}()
+	for _, c := range s.clusters {
+		// An entry without a positive TasksPerSecond is invalid. Entries without RemoteCluster
+		// are ignored instead, so each entry names a remote.
+		var invalid []dynamicconfig.ReplicationLaneIsolationEntry
+		for _, remote := range s.clusters {
+			if remote.ClusterName() != c.ClusterName() {
+				invalid = append(invalid, dynamicconfig.ReplicationLaneIsolationEntry{
+					RemoteCluster: remote.ClusterName(),
+					NamespaceID:   s.namespaceID,
+				})
+			}
+		}
+		reverts = append(reverts, c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, invalid))
+	}
+	s.requireWorkflowsReplicated(workflowIDs)
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		require.True(t, s.sawLaneMessage(s.clusters[0], func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo().GetRetire()
+		}), "the lane did not retire")
+	}, 60*time.Second, time.Second)
+}
+
+// TestLegacyIgnoresStaleIsolationEntries adds isolation entries for the suite's namespace while
+// the lane settings are unset, and restarts every stream. Every stream must select the legacy
+// implementation, no lane may be created, and the namespace must keep replicating.
+func (s *streamBasedReplicationTestSuite) TestLegacyIgnoresStaleIsolationEntries() {
+	if s.laneStreams {
+		s.T().Skip("checks the variants that leave the lane settings unset")
+	}
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		captures[i] = captureHandler.StartCapture()
+		s.T().Cleanup(func() { captureHandler.StopCapture(captures[i]) })
+	}
+	stopIsolating := s.isolateSuiteNamespace(0.2)
+	defer stopIsolating()
+	s.awaitStreamRestart(s.clusters[0], laneTestSenderOperation, s.reloadHistoryShards)
+	var workflowIDs []string
+	for range 10 {
+		workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+	}
+	s.requireWorkflowsReplicated(workflowIDs)
+
+	for i, capture := range captures {
+		recordings := capture.SnapshotMetric(metrics.ReplicationStreamImplementationSelected.Name())
+		s.NotEmpty(recordings, "cluster %s created no stream", s.clusters[i].ClusterName())
+		for _, recording := range recordings {
+			s.Equal("legacy", recording.Tags["replication_stream_implementation"], "cluster %s selected a lane stream", s.clusters[i].ClusterName())
+		}
+		s.Empty(capture.SnapshotMetric(metrics.ReplicationLaneCreated.Name()), "cluster %s created a lane", s.clusters[i].ClusterName())
+	}
+}
+
+// TestLaneReloadWhileSenderLanesOff turns sender lanes off while a lane holds a backlog,
+// restarts every stream while they are off, and turns them back on with the namespace still
+// isolated. Every workflow must replicate across each step.
+func (s *streamBasedReplicationTestSuite) TestLaneReloadWhileSenderLanesOff() {
+	active := s.clusters[0]
+	workflowIDs, stopSlowLane := s.startLaneBacklog()
+	revert := s.applyAndAwaitRestart(s.senderLanesDisabled())
+	s.awaitStreamRestart(active, laneTestSenderOperation, s.reloadHistoryShards)
+	s.requireWorkflowsReplicated(workflowIDs)
+
+	// A fast lane lets the workflows started after lanes return replicate within the wait.
+	stopSlowLane()
+	stopFastLane := s.isolateSuiteNamespace(1000)
+	defer stopFastLane()
+	s.awaitStreamRestart(active, laneTestSenderOperation, revert)
+	workflowIDs = append(workflowIDs, s.startWorkflowsUntilLaneSendsTasks()...)
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// TestLaneKillSwitch_InvalidImplementationRule makes the sender's implementation rule invalid
+// while a lane has a backlog. The invalid rule rolls only that sender back to the legacy
+// implementation.
+func (s *streamBasedReplicationTestSuite) TestLaneKillSwitch_InvalidImplementationRule() {
+	s.runLaneKillSwitchDrill(func() {
+		active := s.clusters[0]
+		var senderRules, receiverRules []dynamicconfig.ReplicationStreamImplementationRule
+		for _, remote := range s.clusters[1:] {
+			senderRules = append(senderRules, dynamicconfig.ReplicationStreamImplementationRule{
+				RemoteCluster: remote.ClusterName(), Implementation: "unknown", ShardPercent: 100,
+			})
+			receiverRules = append(receiverRules, dynamicconfig.ReplicationStreamImplementationRule{
+				RemoteCluster: remote.ClusterName(), Implementation: "lane", ShardPercent: 100,
+			})
+		}
+		s.awaitStreamRestart(active, laneTestSenderOperation, func() {
+			active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
+				Sender:   senderRules,
+				Receiver: receiverRules,
+			})
+		})
+	})
+}
+
+// runLaneKillSwitchDrill isolates the suite's namespace on a slow lane, builds a backlog the
+// lane cannot send within the test's wait, applies a kill switch, and requires every
+// workflow started while isolated to replicate. That only happens if the default lane
+// re-sends the lane's backlog.
+func (s *streamBasedReplicationTestSuite) runLaneKillSwitchDrill(applyKillSwitch func()) {
+	workflowIDs, stopIsolating := s.startLaneBacklog()
+	defer stopIsolating()
+	applyKillSwitch()
+	s.requireWorkflowsReplicated(workflowIDs)
+}
+
+// startLaneBacklog isolates the suite's namespace on a slow lane and starts workflows until the
+// lane holds a backlog it cannot send within the test's wait. It returns the workflows and a
+// function that stops isolating the namespace.
+func (s *streamBasedReplicationTestSuite) startLaneBacklog() ([]string, func()) {
+	if !s.laneStreams {
+		s.T().Skip("replication lanes require lane streams")
+	}
+	stopIsolating := s.isolateSuiteNamespace(0.2)
+	workflowIDs := s.startWorkflowsUntilLaneSendsTasks()
+	for range 20 {
+		workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(context.Background()))
+	}
+	return workflowIDs, stopIsolating
+}
+
+const (
+	laneTestSenderOperation   = "ReplicationStreamSender"
+	laneTestReceiverOperation = "ReplicationStreamReceiver"
+)
+
+// laneKillSwitch is a kill switch for the suite namespace's lane, applied on the cluster that
+// runs the side it controls.
+type laneKillSwitch struct {
+	name    string
+	cluster *testcore.TestCluster
+	// operation names the stream the switch restarts: laneTestSenderOperation or
+	// laneTestReceiverOperation.
+	operation string
+	// apply turns the switch on and returns a function that turns it off.
+	apply func() (revert func())
+}
+
+func (s *streamBasedReplicationTestSuite) senderLanesDisabled() laneKillSwitch {
+	active := s.clusters[0]
+	return laneKillSwitch{
+		name:      "SenderLanesDisabled",
+		cluster:   active,
+		operation: laneTestSenderOperation,
+		apply: func() func() {
+			return active.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamSenderLanesEnabled, false)
+		},
+	}
+}
+
+func (s *streamBasedReplicationTestSuite) legacySender() laneKillSwitch {
+	active := s.clusters[0]
+	return laneKillSwitch{
+		name:      "LegacySender",
+		cluster:   active,
+		operation: laneTestSenderOperation,
+		apply:     func() func() { return s.selectStreamImplementations(active, "legacy", "lane") },
+	}
+}
+
+func (s *streamBasedReplicationTestSuite) receiverLanesDisabled() laneKillSwitch {
+	standby := s.clusters[1]
+	return laneKillSwitch{
+		name:      "ReceiverLanesDisabled",
+		cluster:   standby,
+		operation: laneTestReceiverOperation,
+		apply: func() func() {
+			return standby.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamReceiverLanesEnabled, false)
+		},
+	}
+}
+
+func (s *streamBasedReplicationTestSuite) legacyReceiver() laneKillSwitch {
+	standby := s.clusters[1]
+	return laneKillSwitch{
+		name:      "LegacyReceiver",
+		cluster:   standby,
+		operation: laneTestReceiverOperation,
+		apply:     func() func() { return s.selectStreamImplementations(standby, "lane", "legacy") },
+	}
+}
+
+// applyAndAwaitRestart turns killSwitch on and waits until its cluster restarts the stream it
+// controls, so the next step starts from the new config. It returns the function that turns
+// killSwitch off.
+func (s *streamBasedReplicationTestSuite) applyAndAwaitRestart(killSwitch laneKillSwitch) (revert func()) {
+	s.awaitStreamRestart(killSwitch.cluster, killSwitch.operation, func() { revert = killSwitch.apply() })
+	return revert
+}
+
+// awaitStreamRestart runs change and waits until cluster c creates a replication stream sender
+// or receiver, as operation names it. Every stream creation records the implementation it
+// selected, so a new recording shows that the stream restarted after change.
+func (s *streamBasedReplicationTestSuite) awaitStreamRestart(c *testcore.TestCluster, operation string, change func()) {
+	captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+	s.Require().True(ok, "cluster metrics handler does not support capture")
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	change()
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		for _, recording := range capture.SnapshotMetric(metrics.ReplicationStreamImplementationSelected.Name()) {
+			if recording.Tags["operation"] == operation {
+				return
+			}
+		}
+		require.Fail(t, fmt.Sprintf("cluster %s did not restart a %s", c.ClusterName(), operation))
+	}, 30*time.Second, 200*time.Millisecond)
+}
+
+// selectStreamImplementations selects the sender and receiver implementations for every stream
+// between cluster c and the other clusters, and returns a function that restores the previous
+// selection.
+func (s *streamBasedReplicationTestSuite) selectStreamImplementations(c *testcore.TestCluster, sender, receiver string) func() {
+	var senderRules, receiverRules []dynamicconfig.ReplicationStreamImplementationRule
+	for _, remote := range s.clusters {
+		if remote.ClusterName() == c.ClusterName() {
+			continue
+		}
+		senderRules = append(senderRules, dynamicconfig.ReplicationStreamImplementationRule{
+			RemoteCluster: remote.ClusterName(), Implementation: sender, ShardPercent: 100,
+		})
+		receiverRules = append(receiverRules, dynamicconfig.ReplicationStreamImplementationRule{
+			RemoteCluster: remote.ClusterName(), Implementation: receiver, ShardPercent: 100,
+		})
+	}
+	return c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationStreamImplementation, dynamicconfig.ReplicationStreamImplementationSettings{
+		Sender:   senderRules,
+		Receiver: receiverRules,
+	})
+}
+
+// reloadHistoryShards closes every history shard on both clusters and then loads each one again
+// from persistence, as a history restart or shard move would. A closed shard otherwise stays
+// unloaded until it is used or the shard controller's next acquire, and replication streams
+// exist only for loaded shards.
+func (s *streamBasedReplicationTestSuite) reloadHistoryShards() {
+	ctx := testcore.NewContext()
+	for _, c := range s.clusters {
+		for shardID := int32(1); shardID <= s.numHistoryShards; shardID++ {
+			_, err := c.AdminClient().CloseShard(ctx, &adminservice.CloseShardRequest{ShardId: shardID})
+			s.Require().NoError(err)
+		}
+	}
+	for _, c := range s.clusters {
+		for shardID := int32(1); shardID <= s.numHistoryShards; shardID++ {
+			_, err := c.AdminClient().DescribeHistoryHost(ctx, &adminservice.DescribeHistoryHostRequest{ShardId: shardID})
+			s.Require().NoError(err)
+		}
+	}
+}
+
+// isolateSuiteNamespace isolates the suite's namespace on every stream between the clusters,
+// and returns a function that stops isolating it.
+func (s *streamBasedReplicationTestSuite) isolateSuiteNamespace(tasksPerSecond float64) func() {
+	for _, c := range s.clusters {
+		c.GetReplicationStreamRecorder().Clear()
+	}
+	var stops []func()
+	for _, c := range s.clusters {
+		var entries []dynamicconfig.ReplicationLaneIsolationEntry
+		for _, remote := range s.clusters {
+			if remote.ClusterName() != c.ClusterName() {
+				entries = append(entries, dynamicconfig.ReplicationLaneIsolationEntry{
+					RemoteCluster:  remote.ClusterName(),
+					NamespaceID:    s.namespaceID,
+					TasksPerSecond: tasksPerSecond,
+				})
+			}
+		}
+		stops = append(stops, c.OverrideDynamicConfig(s.T(), dynamicconfig.ReplicationLaneIsolation, entries))
+	}
+	return func() {
+		for _, stop := range stops {
+			stop()
+		}
+	}
+}
+
+// startWorkflowsUntilLaneSendsTasks starts workflows on the active cluster until its sender
+// sends replication tasks on a lane and the standby acks the lane, and returns their IDs. Lanes
+// are created on an ack, so the first workflows may replicate on the default lane. Requiring the
+// standby's lane ack also waits out a sender that a previous test's config left without lanes,
+// whose stopped predecessor may still be retrying lane sends on its dead stream.
+func (s *streamBasedReplicationTestSuite) startWorkflowsUntilLaneSendsTasks() []string {
+	active := s.clusters[0]
+	var workflowIDs []string
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		workflowIDs = append(workflowIDs, s.startLaneTestWorkflow(t.Context()))
+		require.True(t, s.sawLaneMessage(active, func(messages *replicationspb.WorkflowReplicationMessages) bool {
+			return messages.GetLaneInfo().GetLaneId() != "" && len(messages.GetReplicationTasks()) > 0
+		}), "no replication tasks were sent on a lane")
+		require.True(t, s.sawLaneAck(active), "the standby did not ack a lane")
+	}, 60*time.Second, time.Second)
+	return workflowIDs
+}
+
+func (s *streamBasedReplicationTestSuite) startLaneTestWorkflow(ctx context.Context) string {
+	workflowID := "lane-test-" + uuid.NewString()
+	_, err := s.clusters[0].FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.NewString(),
+		Namespace:    s.namespaceName,
+		WorkflowId:   workflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "lane-test-type"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "lane-test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.Require().NoError(err)
+	return workflowID
+}
+
+// requireWorkflowsReplicated waits until the standby cluster has every workflow with the same
+// complete history as the active cluster.
+func (s *streamBasedReplicationTestSuite) requireWorkflowsReplicated(workflowIDs []string) {
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		for _, workflowID := range workflowIDs {
+			execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+			active, err := completeHistory(t.Context(), s.clusters[0].FrontendClient(), s.namespaceName, execution)
+			require.NoError(t, err)
+			standby, err := completeHistory(t.Context(), s.clusters[1].FrontendClient(), s.namespaceName, execution)
+			require.NoError(t, err, "workflow %s did not replicate", workflowID)
+			protorequire.ProtoEqual(t, active, standby)
+		}
+	}, 60*time.Second, time.Second)
+}
+
+// sawLaneMessage reports whether cluster sender sent a replication stream message that
+// matches. Only messages the cluster's servers sent count, so a message on the stream in the
+// other direction never satisfies a check about this cluster's sender. A message counts as soon
+// as the sender tries to send it, even on a stream that has already ended; sawLaneAck shows
+// delivery.
+func (s *streamBasedReplicationTestSuite) sawLaneMessage(sender *testcore.TestCluster, match func(*replicationspb.WorkflowReplicationMessages) bool) bool {
+	for _, captured := range sender.GetReplicationStreamRecorder().GetMessages() {
+		if captured.Direction != testcore.DirectionServerSend {
+			continue
+		}
+		// The recorder keeps what a server sent in Request.
+		var messages *replicationspb.WorkflowReplicationMessages
+		switch resp := captured.Request.(type) {
+		case *adminservice.StreamWorkflowReplicationMessagesResponse:
+			messages = resp.GetMessages()
+		case *historyservice.StreamWorkflowReplicationMessagesResponse:
+			messages = resp.GetMessages()
+		default:
+		}
+		if messages != nil && match(messages) {
+			return true
+		}
+	}
+	return false
+}
+
+// ackCount returns how many acks cluster sender has received.
+func (s *streamBasedReplicationTestSuite) ackCount(sender *testcore.TestCluster) int {
+	count := 0
+	s.sawLaneAckMatching(sender, func(*replicationspb.SyncReplicationState) bool {
+		count++
+		return false
+	})
+	return count
+}
+
+// sawLaneAckMatching reports whether cluster sender received an ack that matches.
+func (s *streamBasedReplicationTestSuite) sawLaneAckMatching(sender *testcore.TestCluster, match func(*replicationspb.SyncReplicationState) bool) bool {
+	for _, captured := range sender.GetReplicationStreamRecorder().GetMessages() {
+		if captured.Direction != testcore.DirectionServerRecv {
+			continue
+		}
+		var state *replicationspb.SyncReplicationState
+		switch req := captured.Response.(type) {
+		case *adminservice.StreamWorkflowReplicationMessagesRequest:
+			state = req.GetSyncReplicationState()
+		case *historyservice.StreamWorkflowReplicationMessagesRequest:
+			state = req.GetSyncReplicationState()
+		default:
+		}
+		if state != nil && match(state) {
+			return true
+		}
+	}
+	return false
+}
+
+// sawLaneAck reports whether cluster sender received an ack that carries lane watermarks. A
+// receiver acks a lane only after lane messages reach it, so the ack shows that a live stream
+// delivered lane traffic.
+func (s *streamBasedReplicationTestSuite) sawLaneAck(sender *testcore.TestCluster) bool {
+	return s.sawLaneAckMatching(sender, func(state *replicationspb.SyncReplicationState) bool {
+		return len(state.GetLaneStates()) > 0
+	})
 }

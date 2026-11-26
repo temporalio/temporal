@@ -3245,6 +3245,88 @@ replicationReaderGroup abstraction, a refactor of the per-priority cursor arithm
 stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
 refactored path. Changing it restarts replication streams.`,
 	)
+	ReplicationStreamImplementation = NewGlobalTypedSettingWithConverter(
+		"history.ReplicationStreamImplementation",
+		convertReplicationStreamImplementationSettings,
+		ReplicationStreamImplementationSettings{},
+		`ReplicationStreamImplementation selects the replication stream implementation for each stream.
+Fields: Sender and Receiver, each a list of rules. A rule has RemoteCluster, Implementation
+("legacy" or "lane"), and either ShardIDs or ShardPercent (1-100) to select local shards.
+ShardPercent selects the lowest shard IDs, rounding up to a whole shard.
+Streams that match no rule use legacy. Invalid or duplicate rules for a remote cluster select
+legacy only for that cluster in that direction, including rules with a value of the wrong type.
+Rules without RemoteCluster are ignored with a diagnostic. If Sender or Receiver is not a list,
+that direction uses legacy. A value that is not a map uses the default, legacy everywhere.
+Changing the implementation selected for a stream restarts that stream.`,
+	)
+	ReplicationStreamReceiverLanesEnabled = NewGlobalBoolSetting(
+		"history.ReplicationStreamReceiverLanesEnabled",
+		false,
+		`ReplicationStreamReceiverLanesEnabled allows lane stream receivers to accept replication lanes.
+A lane stream receiver advertises lane support to its sender only when this is true. It has no
+effect on legacy stream receivers. Changing it restarts lane stream receivers.`,
+	)
+	ReplicationStreamSenderLanesEnabled = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderLanesEnabled",
+		false,
+		`ReplicationStreamSenderLanesEnabled allows lane stream senders to send replication lanes.
+A lane stream sender sends a lane only when this is true, the stream's lane policy asks for the
+lane, and the receiver advertises lane support. It has no effect on legacy stream senders.
+Changing it restarts lane stream senders.`,
+	)
+	ReplicationLaneIsolation = NewGlobalTypedSettingWithConverter(
+		"history.ReplicationLaneIsolation",
+		convertReplicationLaneIsolationEntries,
+		([]ReplicationLaneIsolationEntry)(nil),
+		`ReplicationLaneIsolation lists the namespaces whose HIGH priority replication traffic lane
+stream senders move onto their own lanes, when the open-source lane policy is in use. Each entry
+has RemoteCluster, NamespaceID, and TasksPerSecond. TasksPerSecond is the lane's send rate limit
+on each source shard's stream, not a total for the namespace: a namespace whose traffic
+concentrates on one shard sends at most this rate there. Invalid entries, including entries with
+a value of the wrong type, withdraw isolation only for their RemoteCluster. Entries without
+RemoteCluster are ignored with a diagnostic.`,
+	)
+	ReplicationLaneDrainTasksPerSecond = NewGlobalFloatSetting(
+		"history.ReplicationLaneDrainTasksPerSecond",
+		3,
+		`ReplicationLaneDrainTasksPerSecond caps how fast a replication lane whose isolation entry was
+removed drains its backlog before it retires, on each source shard's stream. The lane may send as
+fast as its namespace's tasks arrive on the shard, averaged over the last several seconds, plus this
+many tasks a second, so it catches up with the default lane and retires however fast the namespace
+writes. An uncapped drain sends a throttled lane's backlog as fast as the stream allows, which can
+flood the receiver and slow every namespace there. Non-positive values leave the drain uncapped.`,
+	)
+	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderMaxLanes",
+		4,
+		`ReplicationStreamSenderMaxLanes is the maximum number of lanes on one lane stream sender. The
+sender ignores requests for more lanes, keeping the lanes the policy lists first. The open-source
+policy lists lanes in namespace ID order.`,
+	)
+	ReplicationStreamReceiverMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverMaxLanes",
+		8,
+		`ReplicationStreamReceiverMaxLanes is the most replication lanes a lane stream receiver tracks
+at once on one stream. The receiver advertises it to its sender, which never opens more, and fails
+the stream if a sender does. A lane counts until the sender sends its retirement marker, so this
+default leaves room above the sender's default of 4 for a lane to be replaced while another
+retires. Changing it restarts lane stream receivers.`,
+	)
+	ReplicationLaneMaxLag = NewGlobalDurationSetting(
+		"history.ReplicationLaneMaxLag",
+		30*time.Minute,
+		`ReplicationLaneMaxLag is how far a replication lane may fall behind before the sender reports
+it with the replication_lane_max_lag_exceeded metric and a warning log. It does not change how the
+lane sends.`,
+	)
+	ReplicationStreamReceiverLaneFeedbackMaxBytes = NewGlobalIntSetting(
+		"history.ReplicationStreamReceiverLaneFeedbackMaxBytes",
+		4096,
+		`ReplicationStreamReceiverLaneFeedbackMaxBytes limits the serialized size of lane_feedback
+on each lane stream receiver ack, including the Any type URL. Oversized feedback is omitted;
+watermarks and lane capabilities are still sent. Non-positive values disable lane feedback.
+Changes take effect on the next ack without restarting the stream.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
@@ -3279,6 +3361,21 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationReceiverMaxOutstandingTaskCount",
 		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
+	)
+	ReplicationReceiverLaneMaxOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverLaneMaxOutstandingTaskCount",
+		100,
+		`Maximum number of outstanding tasks of one replication lane in a lane stream receiver. Past
+it, the receiver pauses that lane alone. The default HIGH priority lane keeps sending, and counts
+only its own tasks toward ReplicationReceiverMaxOutstandingTaskCount.`,
+	)
+	ReplicationReceiverMaxTotalOutstandingTaskCount = NewGlobalIntSetting(
+		"history.ReplicationReceiverMaxTotalOutstandingTaskCount",
+		1000,
+		`Maximum number of outstanding HIGH priority tasks of a lane stream receiver across the default
+lane and every replication lane. Past it, the receiver pauses all HIGH priority traffic, lanes
+included. Set it above ReplicationReceiverMaxOutstandingTaskCount plus the lanes' share, so that it
+only acts as a backstop for receiver memory.`,
 	)
 	ReplicationReceiverSlowSubmissionLatencyThreshold = NewGlobalDurationSetting(
 		"history.ReplicationReceiverSubmissionLatencyThreshold",

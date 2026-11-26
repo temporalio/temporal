@@ -68,6 +68,10 @@ var Module = fx.Provide(
 		Target: replicationStreamLowPrioritySchedulerProvider,
 	},
 	executableTaskConverterProvider,
+	NewStreamSenderFactory,
+	NewStreamReceiverFactory,
+	NewManualLaneStreamPolicyFactory,
+	NewNoopLaneFeedbackProvider,
 	streamReceiverMonitorProvider,
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
@@ -329,10 +333,12 @@ func executableTaskConverterProvider(
 func streamReceiverMonitorProvider(
 	processToolBox ProcessToolBox,
 	taskConverter ExecutableTaskConverter,
+	receiverFactory StreamReceiverFactory,
 ) StreamReceiverMonitor {
 	return NewStreamReceiverMonitor(
 		processToolBox,
 		taskConverter,
+		receiverFactory,
 		processToolBox.Config.EnableReplicationStream() && processToolBox.ClusterMetadata.IsGlobalNamespaceEnabled(), // No global namespace = no ack manager
 	)
 }
