@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/failpointadapter"
+	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/grpcfailpoints"
 	"go.temporal.io/server/common/testing/httpfailpoints"
 	"go.temporal.io/server/common/testing/serverbuggify"
@@ -89,20 +90,19 @@ func TestResolveFailpoints(t *testing.T) {
 	}
 }
 
-// TestFailpointsGenerators checks that transport fault generators and BUGGIFY are only installed
-// when failpoints are enabled.
+// TestFailpointsGenerators checks that the gRPC fault interceptor, the HTTP fault wrapper and the
+// persistence failpoint injector are only installed if failpoints are enabled.
 func TestFailpointsGenerators(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name    string
+	for name, tc := range map[string]struct {
 		enabled bool
 		want    bool
 	}{
-		{name: "disabled"},
-		{name: "enabled", enabled: true, want: true},
+		"disabled": {},
+		"enabled":  {enabled: true, want: true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			registry := resolveFailpoints(tc.enabled, log.NewNoopLogger())
 
@@ -112,23 +112,23 @@ func TestFailpointsGenerators(t *testing.T) {
 			require.Equal(t, tc.want, factory != created, "the persistence factory is wrapped for failpoints")
 
 			if !tc.want {
+				// No rules, no BUGGIFY and no randomized settings: the modules ignore even invalid settings.
 				client := dynamicconfig.NewMemoryClient()
-				wrapped, buggifyStatic, err := serverbuggify.RandomizeSettings(
-					client,
-					log.NewNoopLogger(),
-					registry != nil,
-					config.FailpointsBuggify{Seed: 5, Trace: true},
-				)
+				client.OverrideSetting(failpointrules.Setting, []any{map[string]any{"key": "on", "action": "Of"}})
+				wrapped, buggifyStatic, err := serverbuggify.RandomizeSettings(client, log.NewNoopLogger(), registry != nil,
+					config.FailpointsBuggify{Seed: 5, Trace: true})
 				require.NoError(t, err)
 				require.Same(t, client, wrapped)
 				require.Equal(t, serverbuggify.StaticConfig{}, buggifyStatic)
-
 				app := fxtest.New(t,
 					fx.Supply(
 						registry,
+						fx.Annotate(client, fx.As(new(dynamicconfig.Client))),
 						fx.Annotate(log.NewNoopLogger(), fx.As(new(log.Logger))),
 					),
+					failpointrules.Module,
 					serverbuggify.Module,
+					failpointrules.ReleaseModule,
 				)
 				app.RequireStart()
 				app.RequireStop()
@@ -136,3 +136,4 @@ func TestFailpointsGenerators(t *testing.T) {
 		})
 	}
 }
+

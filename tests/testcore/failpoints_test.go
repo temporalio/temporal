@@ -3,6 +3,7 @@ package testcore
 import (
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,6 +22,8 @@ type recordingTB struct {
 func (r *recordingTB) Helper() {}
 
 func (r *recordingTB) Errorf(string, ...any) { r.failed = true }
+
+func (r *recordingTB) Fatalf(string, ...any) { r.failed = true }
 
 var requireFiredKey = failpoint.NewKey[error]("testcore.requireFired")
 
@@ -64,6 +67,36 @@ func TestRequireFired(t *testing.T) {
 			requireFired(recorder, requireFiredKey, fp)
 			require.Equal(t, tc.wantFailed, recorder.failed)
 		})
+	}
+}
+
+var raceKey = failpoint.NewKey[error]("testcore.injectRace")
+
+// TestInjectFailpoint_RaceWithRule checks that a rule and a test that register a failpoint for the
+// same key at the same time don't replace each other: one of them registers it, and the other one
+// reports an error.
+func TestInjectFailpoint_RaceWithRule(t *testing.T) {
+	t.Parallel()
+
+	for range 100 {
+		registry := failpoint.NewRegistry()
+		rules := failpoint.NewRuleSet(registry)
+		recorder := &recordingTB{TB: t}
+		var applyErr error
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			_, applyErr = rules.Apply([]failpoint.Rule{{Key: raceKey.Name(), Action: failpoint.ActionOn}})
+		})
+		wg.Go(func() {
+			injectFailpoint(recorder, registry, raceKey, []FailpointOption{MayNotFire()})
+		})
+		wg.Wait()
+
+		testWon := !recorder.failed
+		ruleWon := applyErr == nil
+		require.NotEqual(t, testWon, ruleWon, "exactly one of the test and the rule registers the failpoint")
+		require.NotNil(t, registry.Get(raceKey))
+		rules.Close()
 	}
 }
 

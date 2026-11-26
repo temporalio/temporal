@@ -390,12 +390,16 @@ one (frontend resolves the namespace name of a request to its ID), so `testcore.
 works for them on a shared cluster. A request that only carries a namespace name uses the ID if the
 service resolves it from its namespace cache, and otherwise is scoped to
 `failpointadapter.NameScope(name)`; the `Inject*Fault` helpers of `TestEnv` register their faults
-for the ID and the name of the test's namespace. To inject a failpoint for a request that may not
-resolve, such as one that frontend sends to history or matching, scope its key with
-`failpointadapter.NameScope(name)` and use `testcore.InjectFailpointIn`. A failpoint without a
-scope applies to all namespaces, but only to requests whose namespace has no failpoint registered
-for the same key. A failpoint registered for the namespace takes precedence, even when it is
-disabled.
+for the ID and the name of the test's namespace. A failpoint scoped to
+`failpointadapter.NameScope(name)` also fires for a request whose name the server knows (the
+request carries it, or the server resolves it from memory), unless a failpoint is registered for
+the same key and the namespace ID, which is the more specific one. A rule with `namespace: <name>`
+is scoped to `failpointadapter.RuleScope(name)` instead, which fires only for a namespace that
+exists: the request carries its ID, or the service resolves the name to an ID from its cache. To inject a failpoint for a request that may not resolve, such as one that
+frontend sends to history or matching, scope its key with `failpointadapter.NameScope(name)` and
+use `testcore.InjectFailpointIn`. A failpoint without a scope applies to all namespaces, but only
+to requests whose namespace has no failpoint registered for the same key. A failpoint registered
+for the namespace takes precedence, even when it is disabled.
 
 The visibility store has no persistence failpoints. Of the other store methods, only those that
 take a request after the context have one. The requests of the following methods have no namespace,
@@ -414,6 +418,12 @@ but the other branch requests have no such field, so no branch method is scoped.
 
 Inject failpoints for these methods with `testcore.InjectUnscopedFailpoint`, which requires a
 dedicated cluster. `common/persistence/request_namespace.go` maps each request type to its namespace.
+
+A server or test cluster is also configured from outside with the `testing.failpointRules` dynamic
+config setting, see [Failpoints](failpoints.md#failpoint-rules). A test sets the rules with
+`env.OverrideDynamicConfig(failpointrules.Setting, ...)` on a dedicated cluster. A call site that
+takes an unusual but legal branch, such as `matching.SkipSyncMatchKey`, can be forced
+with `On`; the servers of other runs choose it with BUGGIFY, see [BUGGIFY](failpoints.md#buggify).
 
 ### softassert package
 

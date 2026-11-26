@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/failpointrules"
 	"go.temporal.io/server/common/testing/serverbuggify"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
@@ -157,9 +158,11 @@ var (
 		chasm.Module,
 		serialization.Module,
 		FxLogAdapter,
-		// serverbuggify starts before the services so BUGGIFY is active when they start.
+		// failpointrules and buggify start before the services. ReleaseModule stops the rules before the services stop.
+		failpointrules.Module,
 		serverbuggify.Module,
 		fx.Invoke(ServerLifetimeHooks),
+		failpointrules.ReleaseModule,
 	)
 )
 
@@ -235,6 +238,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		eventLoggerProvider = lognoop.NewLoggerProvider()
 	}
 
+	// The failpoint switch decides whether the dynamic config file client loads the failpoint rules.
 	failpointSource := so.failpointSource
 	if failpointSource == nil {
 		failpointSource = resolveFailpoints(so.config.Failpoints.Enabled, logger)

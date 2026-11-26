@@ -31,8 +31,10 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/serverfailpoints"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -125,6 +127,61 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 	}, 5*time.Second, 100*time.Millisecond)
 
 	s.GreaterOrEqual(attempts.Load(), int32(2))
+}
+
+func (s *CallbacksSuite) TestHTTPKey_NexusCallbackRetriesAfterRequestFailpoint(opts []testcore.TestOption) {
+	testOpts := append([]testcore.TestOption{}, opts...)
+	testOpts = append(testOpts, testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 50*time.Millisecond))
+	env := s.newTestEnv(testOpts...)
+	ctx := s.Context()
+
+	workflowID := env.Tv().WorkflowID()
+	env.SdkWorker().RegisterWorkflowWithOptions(
+		func(workflow.Context) (int, error) { return 42, nil },
+		workflow.RegisterOptions{Name: env.Tv().WorkflowType().GetName()},
+	)
+
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
+
+	// The failpoint of the operation fails the first request before it is sent, so the handler
+	// only sees the retry.
+	fp := testcore.InjectFailpoint(env, serverfailpoints.HTTPKey("POST /cb1"))
+	fp.Return(errors.New("injected"), failpoint.Trigger{MaxFires: 1})
+
+	cb := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/cb1"},
+		},
+	}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		Identity:            s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{cb},
+	}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	s.NoError(err)
+
+	s.Rcv(ch.requestCh)
+	s.Snd(ch.requestCompleteCh, nil)
+
+	sdkClient := env.SdkClient()
+	s.Await(func(s *CallbacksSuite) {
+		description, err := sdkClient.DescribeWorkflowExecution(s.Context(), workflowID, "")
+		s.NoError(err)
+		s.Len(description.Callbacks, 1)
+		callbackInfo := description.Callbacks[0]
+		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+		s.GreaterOrEqual(callbackInfo.Attempt, int32(2))
+	}, 5*time.Second, 100*time.Millisecond)
+
+	_, fires := fp.Stats()
+	s.EqualValues(1, fires)
 }
 
 func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead(opts []testcore.TestOption) {
