@@ -3821,7 +3821,9 @@ because executions scanner support for SQL is not yet implemented.`,
 	HistoryScannerDataMinAge = NewGlobalDurationSetting(
 		"worker.historyScannerDataMinAge",
 		60*24*time.Hour,
-		`HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.`,
+		`HistoryScannerDataMinAge is the minimum age of a history branch, measured from its fork time, before the history scanner checks it for cleanup.
+The default is 60 days. A lower value lets the scanner reclaim orphaned branches sooner and leaves less time for the corresponding workflow execution record to be written after its history.
+If the execution record exists, the scanner considers the execution for cleanup only if it has completed, worker.historyScannerVerifyRetention is enabled, and the time since its last update exceeds the namespace retention period plus worker.executionDataDurationBuffer.`,
 	)
 	HistoryScannerVerifyRetention = NewGlobalBoolSetting(
 		"worker.historyScannerVerifyRetention",
