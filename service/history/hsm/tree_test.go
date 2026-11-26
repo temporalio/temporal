@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -24,6 +25,10 @@ var defs = []hsmtest.Definition{def1, def2}
 var reg = hsm.NewRegistry()
 
 type backend struct{}
+
+func (b *backend) Now() time.Time {
+	panic("not used by these tests")
+}
 
 func (b *backend) GetCurrentVersion() int64 {
 	return 1

@@ -338,7 +338,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 
 // TestBatchTerminate_NamespaceIsolation verifies that a batch terminate operation
 // scoped to the primary namespace does not affect workflows in a separate namespace.
-// This is an end-to-end complement to the unit-level checkNamespace tests: it
+// This is an end-to-end complement to the unit-level checkAndGetTargetNamespace tests: it
 // exercises the full path from StartBatchOperation through the batcher worker.
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIsolation() {
 	env := testcore.NewEnv(s.T())

@@ -12,6 +12,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
@@ -179,9 +180,10 @@ func (h *CompletionHandler) Handle(
 	result *commonpb.Payload,
 	opFailedError *nexus.OperationError,
 ) error {
-	// The initial version of the completion token did not include a request ID.
-	// Only retry Access without a run ID if the request ID is not empty.
-	isRetryableNotFoundErr := requestID != ""
+	if requestID == "" {
+		return serviceerror.NewNotFound("operation not found")
+	}
+	isRetryableNotFoundErr := true
 	// emitMetrics is populated inside the Access closure and invoked only after the write
 	// transaction commits successfully, so a failed commit (which retries the completion) does not
 	// double-count the metric. See operationMetricsHandler's doc comment.
@@ -194,6 +196,10 @@ func (h *CompletionHandler) Handle(
 		if err != nil {
 			return err
 		}
+		if operation.RequestId != requestID {
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
+		}
 		// If the operation has not started yet, this completion arrived before the start response and
 		// fabricateStartedEventIfMissing will transition it to started below; the executor never emitted
 		// schedule-to-start in that case, so we emit it here.
@@ -201,11 +207,6 @@ func (h *CompletionHandler) Handle(
 		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
 		}
-		if requestID != "" && operation.RequestId != requestID {
-			isRetryableNotFoundErr = false
-			return serviceerror.NewNotFound("operation not found")
-		}
-
 		if opFailedError != nil {
 			err = handleOperationError(node, operation, opFailedError)
 		} else {
@@ -222,7 +223,13 @@ func (h *CompletionHandler) Handle(
 		}
 		// fabricatedStart means the executor never emitted schedule-to-start, so we emit it here.
 		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
-		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, env.Now())
+		metricCloseTime := env.Now()
+		if !fabricatedStart {
+			// Normal async starts are recorded in workflow time. Use the same clock frame for
+			// their completion metrics while leaving completion-before-start behavior unchanged.
+			metricCloseTime = node.WorkflowTime()
+		}
+		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, metricCloseTime)
 		return nil
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
@@ -267,7 +274,8 @@ func (h *CompletionHandler) deferredCompletionMetric(
 		case opFailedError.State == nexus.OperationStateCanceled:
 			emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
 		default:
-			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+			// Use FailedReasonOperationError: the request was accepted, but the operation failed.
+			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, chasmnexus.FailedReasonOperationError, closeTime)
 		}
 	}
 }

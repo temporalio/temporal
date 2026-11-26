@@ -20,10 +20,9 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
-	chasmactivity "go.temporal.io/server/chasm/lib/activity"
-	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -33,6 +32,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/wideevents"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
@@ -124,6 +124,7 @@ type (
 		adminClient                      adminservice.AdminServiceClient
 		clientFactory                    serverClient.Factory
 		clientBean                       serverClient.Bean
+		clusterMetadata                  cluster.Metadata
 		Logger                           log.Logger
 		EventLogger                      otellog.Logger
 		MetricsHandler                   metrics.Handler
@@ -133,7 +134,12 @@ type (
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
 		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
-		chasmRegistry                    *chasm.Registry
+		// sdkClientFactory resolves the system SDK client lazily for the
+		// sharded ReplicateBatch activity's mid-flight ReleaseShards signal.
+		// Eager resolution at fx-wire time tries to dial the frontend before
+		// it's listening; the factory's internal sync.Once guarantees a
+		// single dial on first use.
+		sdkClientFactory sdk.ClientFactory
 	}
 
 	shardStatus struct {
@@ -429,17 +435,10 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		return false, err
 	}
 
-	localShards := resp.Shards
-
-	if int(waitRequest.ShardCount) != len(localShards) {
-		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(localShards), waitRequest.ShardCount)
-	}
-
-	shardStatuses := make([]shardStatus, 0, len(localShards))
-	var handoverInfosMissingCount int
-
-	// check that every shard is ready to handover
-	for _, localShard := range localShards {
+	// Shard movement can make multiple hosts report the same shard. Keep the
+	// report with the latest acknowledged replication task for the remote cluster.
+	localShards := make(map[int32]*historyservice.ShardReplicationStatus, len(resp.Shards))
+	for _, localShard := range resp.Shards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 		if !hasRemoteShardProgress {
 			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during handover",
@@ -451,6 +450,23 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
+
+		previous, ok := localShards[localShard.ShardId]
+		if !ok || remoteShardProgress.AckedTaskId > previous.RemoteClusters[waitRequest.RemoteCluster].AckedTaskId {
+			localShards[localShard.ShardId] = localShard
+		}
+	}
+
+	if int(waitRequest.ShardCount) != len(localShards) {
+		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(localShards), waitRequest.ShardCount)
+	}
+
+	shardStatuses := make([]shardStatus, 0, len(localShards))
+	var handoverInfosMissingCount int
+
+	// check that every shard is ready to handover
+	for _, localShard := range localShards {
+		remoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 
 		handoverInfo, hasHandoverInfo := localShard.HandoverNamespaces[waitRequest.Namespace]
 		if !hasHandoverInfo {
@@ -563,18 +579,12 @@ func (a *activities) generateWorkflowReplicationTask(
 
 	var stateTransitionCount, historyLength int64
 	if generateViaFrontend {
-		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-		if err != nil {
-			return err
-		}
-
 		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
 			Namespace: namespaceName,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: execution.BusinessID,
 				RunId:      execution.RunID,
 			},
-			Archetype:      archetype,
 			ArchetypeId:    execution.ArchetypeID,
 			TargetClusters: targetClusters,
 		})
@@ -690,7 +700,9 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
 			// which does not have ArchetypeId field.
 			//
-			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
+			// TODO: Switch to chasm.WorkflowArchetypeID and remove the workflow exception below.
+			// ExecutionInfo decoders in OSS v1.30 and later accept nonzero archetype IDs.
+			// Remove this workaround once compatibility with older workflow workers is no longer required.
 			ArchetypeID: chasm.UnspecifiedArchetypeID,
 		}
 
@@ -959,35 +971,31 @@ func (a *activities) verifySingleReplicationTask(
 	s := time.Now()
 	// Check if execution exists on remote cluster
 
-	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-	if err != nil {
-		return verifyResult{
-			status: notVerified,
-		}, err
-	}
-
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: execution.BusinessID,
 			RunId:      execution.RunID,
 		},
-		Archetype:       archetype,
 		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
+	nsTag := metrics.NamespaceTag(request.Namespace)
+
 	switch e := err.(type) {
 	case nil:
 		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, execution, mu)
 		if err == nil && result.status == verified {
-			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+		} else if err == nil && !result.isVerified() {
+			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskPending.Name()).Record(1)
 		}
 		return result, err
 
 	case *serviceerror.NotFound:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
 		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workflow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
 		return a.checkSkipWorkflowExecution(ctx, request, execution, ns)
@@ -1001,16 +1009,17 @@ func (a *activities) verifySingleReplicationTask(
 		if e.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 			// The passive cluster holds the workflow cache lock while applying history
 			// during SyncWorkflowStateTask. This is actually a small sign of progress.
+			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskBusy.Name()).Record(1)
 			return verifyResult{status: notVerified}, nil
 		}
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+		a.forceReplicationMetricsHandler.WithTags(nsTag, metrics.ServiceErrorTypeTag(err)).
 			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 		return verifyResult{
 			status: notVerified,
 		}, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 
 	default:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+		a.forceReplicationMetricsHandler.WithTags(nsTag, metrics.ServiceErrorTypeTag(err)).
 			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 
 		return verifyResult{
@@ -1278,39 +1287,4 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	}
 
 	return isReady, nil
-}
-
-func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.ArchetypeID) (chasm.Archetype, error) {
-	if archetypeID == chasm.UnspecifiedArchetypeID {
-		// For backward compatibility reason, the archetypeID is set to 0 in MigrationExecutionInfo
-		// for workflows. But 0 is not a valid archetypeID in chasm.Registry, so explicitly return
-		//  WorkflowArchetype here.
-		return chasm.WorkflowArchetype, nil
-	}
-
-	// chasm activity and nexus operation libraries are not registered on worker service, so hardcoding
-	// the mapping here for now.
-	// TODO: Accept archetypeID in admin apis directly and remove this translation logic which relies on
-	// chasm registry.
-	if archetypeID == chasmactivity.ArchetypeID {
-		return chasmactivity.Archetype, nil
-	}
-	if archetypeID == chasmnexus.ArchetypeID {
-		return chasmnexus.Archetype, nil
-	}
-
-	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)
-	if !ok {
-		activityInfo := activity.GetInfo(ctx)
-		err := fmt.Errorf("unknown archetypeID: %v", archetypeID)
-		a.Logger.Error("force-replication failed to translate archetypeID to name",
-			tag.Error(err),
-			tag.ArchetypeID(archetypeID),
-			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
-			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
-		)
-		return "", err
-	}
-	return archetype, nil
 }

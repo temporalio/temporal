@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -35,6 +36,10 @@ import (
 type invocableNexusHandler struct {
 	callback   *callbackspb.Callback_NexusHandler
 	completion nexusrpc.CompleteOperationOptions
+
+	// sourceLinks describe the Callback which is triggering the Nexus handler, so it can
+	// link back to its source/trigger.
+	sourceLinks []*nexuspb.Link
 
 	// completionSourceTag is the fully qualified name of the CHASM component that produced this
 	// completion, e.g. "workflow.workflow" or "activity.activity".
@@ -129,10 +134,10 @@ func (n invocableNexusHandler) buildDispatchRequest(
 					Operation: n.callback.GetOperation(),
 					RequestId: n.requestID,
 					Payload:   input,
-					// TODO(temporal/issues/11889): These links will be wrong. Backlinks to the source of the Nexus completion
-					// should be to the *callback attached* to the completion's source. Not the completion directly.
-					// e.g. a Link_Callback to "SANO xxx callback yyy", and not "SANO xxx".
-					Links: commonnexus.ConvertLinksToProto(n.completion.Links),
+					// We intentionally ignore n.completion.Links. We want to link to the *Callback* that
+					// triggered the Nexus handler's invocation. And not the source execution that produced
+					// the completion result.
+					Links: n.sourceLinks,
 				},
 			},
 			Capabilities: &nexuspb.Request_Capabilities{
@@ -226,7 +231,7 @@ func (n invocableNexusHandler) dispatch(
 	if dispatchResult.Outcome.Succeeded() {
 		outcome = string(outcomeSuccess)
 	}
-	return n.classifyDispatchResult(logger, dispatchResult), outcomeTag(outcome)
+	return n.classifyDispatchResult(logger, dispatchResult, ns.Name().String(), h.linkValidator), outcomeTag(outcome)
 }
 
 // classifyDispatchResult inspects the response from the Nexus handler to determine how to handle
@@ -234,12 +239,21 @@ func (n invocableNexusHandler) dispatch(
 func (n invocableNexusHandler) classifyDispatchResult(
 	logger log.Logger,
 	result commonnexus.DispatchResult,
+	namespaceName string,
+	linkValidator commonlinks.Validator,
 ) invocationResult {
 	if result.Outcome.Succeeded() {
 		// Both flavors of success count as delivered. An async start means the worker accepted the
 		// completion and started an operation to process it; either way the callback is done, it does
 		// not wait for that operation to finish.
-		return invocationResultOK{}
+		//
+		// The worker's links are sanitized here, where they enter the system, rather than when they are
+		// recorded on the callback.
+		return invocationResultOK{
+			links: commonnexus.ConvertAndSanitizeHandlerLinks(
+				commonnexus.ConvertLinksFromProto(result.Links), namespaceName, linkValidator, logger,
+			),
+		}
 	}
 
 	// Every remaining outcome carries an error: what the worker reported, or one that

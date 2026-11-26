@@ -609,3 +609,163 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 		})
 	}
 }
+
+// A callback link's URL is the only thing that carries the execution the callback is attached to
+// and the component path within that execution, so every field has to survive the round trip.
+func TestConvertLinkCallback_RoundTrip(t *testing.T) {
+	callbackLink := func(
+		executionType enumspb.ExecutionType,
+		businessID string,
+		componentPath []string,
+	) *commonpb.Link_Callback {
+		return &commonpb.Link_Callback{
+			Namespace: "ns",
+			Execution: &commonpb.Execution{
+				Type:       executionType,
+				BusinessId: businessID,
+				RunId:      "run-id",
+			},
+			ComponentPath: componentPath,
+			RequestId:     "request-id",
+		}
+	}
+	const workflowURL = "temporal:///namespaces/ns/workflows/wf-id/run-id/callbacks/request-id"
+
+	for _, tc := range []struct {
+		name    string
+		input   *commonpb.Link_Callback
+		wantURL string
+	}{
+		{
+			name:    "Workflow",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_WORKFLOW, "wf-id", nil),
+			wantURL: workflowURL,
+		},
+		{
+			name:    "Activity",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_ACTIVITY, "act-id", nil),
+			wantURL: "temporal:///namespaces/ns/activities/act-id/run-id/callbacks/request-id",
+		},
+		{
+			name:    "NexusOperation",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_NEXUS_OPERATION, "op-id", nil),
+			wantURL: "temporal:///namespaces/ns/nexus-operations/op-id/run-id/callbacks/request-id",
+		},
+		{
+			// An empty component path adds no query parameters, the same as a nil one.
+			name:    "EmptyComponentPath",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_WORKFLOW, "wf-id", []string{}),
+			wantURL: workflowURL,
+		},
+		{
+			name:    "ComponentPathIsEscaped",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_WORKFLOW, "wf-id", []string{"A:B", "C/D", "E_F"}),
+			wantURL: workflowURL + "?componentPath=A%3AB&componentPath=C%2FD&componentPath=E_F",
+		},
+		{
+			// Each segment is its own query parameter, so a delimiter inside a segment cannot be
+			// mistaken for a separator. Segments end in a user-supplied ID, so a comma is reachable.
+			name:    "ComponentPathSegmentContainingDelimiters",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_WORKFLOW, "wf-id", []string{"Updates", "id,with,commas"}),
+			wantURL: workflowURL + "?componentPath=Updates&componentPath=id%2Cwith%2Ccommas",
+		},
+		{
+			// Only a path whose order differs from its sorted order proves the order is preserved.
+			name:    "ComponentPathKeepsUnsortedOrder",
+			input:   callbackLink(enumspb.EXECUTION_TYPE_WORKFLOW, "wf-id", []string{"zulu", "alpha"}),
+			wantURL: workflowURL + "?componentPath=zulu&componentPath=alpha",
+		},
+		{
+			// IDs are user-supplied and may contain characters that would otherwise change the
+			// shape of the path.
+			name: "IDsAreEscaped",
+			input: &commonpb.Link_Callback{
+				Namespace: "ns/with-slash",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+					BusinessId: "wf-id/callbacks/fake",
+					RunId:      "run-id",
+				},
+				RequestId: "request id?x=1",
+			},
+			wantURL: "temporal:///namespaces/ns%2Fwith-slash/workflows/wf-id%2Fcallbacks%2Ffake/run-id" +
+				"/callbacks/request%20id%3Fx=1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			link, err := commonnexus.ConvertLinkCallbackToNexusLink(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, "temporal.api.common.v1.Link.Callback", link.Type)
+			require.Equal(t, tc.wantURL, link.URL.String())
+
+			output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, tc.input, output)
+		})
+	}
+}
+
+func TestConvertLinkCallbackToNexusLink_UnsupportedExecutionType(t *testing.T) {
+	_, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
+		Namespace: "ns",
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_UNSPECIFIED,
+			BusinessId: "wf-id",
+			RunId:      "run-id",
+		},
+		RequestId: "request-id",
+	})
+	require.ErrorContains(t, err, "unsupported execution type")
+}
+
+func TestConvertNexusLinkToLinkCallback_Invalid(t *testing.T) {
+	callbackLinkType := "temporal.api.common.v1.Link.Callback"
+
+	for _, tc := range []struct {
+		name      string
+		link      nexus.Link
+		wantError string
+	}{
+		{
+			name: "wrong-type",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/workflows/wf-id/run-id/callbacks/req-id"},
+				Type: "temporal.api.common.v1.Link.Activity",
+			},
+			wantError: "cannot parse link type",
+		},
+		{
+			name: "wrong-scheme",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "https", Path: "/namespaces/ns/workflows/wf-id/run-id/callbacks/req-id"},
+				Type: callbackLinkType,
+			},
+			wantError: "invalid scheme",
+		},
+		{
+			name: "unknown-execution-type",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/schedules/sched-id/run-id/callbacks/req-id"},
+				Type: callbackLinkType,
+			},
+			wantError: `unsupported execution type: "schedules"`,
+		},
+		{
+			name: "missing-request-id-segment",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/workflows/wf-id/run-id/callbacks"},
+				Type: callbackLinkType,
+			},
+			wantError: "malformed URL path",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := commonnexus.ConvertNexusLinkToLinkCallback(tc.link)
+			require.ErrorContains(t, err, tc.wantError)
+		})
+	}
+}

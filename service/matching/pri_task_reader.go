@@ -25,8 +25,7 @@ import (
 )
 
 const (
-	// TODO(pri): old matcher cleanup, move to here
-	// taskReaderThrottleRetryDelay = 3 * time.Second
+	taskReaderThrottleRetryDelay = 3 * time.Second
 
 	concurrentAddRetries = 10
 )
@@ -201,12 +200,11 @@ func (tr *priTaskReader) getTasksPump() {
 	}
 }
 
-// TODO(pri): old matcher cleanup: move here
-// type getTasksBatchResponse struct {
-// 	tasks           []*persistencespb.AllocatedTaskInfo
-// 	readLevel       int64
-// 	isReadBatchDone bool
-// }
+type getTasksBatchResponse struct {
+	tasks           []*persistencespb.AllocatedTaskInfo
+	readLevel       int64
+	isReadBatchDone bool
+}
 
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
@@ -313,19 +311,21 @@ func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
 		return
 	}
 
-	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(taskFinishResult{})
-	} else if retry {
-		// This should only be due to persistence problems. Retry in a new goroutine
-		// to not block other tasks, up to some concurrency limit.
-		if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
-			return
-		}
-		go tr.retryAddAfterError(task)
+	if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
+		task.finish(dropReason)
+		return
 	}
+	// This should only be due to persistence problems. Retry in a new goroutine
+	// to not block other tasks, up to some concurrency limit.
+	if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
+		return
+	}
+	go tr.retryAddAfterError(task)
 }
 
-func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
+// addErrorBehavior takes an error from addSpooledTask and returns either:
+// dropReasonUnspecified to retry the add (in a while), or another dropReason to drop the task.
+func (tr *priTaskReader) addErrorBehavior(err error) dropReason {
 	// addSpooledTask can only fail due to:
 	// - the task queue is closed (errTaskQueueClosed or context.Canceled)
 	// - ValidateDeployment failed (InvalidArgument)
@@ -335,20 +335,22 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
 		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
 		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
-		return false, true
+		return dropReasonUnspecified // retry
 	}
 	if _, ok := errors.AsType[*serviceerrors.StickyWorkerUnavailable](err); ok {
-		return true, false // drop the task
+		return dropReasonStickyWorkerUnavailable // drop the task
 	}
-	var invalid *serviceerror.InvalidArgument
-	var internal *serviceerror.Internal
-	if errors.As(err, &invalid) || errors.As(err, &internal) {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
-		return true, false // drop the task
+		return dropReasonInvalid // drop the task
+	}
+	if _, ok := errors.AsType[*serviceerror.Internal](err); ok {
+		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
+		return dropReasonInternalError // drop the task
 	}
 	// For any other error (this should be very rare), we can retry.
 	tr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
-	return false, true
+	return dropReasonUnspecified // retry
 }
 
 func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
@@ -362,17 +364,19 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(taskFinishResult{})
+				task.finish(dropReasonExpiredMemory)
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
-			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(taskFinishResult{})
-			} else if retry {
-				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
-				return err
+			if err == nil {
+				return nil
 			}
-			return nil
+			if dropReason := tr.addErrorBehavior(err); dropReason != dropReasonUnspecified {
+				task.finish(dropReason)
+				return nil
+			}
+			metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
+			return err
 		},
 		addErrorRetryPolicy,
 		nil,
@@ -495,13 +499,12 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		tr.SignalTaskLoading()
 		return
 	}
-	if tr.ackLevel == tr.readLevel {
-		// This is called after we read a range and find no tasks. The range we read was tr.readLevel to newReadLevel.
-		// (We know this because nothing should change tr.readLevel except the getTasksPump loop itself, after initialization.
-		// And getTasksPump doesn't start until it gets a signal from taskWriter that it's initialized the levels.)
-		// If we've acked all tasks up to tr.readLevel, and there are no tasks between that and newReadLevel, then we've
-		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
-		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
+	if tr.outstandingTasks.Empty() {
+		// The scan found no tasks in (tr.readLevel, newReadLevel]. The stale-read guard above
+		// handles signalNewTasks advancing readLevel during that scan. Tasks through readLevel
+		// are already acked, expired, or in outstandingTasks, so an empty map means everything
+		// through newReadLevel can be acknowledged. This also advances idle queues over gaps
+		// left by range ID changes.
 		tr.ackLevel = newReadLevel
 		// Push the updated ack level to the db. If we didn't do this here, the updated ack level
 		// wouldn't reach the db until another task is written and acked, which could be far in the

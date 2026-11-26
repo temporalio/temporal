@@ -109,11 +109,19 @@ func (f *timerQueueFactory) CreateQueue(
 		metricsHandler,
 	)
 
+	shardScheduler = queues.NewNamespaceStateGateScheduler(
+		shardScheduler,
+		f.NamespaceRegistry,
+		queues.IsExemptFromNamespaceStateGate,
+		metricsHandler,
+	)
+
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(
@@ -175,6 +183,7 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
 	)
 	return queues.NewScheduledQueue(
 		shardContext,

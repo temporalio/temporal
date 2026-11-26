@@ -210,6 +210,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		Attempt:                     workflowTask.Attempt,
 		AttemptsSinceLastSuccess:    workflowTask.AttemptsSinceLastSuccess,
 		StartedTime:                 startedTime,
+		WorkerControlQueue:          workflowTask.WorkerControlQueue,
 		ScheduledTime:               workflowTask.ScheduledTime,
 		TaskQueue:                   workflowTask.TaskQueue,
 		OriginalScheduledTime:       workflowTask.OriginalScheduledTime,
@@ -461,6 +462,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	updateReg update.Registry,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 	targetRevisionNumber int64,
+	workerControlQueue string,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -606,6 +608,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
 	}
+
+	workflowTask.WorkerControlQueue = workerControlQueue
 
 	workflowTask, err = m.ApplyWorkflowTaskStartedEvent(
 		workflowTask,
@@ -815,13 +819,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName = request.GetDeployment().GetSeriesName()
 	}
 
-	vb := request.VersioningBehavior
-	if request.DeploymentOptions != nil && request.DeploymentOptions.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
-		// SDK has a bug that reports behavior if user has specified a default behavior without enabling versioning.
-		// Until that is fixed, we should adjust this value so the workflow works correctly.
-		vb = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	}
-
 	wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := worker_versioning.DeploymentOrVersion(request.Deployment, wftDeploymentVersion)
@@ -837,7 +834,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.MeteringMetadata,
 		deploymentName,
 		wftDeployment,
-		vb,
+		request.VersioningBehavior,
 	)
 
 	override := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
@@ -872,7 +869,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		m.ms.GetExecutionInfo().GetTaskQueue(),
 		WorkflowTaskCompletionMetrics{
 			VersioningInfo: VersioningMetricContext{
-				Behavior:          vb,
+				Behavior:          request.VersioningBehavior,
 				DeploymentVersion: wftDeploymentVersion,
 			},
 			Attempt: workflowTask.Attempt,
@@ -1035,13 +1032,13 @@ func (m *workflowTaskStateMachine) recordTimeoutTasksForDeletion(workflowTask *h
 	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
 	if task := workflowTask.ScheduleToStartTimeoutTask; task != nil {
 		key := task.GetKey()
-		if key.FireTime.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+		if key.FireTime.Sub(m.ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(workflowTask.ScheduledTime)) < maxWorkflowTaskTimeoutToDelete {
 			m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], key)
 		}
 	}
 	if task := workflowTask.StartToCloseTimeoutTask; task != nil {
 		key := task.GetKey()
-		if key.FireTime.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+		if key.FireTime.Sub(m.ms.ToPhysicalTimeWithCurrentTimeSkippingOffset(workflowTask.StartedTime)) < maxWorkflowTaskTimeoutToDelete {
 			m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], key)
 		}
 	}
@@ -1165,6 +1162,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
+	m.ms.executionInfo.WorkflowTaskWorkerControlQueue = workflowTask.WorkerControlQueue
 	if !workflowTask.ScheduledTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
 	}
@@ -1302,6 +1300,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		Attempt:                     m.ms.executionInfo.WorkflowTaskAttempt,
 		AttemptsSinceLastSuccess:    m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		StartedTime:                 m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
+		WorkerControlQueue:          m.ms.executionInfo.WorkflowTaskWorkerControlQueue,
 		ScheduledTime:               m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:                   m.ms.CurrentTaskQueue(),
 		OriginalScheduledTime:       m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),
@@ -1565,6 +1564,10 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {
 		// If WT was already started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
+		var versioningStamp *commonpb.WorkerVersionStamp
+		if wt.BuildId != "" {
+			versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: wt.BuildId}
+		}
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEvent.EventId,
@@ -1573,7 +1576,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.StartedTime,
 			wt.SuggestContinueAsNew,
 			wt.HistorySizeBytes,
-			nil,
+			versioningStamp,
 			wt.BuildIdRedirectCounter,
 			wt.SuggestContinueAsNewReasons,
 			m.targetWorkerDeploymentVersionChangedForStartedEvent(),

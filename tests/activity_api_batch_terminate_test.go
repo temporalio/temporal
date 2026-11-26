@@ -483,3 +483,80 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ta
 	s.NoError(err)
 	s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
 }
+
+// Configured batch rate, well above every rate requested below.
+const batchRPSConfiguredMax = 100
+
+// TestActivityBatchTerminate_MaxOperationsPerSecond verifies a batch is paced at
+// min(requested RPS, worker.batcherRPS).
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_MaxOperationsPerSecond() {
+	env := newStandaloneActivityBatchEnv(s.T())
+	t := s.T()
+	ctx := s.Context()
+
+	env.OverrideDynamicConfig(dynamicconfig.BatcherRPS, batchRPSConfiguredMax)
+
+	// Returns the batch job's own duration. Targets activities explicitly to keep
+	// visibility indexing out of the measurement.
+	runBatch := func(count int, requestedRPS float32) time.Duration {
+		t.Helper()
+		taskQueue := testcore.RandomizeStr(t.Name())
+		executions := make([]*commonpb.Execution, 0, count)
+		for i := range count {
+			activityID := testcore.RandomizeStr(fmt.Sprintf("%s-%d", t.Name(), i))
+			startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+			executions = append(executions, &commonpb.Execution{
+				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: activityID,
+				RunId:      startResp.RunId,
+			})
+		}
+
+		jobID := uuid.NewString()
+		_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+			Namespace:        env.Namespace().String(),
+			TargetExecutions: executions,
+			Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+				TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+					Identity: "batch-terminator",
+					Reason:   "test",
+				},
+			},
+			JobId:                  jobID,
+			Reason:                 "test",
+			MaxOperationsPerSecond: requestedRPS,
+		})
+		require.NoError(t, err)
+
+		var elapsed time.Duration
+		//nolint:forbidigo // for tests with waits
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+				Namespace: env.Namespace().String(),
+				JobId:     jobID,
+			})
+			require.NoError(c, err)
+			require.Equal(c, enumspb.BATCH_OPERATION_STATE_COMPLETED, desc.GetState())
+			// Rate limiting must not drop work
+			require.Equal(c, int64(count), desc.GetTotalOperationCount())
+			require.Equal(c, int64(count), desc.GetCompleteOperationCount())
+			require.Zero(c, desc.GetFailureOperationCount())
+			elapsed = desc.GetCloseTime().AsTime().Sub(desc.GetStartTime().AsTime())
+		}, 30*time.Second, 100*time.Millisecond)
+		return elapsed
+	}
+
+	// Ops beyond the limiter's burst wait at requestedRPS/sec. Assert a floor with
+	// slack; the limiter can only ever make the job slower, never faster.
+	const requestedRPS = 2
+	const count = 3 * requestedRPS
+	minWait := (count - requestedRPS) * time.Second / requestedRPS * 3 / 4
+
+	rateLimited := runBatch(count, requestedRPS)
+	t.Logf("batch of %d operations at %d rps took %v (expected at least %v)", count, requestedRPS, rateLimited, minWait)
+	require.GreaterOrEqual(t, rateLimited, minWait,
+		"MaxOperationsPerSecond=%d should have paced the batch", requestedRPS)
+
+	unlimited := runBatch(count, 0)
+	t.Logf("batch of %d operations with no requested rate took %v", count, unlimited)
+}

@@ -125,16 +125,18 @@ func (s *VisibilityManagerSuite) SetupTest() {
 	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.visibilityManager = newVisibilityManager(
 		s.visibilityStore,
-		dynamicconfig.GetIntPropertyFn(1),
-		dynamicconfig.GetIntPropertyFn(1),
-		dynamicconfig.GetFloatPropertyFn(0.2),
-		dynamicconfig.GetDurationPropertyFn(time.Second),
-		s.metricsHandler,
 		metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
-		log.NewNoopLogger(),
-		nil, // searchAttributesMapperProvider
-		nil, // chasmRegistry
+		&ManagerParams{
+			MetricsHandler: s.metricsHandler,
+			Logger:         log.NewNoopLogger(),
+		},
+		&ManagerConfig{
+			MaxReadQPS:         dynamicconfig.GetIntPropertyFn(1),
+			MaxWriteQPS:        dynamicconfig.GetIntPropertyFn(1),
+			OperatorRPSRatio:   dynamicconfig.GetFloatPropertyFn(0.2),
+			SlowQueryThreshold: dynamicconfig.GetDurationPropertyFn(time.Second),
+		},
 	)
 }
 

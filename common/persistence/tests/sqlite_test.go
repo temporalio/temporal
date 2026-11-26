@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -1589,8 +1590,9 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 	// Cancel the context before the transaction has finished.
 	cancel()
 
+	// database/sql rolls back asynchronously on cancel, so Commit may observe either error.
 	err = tx.Commit()
-	assert.ErrorIs(t, err, context.Canceled)
+	require.True(t, errors.Is(err, context.Canceled) || errors.Is(err, gosql.ErrTxDone), "unexpected error: %v", err)
 
 	// Check if we still have a connection to the db.
 	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{
@@ -1598,4 +1600,17 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 		TaskQueueID: []byte("test-queue"),
 	}, sqlplugin.MatchingTaskVersion1)
 	require.ErrorIs(t, err, gosql.ErrNoRows)
+}
+
+func TestSQLiteShardStoreSuite(t *testing.T) {
+	t.Parallel()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*NewSQLiteMemoryConfig(), resolver.NewNoopResolver(), testSQLiteClusterName,
+		logger, metrics.NoopMetricsHandler, serialization.NewSerializer(),
+	)
+	t.Cleanup(factory.Close)
+	store, err := factory.NewShardStore()
+	require.NoError(t, err)
+	suite.Run(t, NewShardSuite(t, store, serialization.NewSerializer(), logger))
 }

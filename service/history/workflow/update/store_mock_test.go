@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -17,7 +18,7 @@ import (
 var (
 	emptyUpdateStore = mockUpdateStore{
 		VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {},
-		GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+		GetCompletedUpdateFunc: func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
 			return nil, serviceerror.NewNotFound("not found")
 		},
 	}
@@ -27,7 +28,8 @@ var (
 type mockUpdateStore struct {
 	update.UpdateStore
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
-	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
+	GetCompletedUpdateFunc         func(context.Context, string) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error)
+	GetUpdateNexusContextFunc      func(string) *nexuspb.PropagatedSerializationContext
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
 }
@@ -40,11 +42,20 @@ func (m mockUpdateStore) VisitUpdates(
 	}
 }
 
-func (m mockUpdateStore) GetUpdateOutcome(
+func (m mockUpdateStore) GetCompletedUpdate(
 	ctx context.Context,
 	updateID string,
-) (*updatepb.Outcome, error) {
-	return m.GetUpdateOutcomeFunc(ctx, updateID)
+) (*historypb.WorkflowExecutionUpdateCompletedEventAttributes, error) {
+	return m.GetCompletedUpdateFunc(ctx, updateID)
+}
+
+func (m mockUpdateStore) GetUpdateNexusSerializationContext(
+	updateID string,
+) *nexuspb.PropagatedSerializationContext {
+	if m.GetUpdateNexusContextFunc == nil {
+		return nil
+	}
+	return m.GetUpdateNexusContextFunc(updateID)
 }
 
 func (m mockUpdateStore) GetCurrentVersion() int64 {

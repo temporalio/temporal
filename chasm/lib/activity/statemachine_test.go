@@ -196,6 +196,48 @@ func TestTransitionScheduled(t *testing.T) {
 	}
 }
 
+func TestTransitionEagerStarted(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			GoCtx:     headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", ""),
+		},
+	}
+	attempt := &activitypb.ActivityAttemptState{}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			ScheduleTime:           timestamppb.New(defaultTime),
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			HeartbeatTimeout:       durationpb.New(time.Minute),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		LastAttempt: chasm.NewDataField(ctx, attempt),
+		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+
+	err := TransitionEagerStarted.Apply(activity, ctx, eagerStartEvent{
+		requestID: "start-request-id",
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.GetStatus())
+	require.True(t, activity.GetEagerExecutionAccepted())
+	require.EqualValues(t, 1, attempt.GetCount())
+	require.EqualValues(t, 1, attempt.GetStamp())
+	require.EqualValues(t, 1, attempt.GetStartedStamp())
+	require.Equal(t, "start-request-id", attempt.GetStartRequestId())
+	require.Equal(t, headers.ClientNameGoSDK, attempt.GetSdkName())
+	require.Equal(t, temporal.SDKVersion, attempt.GetSdkVersion())
+
+	require.Len(t, ctx.Tasks, 3)
+	require.IsType(t, &activitypb.ScheduleToCloseTimeoutTask{}, ctx.Tasks[0].Payload)
+	require.IsType(t, &activitypb.StartToCloseTimeoutTask{}, ctx.Tasks[1].Payload)
+	require.IsType(t, &activitypb.HeartbeatTimeoutTask{}, ctx.Tasks[2].Payload)
+}
+
 func TestTransitionRescheduled(t *testing.T) {
 	testCases := []struct {
 		name                     string
@@ -438,10 +480,13 @@ func TestTransitionStarted(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
+	componentRef := []byte("test-component-ref")
 	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-			Identity: "test-worker",
+			Identity:               "test-worker",
+			WorkerControlTaskQueue: "test-control-queue",
 		},
+		ComponentRef: componentRef,
 		// TODO: change this and serverside once versioning is supported in SAA.
 		// LastDeploymentVersion represents the worker that actually accepted the task,
 		// than when it's scheduled. WFA derives it from PollRequest via
@@ -457,9 +502,10 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
-	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
+	require.Equal(t, componentRef, attemptState.ComponentRef)
+	require.Equal(t, "test-control-queue", attemptState.WorkerControlTaskQueue)
 
 	deploymentVersion := attemptState.GetLastDeploymentVersion()
 	require.Equal(t, "test-deployment", deploymentVersion.GetDeploymentName())
@@ -752,7 +798,6 @@ func TestTransitionCompleted(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.NotNil(t, attemptState.GetCompleteTime())
 	protorequire.ProtoEqual(t, payload, outcome.GetSuccessful().GetOutput())
 }
@@ -896,7 +941,6 @@ func TestTransitionFailed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.NotNil(t, attemptState.GetCompleteTime())
 	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
@@ -909,8 +953,7 @@ func TestTransitionTerminated(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{
-		Count:              1,
-		LastWorkerIdentity: "worker",
+		Count: 1,
 	}
 	outcome := &activitypb.ActivityOutcome{}
 
@@ -950,7 +993,6 @@ func TestTransitionTerminated(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.Equal(t, "test-request-id", activity.GetTerminateState().RequestId)
 
 	expectedFailure := &failurepb.Failure{

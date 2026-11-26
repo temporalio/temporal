@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -52,7 +53,7 @@ func (m *SqlStore) Close() {
 func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.DB.BeginTx(ctx)
 	if err != nil {
-		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
+		return convertSQLError(operation, "failed to start transaction", err)
 	}
 	err = f(tx)
 	if err != nil {
@@ -71,13 +72,27 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*serviceerror.NotFound:
 			return err
 		default:
-			return serviceerror.NewUnavailablef("%v: %v", operation, err)
+			return convertSQLError(operation, "", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return serviceerror.NewUnavailablef("%s operation failed. Failed to commit transaction. Error: %v", operation, err)
+		return convertSQLError(operation, "failed to commit transaction", err)
 	}
 	return nil
+}
+
+// convertSQLError maps driver errors to persistence errors. Context cancel and
+// deadline must stay unwrap-able so callers can skip retries and error logs on
+// shutdown; other errors become Unavailable.
+func convertSQLError(operation string, message string, err error) error {
+	prefix := operation
+	if message != "" {
+		prefix = operation + ": " + message
+	}
+	if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
+		return fmt.Errorf("%s: %w", prefix, err)
+	}
+	return serviceerror.NewUnavailablef("%s: %v", prefix, err)
 }
 
 func gobSerialize(x any) ([]byte, error) {

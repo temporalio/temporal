@@ -381,12 +381,15 @@ var TransitionStarted = hsm.NewTransition(
 			return hsm.TransitionOutput{}, err
 		}
 		if child != nil {
-			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+			// Cancellation does not complete the operation, so continue below to emit its start-to-close timeout task.
+			if err := hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
 				return TransitionCancelationScheduled.Apply(c, EventCancelationScheduled{
 					Time: event.Time,
 					Node: child,
 				})
-			})
+			}); err != nil {
+				return hsm.TransitionOutput{}, err
+			}
 		}
 
 		output, err := op.output()

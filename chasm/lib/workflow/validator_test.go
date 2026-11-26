@@ -15,12 +15,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const testMaxIDLen = 1000
 
-func newTestValidator() *RequestValidator {
+func newTestValidator(t *testing.T) *RequestValidator {
+	linkValidator := test.NewLinksValidator(t, test.NewLinksValidatorConfig())
 	saValidator := searchattribute.NewValidator(
 		searchattribute.NewTestProvider(),
 		searchattribute.NewTestMapperProvider(nil),
@@ -35,15 +37,16 @@ func newTestValidator() *RequestValidator {
 	)
 	return NewValidator(
 		Config{
-			maxIDLengthLimit: func() int { return testMaxIDLen },
+			maxIDLengthLimit:                   func() int { return testMaxIDLen },
+			timeSkippingMaxSkipPerSession:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(200),
+			timeSkippingMaxAccumulatedDuration: dynamicconfig.GetDurationPropertyFn(10 * 365 * 24 * time.Hour),
 			defaultWorkflowRetrySettings: func(ns string) retrypolicy.DefaultRetrySettings {
 				return retrypolicy.DefaultDefaultRetrySettings
 			},
-			maxLinksPerRequest: func(ns string) int { return 10 },
-			linkMaxSize:        func(ns string) int { return 1024 },
 		},
 		searchattribute.NewTestMapperProvider(nil),
 		saValidator,
+		linkValidator,
 	)
 }
 
@@ -57,7 +60,7 @@ func validSWSRequest() *workflowservice.SignalWithStartWorkflowExecutionRequest 
 }
 
 func TestValidateSignalWithStartRequest(t *testing.T) {
-	v := newTestValidator()
+	v := newTestValidator(t)
 
 	t.Run("HappyPath", func(t *testing.T) {
 		req := validSWSRequest()
@@ -157,4 +160,39 @@ func TestValidateSignalWithStartRequest(t *testing.T) {
 		err := v.ValidateSignalWithStartRequest(req)
 		require.ErrorIs(t, err, ErrCronAndStartDelaySet)
 	})
+}
+
+func TestValidateSignalWithStartRequestTimeSkippingConfig(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		namespace string
+		config    *commonpb.TimeSkippingConfig
+		wantError bool
+	}{
+		{name: "no config in disabled namespace", namespace: "ns2"},
+		{name: "disabled config in disabled namespace", namespace: "ns2", config: &commonpb.TimeSkippingConfig{}, wantError: true},
+		{name: "enabled config in disabled namespace", namespace: "ns2", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantError: true},
+		{name: "enabled config in enabled namespace", namespace: "ns1", config: &commonpb.TimeSkippingConfig{Enabled: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			validator := newTestValidator(t)
+			validator.config.workflowTimeSkippingEnabled = func(namespace string) bool { return namespace == "ns1" }
+			request := validSWSRequest()
+			request.Namespace = tc.namespace
+			request.TimeSkippingConfig = tc.config
+
+			err := validator.ValidateSignalWithStartRequest(request)
+			if tc.wantError {
+				require.ErrorIs(t, err, ErrWorkflowTimeSkippingNotEnabled)
+			} else {
+				require.NoError(t, err)
+				if tc.config != nil {
+					require.Equal(t, int32(200), tc.config.GetMaxSessionSkipCount())
+				}
+			}
+		})
+	}
 }

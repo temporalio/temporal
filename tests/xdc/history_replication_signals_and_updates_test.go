@@ -44,6 +44,7 @@ type (
 	// that push their tasks into test-specific (i.e. workflow-specific) buffers.
 	hrsuTestSuite struct {
 		xdcBaseSuite
+		maxEventBatchSizeInBytes int
 	}
 	// Each test starts its own workflow, in its own namespace.
 	hrsuTest struct {
@@ -78,7 +79,24 @@ const (
 
 func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(hrsuTestSuite))
+	for _, tc := range []struct {
+		name                     string
+		maxEventBatchSizeInBytes int
+	}{
+		{
+			name:                     "SingleBatch",
+			maxEventBatchSizeInBytes: 0,
+		},
+		{
+			// Every event is written in its own batch, so one transaction spans several replication tasks.
+			name:                     "SplitBatches",
+			maxEventBatchSizeInBytes: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			suite.Run(t, &hrsuTestSuite{maxEventBatchSizeInBytes: tc.maxEventBatchSizeInBytes})
+		})
+	}
 }
 
 func (s *hrsuTestSuite) SetupSuite() {
@@ -86,6 +104,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream.Key(): true,
 		// Use short interval to make long poll timeout
 		dynamicconfig.HistoryLongPollExpirationInterval.Key(): 100 * time.Millisecond,
+		dynamicconfig.MaximumEventBatchSizeInBytes.Key():      s.maxEventBatchSizeInBytes,
 	}
 	s.logger = log.NewTestLogger()
 	s.setupSuite()
@@ -646,17 +665,24 @@ func (c *hrsuTestCluster) executeNamespaceReplicationTasksUntil(operation enumss
 }
 
 // executeHistoryReplicationTasksUntil executes buffered history event replication tasks until the specified
-// event type is encountered.
+// event type is encountered, and then the rest of that transaction, which can span several tasks when
+// history.maximumEventBatchSizeInBytes splits it into several batches.
 func (c *hrsuTestCluster) executeHistoryReplicationTasksUntil(
 	eventType enumspb.EventType,
 ) {
+	found := false
 	for {
 		task := <-c.inboundHistoryReplicationTasks
 		events := c.t.s.executeHistoryReplicationTask(task)
 		for _, event := range events {
 			if event.GetEventType() == eventType {
-				return
+				found = true
 			}
+		}
+		// The task version history ends at the last event of its transaction.
+		versionHistoryItems := task.replicationTask.GetHistoryTaskAttributes().GetVersionHistoryItems()
+		if found && events[len(events)-1].GetEventId() >= versionHistoryItems[len(versionHistoryItems)-1].GetEventId() {
+			return
 		}
 	}
 }

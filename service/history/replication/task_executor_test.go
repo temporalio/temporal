@@ -20,6 +20,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
@@ -139,6 +140,49 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.False(ok)
+}
+
+func (s *taskExecutorSuite) TestFilterTask_LocalNamespaceNotApply() {
+	s.replicationTaskExecutor.validateSource = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(namespace.NewLocalNamespaceForTest(nil, nil, cluster.TestCurrentClusterName), nil)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	s.NoError(err)
+	s.False(ok)
+}
+
+func (s *taskExecutorSuite) TestFilterTask_SourceClusterNotApply() {
+	s.replicationTaskExecutor.validateSource = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(namespace.NewGlobalNamespaceForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestCurrentClusterName}},
+			0,
+		), nil)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	s.NoError(err)
+	s.False(ok)
+}
+
+func (s *taskExecutorSuite) TestFilterTask_SourceClusterValidationDisabled() {
+	s.replicationTaskExecutor.validateSource = dynamicconfig.GetBoolPropertyFn(false)
+	namespaceID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(namespace.NewGlobalNamespaceForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestCurrentClusterName}},
+			0,
+		), nil)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	s.NoError(err)
+	s.True(ok)
 }
 
 func (s *taskExecutorSuite) TestFilterTask_Error() {

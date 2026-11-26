@@ -531,7 +531,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse() {
 	wfeResponse, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
 
-	eventDefaultOrder := env.GetHistory(env.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution)
+	eventDefaultOrder := env.RequireHistory(s, wfeResponse.WorkflowExecutionInfo.Execution)
 	slices.Reverse(eventDefaultOrder)
 
 	events := s.getHistoryReverse(env, wfeResponse.WorkflowExecutionInfo.Execution, 100)
@@ -620,7 +620,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 	resetWfeResponse, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), resetWorkflowRun.GetID(), resetWorkflowRun.GetRunID())
 	s.NoError(err)
 
-	eventsDefaultOrder := env.GetHistory(env.Namespace().String(), resetWfeResponse.WorkflowExecutionInfo.Execution)
+	eventsDefaultOrder := env.RequireHistory(s, resetWfeResponse.WorkflowExecutionInfo.Execution)
 	slices.Reverse(eventsDefaultOrder)
 
 	events := s.getHistoryReverse(env, resetWfeResponse.WorkflowExecutionInfo.Execution, 100)
@@ -789,7 +789,6 @@ func startMultiBatchWorkflow(
 func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnotherNamespace(
 	enableTransitionHistory bool,
 ) {
-	ctx := s.Context()
 	// A single-shard cluster so both namespaces map to the same history shard. On SQL backends
 	// shard_id is part of the history_node primary key, so without this the replay would be
 	// rejected for the wrong reason; on Cassandra it is not part of the key at all.
@@ -799,10 +798,11 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 		// Shadow mode reports the mismatch but still serves the page.
 		testcore.WithDynamicConfig(dynamicconfig.EnablePaginationTokenBranchValidationShadowMode, false),
 	)
+	ctx := s.Context()
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
 	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
 
@@ -816,8 +816,8 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
 		},
 	)
-	s.Require().NoError(err)
-	s.Require().NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
+	s.NoError(err)
+	s.NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
 
 	// Replayed against the other namespace. No run ID is sent, so nothing in the request itself
 	// refers to the workflow whose history the token points at.
@@ -842,16 +842,16 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 }
 
 func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFromAnotherNamespace() {
-	ctx := s.Context()
 	env := s.newTestEnv(
 		testcore.WithHistoryShardCount(1),
 		// Shadow mode reports the mismatch but still serves the page.
 		testcore.WithDynamicConfig(dynamicconfig.EnablePaginationTokenBranchValidationShadowMode, false),
 	)
+	ctx := s.Context()
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
 	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
 
@@ -863,8 +863,8 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 			MaximumPageSize: 1,
 		},
 	)
-	s.Require().NoError(err)
-	s.Require().NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
+	s.NoError(err)
+	s.NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
 
 	resp, err := env.FrontendClient().GetWorkflowExecutionHistoryReverse(
 		s.Context(),

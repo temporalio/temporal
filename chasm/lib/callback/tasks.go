@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -32,7 +34,14 @@ type invocationResult interface {
 }
 
 // invocationResultOK marks an invocation as successful.
-type invocationResultOK struct{}
+type invocationResultOK struct {
+	// links are the links the target returned when it accepted the delivery, to be recorded on the
+	// CHASM Callback. Only a NexusHandler-variant callback will produce these. A Nexus-variant callback
+	// just delivers the completion result, without receiving any links in return.
+	//
+	// These are already converted and sanitized, see [commonnexus.SanitizeHandlerLinks].
+	links []*commonpb.Link
+}
 
 func (invocationResultOK) mustImplementInvocationResult() {}
 
@@ -81,6 +90,7 @@ type invocationTaskHandlerOptions struct {
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
 	MatchingClient     resource.MatchingClient
+	LinkValidator      commonlinks.Validator
 }
 
 type invocationTaskHandler struct {
@@ -93,6 +103,7 @@ type invocationTaskHandler struct {
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
 	matchingClient     resource.MatchingClient
+	linkValidator      commonlinks.Validator
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -105,6 +116,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
 		matchingClient:     opts.MatchingClient,
+		linkValidator:      opts.LinkValidator,
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 const (
 	callbackIgnoredUnrecognizedRequest metrics.ReasonString = "unrecognized_request_id"
 	callbackIgnoredAlreadyCompleted    metrics.ReasonString = "already_completed"
+	callbackIgnoredStartNotRecorded    metrics.ReasonString = "start_not_recorded"
 )
 
 var _ chasm.NexusCompletionHandler = &Scheduler{}
@@ -127,6 +128,15 @@ func (s *Scheduler) HandleNexusCompletion(
 		)
 		return nil
 	}
+	if !internal.TracksCompletionResult(start.GetOverlapPolicy()) && start.GetRunId() == "" {
+		// A callback can beat the start RPC response. Preserve the pending entry
+		// until that response records its identity and action count.
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(
+			1,
+			metrics.ReasonTag(callbackIgnoredStartNotRecorded),
+		)
+		return nil
+	}
 	if start.GetCompleted() != nil {
 		// Completion callbacks may be validly redelivered, for example after a workflow reset.
 		// Preserve state but keep the duplicate observable through the log and metric.
@@ -193,7 +203,13 @@ func (s *Scheduler) completeAction(
 			previousResult := s.LastCompletionResult.Get(ctx)
 			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
 		case *persistencespb.ChasmNexusCompletion_Success:
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: outcome.Success})
+			// Any success clears the failure. A no-result workflow arrives as an empty
+			// payload and clears the previous result (unlike V1, which keeps it).
+			success := outcome.Success
+			if internal.IsEmptyPayload(success) {
+				success = nil
+			}
+			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: success})
 		default:
 		}
 	}

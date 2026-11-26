@@ -224,6 +224,26 @@ func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
 			request:            &workflowservice.UpdateTaskQueueConfigRequest{TaskQueue: "test-task-queue"},
 			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
 		},
+		{
+			methodName:         "UpdateWorkerVersioningRules",
+			request:            &workflowservice.UpdateWorkerVersioningRulesRequest{TaskQueue: "test-task-queue"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
+		},
+		{
+			methodName:         "GetWorkerVersioningRules",
+			request:            &workflowservice.GetWorkerVersioningRulesRequest{TaskQueue: "test-task-queue"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
+		},
+		{
+			methodName:         "UpdateWorkerBuildIdCompatibility",
+			request:            &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{TaskQueue: "test-task-queue"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
+		},
+		{
+			methodName:         "GetWorkerBuildIdCompatibility",
+			request:            &workflowservice.GetWorkerBuildIdCompatibilityRequest{TaskQueue: "test-task-queue"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
+		},
 
 		// task queue name (from TaskQueue message)
 		{
@@ -233,6 +253,11 @@ func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
 		},
 
 		// deployment name
+		{
+			methodName:         "CreateWorkerDeployment",
+			request:            &workflowservice.CreateWorkerDeploymentRequest{DeploymentName: "test-deployment"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
+		},
 		{
 			methodName:         "DescribeWorkerDeployment",
 			request:            &workflowservice.DescribeWorkerDeploymentRequest{DeploymentName: "test-deployment"},
@@ -274,6 +299,60 @@ func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
 			methodName:         "UpdateWorkerDeploymentVersionMetadata",
 			request:            &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
 			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
+		},
+		{
+			methodName:         "CreateWorkerDeploymentVersion",
+			request:            &workflowservice.CreateWorkerDeploymentVersionRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
+		},
+		{
+			methodName:         "UpdateWorkerDeploymentVersionComputeConfig",
+			request:            &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
+		},
+		{
+			methodName:         "ValidateWorkerDeploymentVersionComputeConfig",
+			request:            &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
+		},
+
+		// standalone activity ID
+		{
+			methodName:         "DeleteActivityExecution",
+			request:            &workflowservice.DeleteActivityExecutionRequest{ActivityId: "test-activity-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-activity-id"},
+		},
+
+		// standalone Nexus operation ID
+		{
+			methodName:         "StartNexusOperationExecution",
+			request:            &workflowservice.StartNexusOperationExecutionRequest{OperationId: "test-operation-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-operation-id"},
+		},
+		{
+			methodName:         "DescribeNexusOperationExecution",
+			request:            &workflowservice.DescribeNexusOperationExecutionRequest{OperationId: "test-operation-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-operation-id"},
+		},
+		{
+			methodName:         "PollNexusOperationExecution",
+			request:            &workflowservice.PollNexusOperationExecutionRequest{OperationId: "test-operation-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-operation-id"},
+		},
+		{
+			methodName:         "RequestCancelNexusOperationExecution",
+			request:            &workflowservice.RequestCancelNexusOperationExecutionRequest{OperationId: "test-operation-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-operation-id"},
+		},
+		{
+			methodName:         "TerminateNexusOperationExecution",
+			request:            &workflowservice.TerminateNexusOperationExecutionRequest{OperationId: "test-operation-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-operation-id"},
+		},
+		{
+			methodName:         "DeleteNexusOperationExecution",
+			request:            &workflowservice.DeleteNexusOperationExecutionRequest{OperationId: "test-operation-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-operation-id"},
 		},
 
 		// namespace

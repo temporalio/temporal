@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/temporalproto"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
@@ -198,9 +197,9 @@ func (s *convertSuite) TestConvertScope() {
 		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 	)
 
-	s.True(temporalproto.DeepEqual(scope, FromPersistenceScope(
+	s.Equal(scope, FromPersistenceScope(
 		ToPersistenceScope(scope),
-	)))
+	))
 }
 
 func (s *convertSuite) TestConvertQueueState() {
@@ -232,7 +231,7 @@ func (s *convertSuite) TestConvertQueueState() {
 		exclusiveReaderHighWatermark: tasks.NewKey(time.Unix(0, rand.Int63()).UTC(), 0),
 	}
 
-	s.True(temporalproto.DeepEqual(queueState, FromPersistenceQueueState(
+	s.Equal(queueState, FromPersistenceQueueState(
 		ToPersistenceQueueState(queueState),
-	)))
+	))
 }

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
@@ -28,6 +29,7 @@ type (
 		visibilityManager            manager.VisibilityManager
 		metadataManager              persistence.MetadataManager
 		clusterMetadata              cluster.Metadata
+		replicationResolverFactory   namespace.ReplicationResolverFactory
 		nexusEndpointManager         persistence.NexusEndpointManager
 		historyClient                resource.HistoryClient
 		metricsHandler               metrics.Handler
@@ -44,15 +46,16 @@ type (
 	}
 	componentParams struct {
 		fx.In
-		DynamicCollection    *dynamicconfig.Collection
-		VisibilityManager    manager.VisibilityManager
-		MetadataManager      persistence.MetadataManager
-		ClusterMetadata      cluster.Metadata
-		NexusEndpointManager persistence.NexusEndpointManager
-		HistoryClient        resource.HistoryClient
-		MetricsHandler       metrics.Handler
-		Logger               log.Logger
-		EventLogger          otellog.Logger
+		DynamicCollection          *dynamicconfig.Collection
+		VisibilityManager          manager.VisibilityManager
+		MetadataManager            persistence.MetadataManager
+		ClusterMetadata            cluster.Metadata
+		ReplicationResolverFactory namespace.ReplicationResolverFactory
+		NexusEndpointManager       persistence.NexusEndpointManager
+		HistoryClient              resource.HistoryClient
+		MetricsHandler             metrics.Handler
+		Logger                     log.Logger
+		EventLogger                otellog.Logger
 	}
 )
 
@@ -66,6 +69,7 @@ func newComponent(
 		visibilityManager:            params.VisibilityManager,
 		metadataManager:              params.MetadataManager,
 		clusterMetadata:              params.ClusterMetadata,
+		replicationResolverFactory:   params.ReplicationResolverFactory,
 		nexusEndpointManager:         params.NexusEndpointManager,
 		historyClient:                params.HistoryClient,
 		metricsHandler:               params.MetricsHandler,
@@ -119,6 +123,7 @@ func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActiv
 	return newLocalActivities(
 		wc.metadataManager,
 		wc.clusterMetadata,
+		wc.replicationResolverFactory,
 		wc.nexusEndpointManager,
 		wc.logger,
 		wc.eventLogger,

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -69,7 +70,7 @@ func (s *noopDCRedirectionPolicySuite) TearDownTest() {
 func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := namespace.ID("some random namespace ID")
-	apiName := "any random API name"
+	apiName := api.WorkflowServicePrefix + "AnyRandomAPIName"
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
@@ -126,41 +127,44 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownTest() {
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestSelectedAPIs() {
 	s.Equal(map[string]struct{}{
 		// Workflow APIs
-		"StartWorkflowExecution":           {},
-		"SignalWithStartWorkflowExecution": {},
-		"SignalWorkflowExecution":          {},
-		"UpdateWorkflowExecution":          {},
-		"RequestCancelWorkflowExecution":   {},
-		"TerminateWorkflowExecution":       {},
-		"PauseWorkflowExecution":           {},
-		"UnpauseWorkflowExecution":         {},
-		"ResetWorkflowExecution":           {},
-		"DeleteWorkflowExecution":          {},
-		"QueryWorkflow":                    {},
-		"ExecuteMultiOperation":            {},
+		wfMethod("StartWorkflowExecution"):           {},
+		wfMethod("SignalWithStartWorkflowExecution"): {},
+		wfMethod("SignalWorkflowExecution"):          {},
+		wfMethod("UpdateWorkflowExecution"):          {},
+		wfMethod("RequestCancelWorkflowExecution"):   {},
+		wfMethod("TerminateWorkflowExecution"):       {},
+		wfMethod("PauseWorkflowExecution"):           {},
+		wfMethod("UnpauseWorkflowExecution"):         {},
+		wfMethod("ResetWorkflowExecution"):           {},
+		wfMethod("DeleteWorkflowExecution"):          {},
+		wfMethod("QueryWorkflow"):                    {},
+		wfMethod("ExecuteMultiOperation"):            {},
+		// Kept because the bare key this list used to have covered AdminService's
+		// same-named method too, not because a request reaches it.
+		api.AdminServicePrefix + "DeleteWorkflowExecution": {},
 
 		// Standalone Activity APIs
-		"StartActivityExecution":         {},
-		"RequestCancelActivityExecution": {},
-		"TerminateActivityExecution":     {},
-		"DeleteActivityExecution":        {},
-		"PauseActivityExecution":         {},
-		"UnpauseActivityExecution":       {},
-		"ResetActivityExecution":         {},
-		"UpdateActivityExecutionOptions": {},
+		wfMethod("StartActivityExecution"):         {},
+		wfMethod("RequestCancelActivityExecution"): {},
+		wfMethod("TerminateActivityExecution"):     {},
+		wfMethod("DeleteActivityExecution"):        {},
+		wfMethod("PauseActivityExecution"):         {},
+		wfMethod("UnpauseActivityExecution"):       {},
+		wfMethod("ResetActivityExecution"):         {},
+		wfMethod("UpdateActivityExecutionOptions"): {},
 
 		// Standalone Nexus Operation APIs
-		"StartNexusOperationExecution":         {},
-		"RequestCancelNexusOperationExecution": {},
-		"TerminateNexusOperationExecution":     {},
-		"DeleteNexusOperationExecution":        {},
-	}, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs)
+		wfMethod("StartNexusOperationExecution"):         {},
+		wfMethod("RequestCancelNexusOperationExecution"): {},
+		wfMethod("TerminateNexusOperationExecution"):     {},
+		wfMethod("DeleteNexusOperationExecution"):        {},
+	}, selectedAPIsForwardingRedirectionPolicyAllowedAPIs)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_LocalNamespace() {
 	s.setupLocalNamespace()
 
-	apiName := "any random API name"
+	apiName := api.WorkflowServicePrefix + "AnyRandomAPIName"
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
@@ -180,7 +184,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_OneReplicationCluster() {
 	s.setupGlobalNamespaceWithOneReplicationCluster()
 
-	apiName := "any random API name"
+	apiName := api.WorkflowServicePrefix + "AnyRandomAPIName"
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
@@ -200,7 +204,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_NamespaceNotWhiltelisted() {
 	s.setupGlobalNamespaceWithTwoReplicationCluster(false, true)
 
-	apiName := "any random API name"
+	apiName := api.WorkflowServicePrefix + "AnyRandomAPIName"
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
@@ -217,8 +221,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhitelisted() {
-	// Active cluster is alternative, but non-whitelisted APIs must stay local.
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotAllowed() {
+	// Active cluster is alternative, but not allow-listed APIs must stay local.
 	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
 
 	callCount := 0
@@ -228,8 +232,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		return nil
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		apiName = apiName + "_notwhitelisted"
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
+		apiName += "_notallowed"
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -237,7 +241,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentCluster() {
@@ -250,7 +254,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		return nil
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -258,7 +262,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeCluster() {
@@ -271,7 +275,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		return nil
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -279,18 +283,18 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster() {
 	s.setupGlobalNamespaceWithOneCluster(false)
-	callCount := len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs) * 2
+	callCount := len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs) * 2
 
 	testcases := []struct {
 		name              string
 		forwardingEnabled bool
 		selectedAPIsOnly  bool
-		apiWhitelisted    bool
+		apiAllowed        bool
 		expectedCallCount map[string]int
 	}{
 		{
@@ -304,16 +308,16 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
 		},
 		{
-			name:              "Forwarding enabled, all APIs disabled, API not whitelisted",
+			name:              "Forwarding enabled, all APIs disabled, API not allow-listed",
 			forwardingEnabled: true,
 			selectedAPIsOnly:  true,
 			expectedCallCount: map[string]int{s.currentClusterName: callCount},
 		},
 		{
-			name:              "Forwarding enabled, all APIs disabled, API whitelisted",
+			name:              "Forwarding enabled, all APIs disabled, API allow-listed",
 			forwardingEnabled: true,
 			selectedAPIsOnly:  true,
-			apiWhitelisted:    true,
+			apiAllowed:        true,
 			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
 		},
 	}
@@ -329,15 +333,14 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 				return nil
 			}
 
-			apis := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
-			for api := range apis {
-				if !tc.apiWhitelisted {
-					api = api + "_notwhitelisted"
+			for fullMethod := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
+				if !tc.apiAllowed {
+					fullMethod += "_notallowed"
 				}
-				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, nil, callFn)
+				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, fullMethod, nil, callFn)
 				s.NoError(err)
 
-				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, nil, callFn)
+				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, fullMethod, nil, callFn)
 				s.NoError(err)
 			}
 
@@ -364,7 +367,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		}
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -372,8 +375,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), currentClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster() {
@@ -394,7 +397,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		}
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -402,8 +405,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), currentClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster_AllAPIs() {
@@ -425,7 +428,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		}
 	}
 
-	apiName := "NotExistRandomAPI"
+	apiName := api.WorkflowServicePrefix + "NotExistRandomAPI"
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.NoError(err)
 
@@ -452,7 +455,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		return nil
 	}
 
-	apiName := "NonWhitelistedAPI"
+	apiName := "NotAllowedAPI"
 	err := policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.NoError(err)
 	err = policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)

@@ -177,7 +177,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	s.Equal(t, pres.task)
 
 	// finish task
-	pres.task.finish(taskFinishResult{consumedToken: true})
+	pres.task.finish(nil)
 	s.True(gotResponse)
 
 	// one more, context should time out again. note two contexts this time.
@@ -236,7 +236,7 @@ func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
 	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
 	now := s.ts.Now().UnixNano()
 	s.md.rateLimitManager.mu.Lock()
-	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.Consume(
 		s.md.rateLimitManager.wholeQueueLimit, now, 1)
 	s.md.rateLimitManager.mu.Unlock()
 
@@ -262,7 +262,7 @@ func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
 	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
 	now := s.ts.Now().UnixNano()
 	s.md.rateLimitManager.mu.Lock()
-	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.Consume(
 		s.md.rateLimitManager.wholeQueueLimit, now, 1)
 	s.md.rateLimitManager.mu.Unlock()
 
@@ -293,7 +293,7 @@ func (s *MatcherDataSuite) TestQuery() {
 	s.True(pres.task.isQuery())
 	// wake up getResponse. use some error just to check it's passed through.
 	someError := errors.New("some error")
-	pres.task.finish(taskFinishResult{err: someError, consumedToken: true})
+	pres.task.finish(someError)
 
 	resp := <-respC
 	s.False(resp.forwarded)
@@ -308,7 +308,7 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	s.NotNil(pres.task)
 	s.True(pres.task.isQuery())
 	var fres *matchingservice.QueryWorkflowResponse
-	pres.task.finishForward(fres, nil, true)
+	pres.task.finishForward(fres, nil)
 
 	resp := <-respC
 	s.True(resp.forwarded)
@@ -327,7 +327,7 @@ func (s *MatcherDataSuite) TestQueryForwardError() {
 	s.True(pres.task.isQuery())
 	var fres *matchingservice.QueryWorkflowResponse
 	someError := errors.New("some error")
-	pres.task.finishForward(fres, someError, true)
+	pres.task.finishForward(fres, someError)
 
 	resp := <-respC
 	s.True(resp.forwarded)
@@ -344,7 +344,7 @@ func (s *MatcherDataSuite) TestQueryForwardResponse() {
 	fres := &matchingservice.QueryWorkflowResponse{
 		QueryResult: payloads.EncodeString("ok"),
 	}
-	pres.task.finishForward(fres, nil, true)
+	pres.task.finishForward(fres, nil)
 
 	resp := <-respC
 	s.True(resp.forwarded)
@@ -360,7 +360,7 @@ func (s *MatcherDataSuite) TestTaskForward() {
 		pres := s.md.EnqueuePollerAndWait(nil, poller)
 		s.NotNil(pres.task)
 		// use some error just to check it's passed through
-		pres.task.finishForward(nil, someError, true)
+		pres.task.finishForward(nil, someError)
 	}()
 	// two normal pollers
 	go s.pollFakeTime(time.Second)
@@ -487,7 +487,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitDoesNotBlockOtherKeys() {
 	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
 	res := s.pollFakeTime(time.Second)
 	s.Equal(task1a, res.task)
-	res.task.finish(taskFinishResult{consumedToken: true})
+	res.task.finish(nil)
 
 	// Now key1 is limited; add another key1 task (high priority) and a key2 task (lower priority).
 	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
@@ -530,8 +530,8 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitRecycleWakesBlockedMatch() {
 	}()
 	s.waitForPollers(1)
 
-	// Finish task1a with consumedToken=false, which recycles the key1 token and should unblock task1b.
-	res.task.finish(taskFinishResult{consumedToken: false})
+	// Drop task1a, which recycles the key1 token and should unblock task1b.
+	res.task.finish(dropReasonInvalid)
 
 	// The parked poller should now match task1b without any fake-time advancement.
 	select {
@@ -996,132 +996,30 @@ func (s *MatcherDataSuite) TestFindMatch() {
 	}
 }
 
-// simple limiter tests
-
-func TestSimpleLimiter(t *testing.T) {
-	p := makeSimpleLimiterParams(10, time.Second)
-
-	base := time.Now().UnixNano()
-	now := base
-	var ready simpleLimiter
-
-	// can consume 11 tokens immediately (1 since we're starting from 0 and 10 burst)
-	for range 11 {
-		require.GreaterOrEqual(t, now, ready)
-		ready = ready.consume(p, now, 1)
+func TestPollerListOrdering(t *testing.T) {
+	p := pollerList{logger: testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)}
+	start := time.Unix(1, 0)
+	pollers := []*waitingPoller{
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(2 * time.Second)},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(6 * time.Second)},
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(4 * time.Second)},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(time.Second)},
 	}
-	// now not ready anymore
-	require.Less(t, now, ready)
-
-	// after 100 ms, we can consume one more
-	now += int64(99 * time.Millisecond)
-	require.Less(t, now, ready)
-	now += int64(1 * time.Millisecond)
-	require.GreaterOrEqual(t, now, ready)
-	ready = ready.consume(p, now, 1)
-	require.Less(t, now, ready)
-}
-
-func TestSimpleLimiterOverTime(t *testing.T) {
-	p := makeSimpleLimiterParams(10, time.Second)
-
-	base := time.Now().UnixNano()
-	now := base
-	var ready simpleLimiter
-
-	consumed := int64(0)
-	for range 10000 {
-		// sleep for some random time, average < 100ms, so we are limited on average
-		// but have some gaps too.
-		now += (70 + rand.Int63n(50)) * int64(time.Millisecond)
-
-		if now >= int64(ready) {
-			ready = ready.consume(p, now, 1)
-			consumed++
-		}
+	for _, poller := range pollers {
+		p.Add(poller)
 	}
 
-	effectiveRate := float64(consumed) / float64(now-base) * float64(time.Second)
-	require.InEpsilon(t, 10, effectiveRate, 0.01)
-}
-
-func TestSimpleLimiterRecycle(t *testing.T) {
-	p := makeSimpleLimiterParams(10, time.Second)
-
-	base := time.Now().UnixNano()
-	now := base
-	var ready simpleLimiter
-
-	consumed := int64(0)
-	for range 10000 {
-		// sleep for some random time, always < 100ms, so we are always limited
-		now += (30 + rand.Int63n(30)) * int64(time.Millisecond)
-
-		if now >= int64(ready) {
-			ready = ready.consume(p, now, 1)
-			consumed++
-
-			// 20% of the time, recycle the token we took
-			if rand.Intn(100) < 20 {
-				now += int64(5 * time.Millisecond)
-				ready = ready.consume(p, now, -1)
-				consumed--
-			}
-		}
+	expected := []*waitingPoller{pollers[4], pollers[2], pollers[5], pollers[1], pollers[0], pollers[3]}
+	at := p.head
+	for _, poller := range expected {
+		require.Same(t, poller, at)
+		at = at.next
 	}
-
-	effectiveRate := float64(consumed) / float64(now-base) * float64(time.Second)
-	require.InEpsilon(t, 10, effectiveRate, 0.01)
-}
-
-func TestSimpleLimiterUnlimited(t *testing.T) {
-	now := time.Now().UnixNano()
-	var ready simpleLimiter
-
-	pInf := makeSimpleLimiterParams(1e12, 0)
-	require.False(t, pInf.never())
-	require.False(t, pInf.limited())
-
-	for range 1000 {
-		ready = ready.consume(pInf, now, 1)
-		require.LessOrEqual(t, ready.delay(now), time.Duration(0))
-	}
-}
-
-func TestSimpleLimiterLowToHigh(t *testing.T) {
-	for _, lowRate := range []float64{
-		0,
-		1e-8, // 1 per 1000+ days
-	} {
-		pLow := makeSimpleLimiterParams(lowRate, time.Second)
-		require.Equal(t, pLow.never(), (lowRate == 0))
-
-		now := time.Now().UnixNano()
-		var ready simpleLimiter
-		ready = ready.consume(pLow, now, 1)
-		// not ready yet
-		require.Greater(t, ready.delay(now), time.Duration(0))
-		// not ready even after 1 day
-		require.Greater(t, ready.delay(now+(24*time.Hour).Nanoseconds()), time.Duration(0))
-
-		// try clipping using the low limit
-		ready = ready.clip(pLow, now, 1)
-		// still not ready now or in 1 day
-		require.Greater(t, ready.delay(now), time.Duration(0))
-		require.Greater(t, ready.delay(now+(24*time.Hour).Nanoseconds()), time.Duration(0))
-
-		// switch to higher rate limit
-		pHigh := makeSimpleLimiterParams(10, time.Second)
-		require.False(t, pHigh.never())
-		require.True(t, pHigh.limited())
-
-		// clip to high limit
-		ready = ready.clip(pHigh, now, 1)
-		// not ready yet
-		require.Greater(t, ready.delay(now), time.Duration(0))
-		// ready within one minute
-		require.Less(t, ready.delay(now+time.Minute.Nanoseconds()), time.Duration(0))
-	}
+	require.Nil(t, at)
+	require.Same(t, expected[len(expected)-1], p.tail)
+	require.Equal(t, len(pollers), p.Len())
 }
 
 func TestCheckConstants(t *testing.T) {
@@ -1239,7 +1137,7 @@ func FuzzMatcherData(f *testing.F) {
 					res := md.EnqueuePollerAndWait(nil, &waitingPoller{taskForwarderType: parentTaskForwarder})
 					softassert.That(md.logger, res.ctxErr == nil && res.task != nil, "")
 					ts.Sleep(sleepTime)
-					res.task.finishForward(nil, nil, true)
+					res.task.finishForward(nil, nil)
 				}()
 
 			case ops - 1: // jump ahead, just to speed things up

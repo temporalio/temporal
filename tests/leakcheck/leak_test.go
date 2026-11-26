@@ -29,8 +29,8 @@ var goleakOpts = []goleak.Option{
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
+	objectleak.WithExpected("functionalTestBase.testCluster.host*"),
+	objectleak.WithExpected("functionalTestBase.testCluster.testBase*"),
 }
 
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional

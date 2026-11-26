@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -65,6 +65,7 @@ type (
 		clientFactory          svc.Factory
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
+		namespaceHandler       *namespaceHandler
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -82,6 +83,7 @@ type (
 		clientFactory          svc.Factory
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
+		namespaceHandler       *namespaceHandler
 	}
 )
 
@@ -112,6 +114,7 @@ func NewOperatorHandlerImpl(
 		clientFactory:          args.clientFactory,
 		namespaceRegistry:      args.namespaceRegistry,
 		nexusEndpointClient:    args.nexusEndpointClient,
+		namespaceHandler:       args.namespaceHandler,
 	}
 
 	return handler
@@ -189,7 +192,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
+	if storeName == esconfig.PersistenceName {
 		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 	return h.addSearchAttributesSQL(ctx, request, visManager)
@@ -227,10 +230,11 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		return nil
 	}
 
-	if err := visManager.AddSearchAttributes(
+	err = visManager.AddSearchAttributes(
 		ctx,
 		&manager.AddSearchAttributesRequest{SearchAttributes: customAttributesToAdd},
-	); err != nil {
+	)
+	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 
@@ -371,7 +375,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
+	if storeName == esconfig.PersistenceName {
 		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 	return h.removeSearchAttributesSQL(ctx, request, visManager)
@@ -489,19 +493,48 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
-		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
+	if h.visibilityMgr.HasStoreName(esconfig.PersistenceName) {
+		return h.listSearchAttributesElasticsearch(request, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
 }
 
+// listSearchAttributesElasticsearch returns the custom search attributes registered at the
+// cluster level, plus the namespace aliases of pre-allocated fields. Pre-allocated fields
+// themselves (eg: Keyword01) are not returned: they can only be used through an alias.
 func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
-	ctx context.Context,
-	indexName string,
+	request *operatorservice.ListSearchAttributesRequest,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*operatorservice.ListSearchAttributesResponse, error) {
+	cmCSA := searchAttributes.Custom()
+	customSearchAttributes := searchattribute.WithoutPreallocatedFields(cmCSA)
+	if nsName := request.GetNamespace(); nsName != "" {
+		ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+		if err != nil {
+			return nil, err
+		}
+		// Like listSearchAttributesSQL, iterate over the fields in cluster metadata and return the
+		// alias of the pre-allocated ones.
+		saMapper := ns.CustomSearchAttributesMapper()
+		fieldToAliasMap := saMapper.FieldToAliasMap()
+		for field, tp := range cmCSA {
+			if !sadefs.IsPreallocatedCSAFieldName(field, tp) {
+				continue
+			}
+			alias, ok := fieldToAliasMap[field]
+			if !ok {
+				continue
+			}
+			// A cluster-level custom search attribute takes precedence over a namespace alias
+			// with the same name.
+			if _, exists := customSearchAttributes[alias]; exists {
+				continue
+			}
+			customSearchAttributes[alias] = tp
+		}
+	}
 	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: searchAttributes.Custom(),
+		CustomAttributes: customSearchAttributes,
 		SystemAttributes: searchAttributes.System(),
 	}, nil
 }
@@ -602,6 +635,26 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
 	}, nil
+}
+
+// SoftDeleteNamespace moves a namespace to SOFT_DELETED and replicates the change.
+func (h *OperatorHandlerImpl) SoftDeleteNamespace(
+	ctx context.Context,
+	request *operatorservice.SoftDeleteNamespaceRequest,
+) (_ *operatorservice.SoftDeleteNamespaceResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if !h.config.EnableNamespaceSoftDelete() {
+		return nil, errNamespaceSoftDeleteNotAllowed
+	}
+	err := h.namespaceHandler.SoftDeleteNamespace(ctx, namespace.Name(request.GetNamespace()), namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	return &operatorservice.SoftDeleteNamespaceResponse{}, nil
 }
 
 // AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.

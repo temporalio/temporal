@@ -7,7 +7,6 @@ This document describes the project's testing setup, utilities and best practice
 ### Build tags
 - `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled.
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
-- `disable_grpc_modules`: Disables gRPC modules for faster compilation during unit tests.
 
 ### Environment variables
 - `CGO_ENABLED`: Set to `0` to disable CGO, which can significantly speed up compilation time.
@@ -19,7 +18,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
 - `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Each can be used by multiple tests simultaneously.
 - `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
-- `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`. The timeout is multiplied by `debug.TimeoutMultiplier` when debugging.
+- `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 
 ### Debugging via IDE
@@ -246,6 +245,52 @@ env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfau
 })
 ```
 
+### Persistence fault injection
+
+Use `testcore.InjectPersistenceFault` to return custom errors from persistence calls. The fault is
+active before the test cluster starts. You can filter it by store and method.
+
+```go
+option := testcore.InjectPersistenceFault(
+    func(config.FaultInjectionTarget) error {
+        return context.DeadlineExceeded
+    },
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+```
+
+The test fails if no matching call reaches the faulty path. This ensures that if we end up refactoring
+the code (i.e., "UpdateShard" doesn't exist anymore), and the path isn't reachable, that the test
+that injects fault there will intentionally fail.
+
+### Persistence order enforcement
+
+Use `testcore.NewPersistenceCallGate` when a test must control call order. It returns a
+`*testcore.PersistenceCallGate` and a `TestOption` that installs the gate. Matching calls block at
+the gate. Call `WaitForPersistenceCall` before you check other state. Call `Release` on the gate to
+continue the persistence operation. Call `ReleaseWithError` to return an error from the blocked
+operation. 
+
+```go
+gate, option := testcore.NewPersistenceCallGate(
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+
+// Wait until one UpdateShard call blocks at the gate.
+testcore.WaitForPersistenceCall(t, gate, 10*time.Second)
+
+// Check state, do work, make assertions, etc... while the call is blocked.
+
+// Later, release the gate manually.
+gate.Release() // Or gate.ReleaseWithError(err) to fail the blocked call.
+```
+
+The test fails if no matching call reaches the gate.
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise
@@ -334,8 +379,6 @@ func (s* TestMyFeatureSuite) func TestXYZ(t *testing.T) {
 ```
 
 Note that each test has its own namespace (`s.Namespace()`) for isolation.
-
-> **Note:** The legacy `FunctionalTestBase` (using testify's `suite`) has been deprecated for new tests.
 
 ## OpenTelemetry (OTEL)
 

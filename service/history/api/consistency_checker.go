@@ -4,15 +4,14 @@ package api
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/vclock"
@@ -180,7 +179,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 	archetypeID chasm.ArchetypeID,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
-	if err := c.clockConsistencyCheck(reqClock); err != nil {
+	if err := c.clockConsistencyCheck(ctx, reqClock); err != nil {
 		return nil, err
 	}
 
@@ -199,6 +198,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 }
 
 func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
+	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 ) error {
 	if reqClock == nil {
@@ -217,12 +217,10 @@ func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
 	if cmpResult <= 0 {
 		return nil
 	}
-	shardID := c.shardContext.GetShardID()
-	c.shardContext.UnloadForOwnershipLost()
-	return &persistence.ShardOwnershipLostError{
-		ShardID: shardID,
-		Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
+	if err := c.shardContext.AssertOwnership(ctx); err != nil {
+		return err
 	}
+	return serviceerror.NewInvalidArgument("invalid task token")
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(

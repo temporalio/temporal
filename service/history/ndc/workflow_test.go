@@ -14,6 +14,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -195,7 +197,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 		RunId: incomingRunID,
 	}).AnyTimes()
 
-	_, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
+	_, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow, metrics.NoopMetricsHandler)
 	s.Error(err)
 }
 
@@ -246,6 +248,11 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 
 	s.mockMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
+	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		cluster.TestCurrentClusterName,
+	)).AnyTimes()
 	startedWorkflowTask := &historyi.WorkflowTaskInfo{
 		Version:          1234,
 		ScheduledEventID: 5678,
@@ -272,13 +279,13 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(2)
 	s.mockMutableState.EXPECT().GetCloseVersion().Return(lastEventVersion, nil)
-	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(historyi.TransactionPolicyPassive, policy)
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil)
-	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(historyi.TransactionPolicyActive, policy)
 }
@@ -336,13 +343,13 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	// if workflow is in zombie or finished state, keep as is
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(2)
 	s.mockMutableState.EXPECT().GetCloseVersion().Return(lastEventVersion, nil).AnyTimes()
-	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
+	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(historyi.TransactionPolicyPassive, policy)
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
+	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(historyi.TransactionPolicyPassive, policy)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.State)

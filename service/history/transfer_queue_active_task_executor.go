@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -17,10 +18,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -55,10 +58,11 @@ type (
 	transferQueueActiveTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
-		workflowResetter        ndc.WorkflowResetter
-		parentClosePolicyClient parentclosepolicy.Client
-		versionCache            worker_versioning.VersionMembershipAndReactivationStatusCache
-		testHooks               testhooks.TestHooks
+		workflowResetter         ndc.WorkflowResetter
+		parentClosePolicyClient  parentclosepolicy.Client
+		concurrencyServiceClient fcpb.ConcurrencyServiceClient
+		versionCache             worker_versioning.VersionMembershipAndReactivationStatusCache
+		testHooks                testhooks.TestHooks
 	}
 )
 
@@ -71,6 +75,7 @@ func newTransferQueueActiveTaskExecutor(
 	config *configs.Config,
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
+	concurrencyServiceClient fcpb.ConcurrencyServiceClient,
 	visibilityManager manager.VisibilityManager,
 	chasmEngine chasm.Engine,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
@@ -98,8 +103,9 @@ func newTransferQueueActiveTaskExecutor(
 			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
-		versionCache: versionCache,
-		testHooks:    testHooks,
+		concurrencyServiceClient: concurrencyServiceClient,
+		versionCache:             versionCache,
+		testHooks:                testHooks,
 	}
 }
 
@@ -172,6 +178,8 @@ func (t *transferQueueActiveTaskExecutor) execute(
 		err = t.processResetWorkflow(ctx, task)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task)
+	case *tasks.ReleaseLimiterTask:
+		err = t.processReleaseLimiterTask(ctx, task)
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
@@ -184,6 +192,38 @@ func (t *transferQueueActiveTaskExecutor) execute(
 		ExecutedAsActive:    true,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *transferQueueActiveTaskExecutor) processReleaseLimiterTask(
+	ctx context.Context,
+	task *tasks.ReleaseLimiterTask,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	errs := make([]error, len(task.Limiters))
+	var wg sync.WaitGroup
+	for i, limiter := range task.Limiters {
+		release := func() {
+			switch limiter.GetLimiterType() {
+			case enumsspb.LIMITER_TYPE_CONCURRENCY:
+				_, errs[i] = t.concurrencyServiceClient.Batch(ctx, &fcpb.ConcurrencyServiceBatchRequest{
+					NamespaceId:  task.NamespaceID,
+					Key:          limiter.GetKey(),
+					ReleaseSlots: []string{limiter.GetSlotId()},
+				})
+			default:
+				errs[i] = queues.NewTerminalTaskError(fmt.Sprintf("unexpected limiter type %v", limiter.GetLimiterType()))
+			}
+		}
+		if i == len(task.Limiters)-1 {
+			release()
+		} else {
+			wg.Go(release)
+		}
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
@@ -1213,6 +1253,10 @@ func (t *transferQueueActiveTaskExecutor) getOrphanedChildReplacementInfo(
 	if !t.config.EnableOrphanedChildWorkflowReplacement(parentNamespaceName.String()) {
 		return nil
 	}
+	// Only a global namespace can fail over, so a local parent never has a losing branch.
+	if !mutableState.GetNamespaceEntry().IsGlobalNamespace() {
+		return nil
+	}
 	executionInfo := mutableState.GetExecutionInfo()
 	childNamespaceMatchesParent := childInfo.GetNamespaceId() == executionInfo.GetNamespaceId()
 	if childInfo.GetNamespaceId() == "" {
@@ -2007,6 +2051,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		return err
 	}
 	allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(namespaceName.String())
+	var resetRequestID string
+	if t.shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceName.String()) {
+		resetRequestID = uuid.New().String()
+	}
 	baseWorkflow := ndc.NewWorkflow(
 		t.shardContext.GetClusterMetadata(),
 		baseContext,
@@ -2023,6 +2071,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		resetRequestID,
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	querypb "go.temporal.io/api/query/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -27,14 +29,20 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -141,6 +149,141 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNo
 			)
 		}
 	}, replicationWaitTime, replicationCheckInterval)
+}
+
+// TestNamespaceFailover_SetActiveClusterOnPassiveReplica covers the self-hosted to cloud migration
+// step `b> tctl --ns $ns n u --ac a`: re-asserting the current active cluster on the passive replica
+// of a namespace that has already failed over (FailoverVersion > IFV). The update must be accepted
+// by the passive cluster, keep cluster0 active on both clusters, leave info and config untouched,
+// and converge FailoverVersion on both clusters to the passive cluster's next version for cluster0.
+//
+// Both test clusters share FVI=10, so the passive cluster's next version for cluster0 equals the
+// current one. The FVI-mismatch bump (42 -> 1_000_002) is covered by
+// TestUpdateNamespace_PassiveClusterFailoverVersionBump in service/frontend.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_SetActiveClusterOnPassiveReplica() {
+	namespace := s.createGlobalNamespace()
+	activeCluster := s.clusters[0].ClusterName()
+
+	// IFV(cluster0)=1, IFV(cluster1)=2, FVI=10: 1 -> 2 -> 11.
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+	s.failover(namespace, 1, activeCluster, 11)
+
+	before := s.describeNamespace(s.T(), s.clusters[1], namespace, true)
+	s.Equal(int64(11), before.GetFailoverVersion())
+
+	resp, err := s.clusters[1].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+		},
+	})
+	s.NoError(err)
+	s.Equal(int64(11), resp.GetFailoverVersion())
+	s.Equal(activeCluster, resp.GetReplicationConfig().GetActiveClusterName())
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		for _, c := range s.clusters {
+			after := s.describeNamespace(t, c, namespace, true)
+			require.Equal(t, int64(11), after.GetFailoverVersion(), "cluster %s", c.ClusterName())
+			require.Equal(t, activeCluster, after.GetReplicationConfig().GetActiveClusterName(), "cluster %s", c.ClusterName())
+			require.Equal(t, enumspb.REPLICATION_STATE_NORMAL, after.GetReplicationConfig().GetState(), "cluster %s", c.ClusterName())
+			require.ElementsMatch(t, s.namespaceClusterNames(before), s.namespaceClusterNames(after), "cluster %s", c.ClusterName())
+			require.Len(t, after.GetFailoverHistory(), len(before.GetFailoverHistory()), "cluster %s", c.ClusterName())
+			protorequire.ProtoEqual(t, before.GetNamespaceInfo(), after.GetNamespaceInfo())
+			protorequire.ProtoEqual(t, before.GetConfig(), after.GetConfig())
+		}
+	}, replicationWaitTime, replicationCheckInterval)
+}
+
+// TestNamespaceFailover_BacklogMetricsFollowNamespaceState guards against loaded task queue partitions
+// continuing to report backlog under the namespace_state tag they were loaded with after a failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_BacklogMetricsFollowNamespaceState() {
+	for _, c := range s.clusters {
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingBacklogMetricsEmitInterval, 500*time.Millisecond)
+		// Lets the standby cluster push the replicated workflow tasks to its matching service quickly,
+		// so it has a passive backlog loaded before the failover.
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.StandbyTaskMissingEventsDiscardDelay, time.Second)
+	}
+	namespace := s.createGlobalNamespace()
+	tq := testcore.RandomizeStr("backlog-metrics-failover-tq")
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		capture := captureHandler.StartCapture()
+		captures[i] = capture
+		s.T().Cleanup(func() { captureHandler.StopCapture(capture) })
+	}
+
+	const numWorkflows = 5
+	for i := range numWorkflows {
+		_, err := s.clusters[0].FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.NewString(),
+			Namespace:    namespace,
+			WorkflowId:   fmt.Sprintf("backlog-metrics-failover-%d", i),
+			WorkflowType: &commonpb.WorkflowType{Name: "backlog-metrics-failover-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		s.NoError(err)
+	}
+
+	// Sums the latest backlog gauge value of each partition in a cluster, per namespace_state tag.
+	backlogByState := func(clusterIdx int) map[string]float64 {
+		latest := make(map[[2]string]float64)
+		for _, r := range captures[clusterIdx].SnapshotMetric(metrics.ApproximateBacklogCount.Name()) {
+			if r.Tags["namespace"] != namespace || r.Tags["taskqueue"] != tq || r.Tags["task_type"] != "Workflow" {
+				continue
+			}
+			latest[[2]string{r.Tags["namespace_state"], r.Tags["partition"]}] = r.Value.(float64)
+		}
+		totals := make(map[string]float64)
+		for key, value := range latest {
+			totals[key[0]] += value
+		}
+		return totals
+	}
+	requireBacklog := func(t *await.T, clusterIdx int, active, passive float64) {
+		totals := backlogByState(clusterIdx)
+		require.InDelta(t, active, totals[metrics.ActiveNamespaceStateTagValue], 0.1, "cluster %d active backlog", clusterIdx)
+		require.InDelta(t, passive, totals[metrics.PassiveNamespaceStateTagValue], 0.1, "cluster %d passive backlog", clusterIdx)
+	}
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		requireBacklog(t, 0, numWorkflows, 0)
+		requireBacklog(t, 1, 0, numWorkflows)
+	}, 30*time.Second, 500*time.Millisecond)
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	// The failover unloads the partitions on both clusters, which zeroes their old-tag backlog. The new
+	// active cluster may already be reloading some of them as history pushes tasks.
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		totals0, totals1 := backlogByState(0), backlogByState(1)
+		require.InDelta(t, 0, totals0[metrics.ActiveNamespaceStateTagValue], 0.1, "cluster 0 active backlog")
+		require.InDelta(t, 0, totals1[metrics.PassiveNamespaceStateTagValue], 0.1, "cluster 1 passive backlog")
+	}, 30*time.Second, 500*time.Millisecond)
+
+	// Partitions reload with the new tag on their next access. Load each root partition directly, which
+	// also loads its child partitions.
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	for _, c := range s.clusters {
+		_, err := c.MatchingClient().ForceLoadTaskQueuePartition(testcore.NewContext(), &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			NamespaceId: nsResp.GetNamespaceInfo().GetId(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+			},
+		})
+		s.NoError(err)
+	}
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		requireBacklog(t, 0, 0, numWorkflows)
+		requireBacklog(t, 1, numWorkflows, 0)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
@@ -2686,6 +2829,240 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	// Expect exactly 2 verified workflow runs: original run + reset run
 	s.Equal(int64(2), totalVerifiedCount,
 		"force-replication should have verified exactly 2 workflow runs (original + reset run)")
+
+	s.waitForClusterSynced()
+
+	// Verify all wf in ns is now available in cluster2
+	client1, _ := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	verifyHistory := func(wfID string, runID string) {
+		iter1 := client0.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		iter2 := client1.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for iter1.HasNext() && iter2.HasNext() {
+			event1, err := iter1.Next()
+			s.NoError(err)
+			event2, err := iter2.Next()
+			s.NoError(err)
+			s.Equal(event1, event2)
+		}
+		s.False(iter1.HasNext())
+		s.False(iter2.HasNext())
+	}
+	verifyHistory(workflowID, run1.GetRunID())
+	verifyHistory(workflowID, resp.GetRunId())
+}
+
+// TestForceMigration_ClosedWorkflow_Sharded is the sharded-variant
+// duplicate of TestForceMigration_ClosedWorkflow. Kept intentionally
+// close to the original — same workflow IDs prefixed with "sharded-",
+// same assertions — so a future swap from legacy to sharded
+// force-replication can drop the legacy version and keep behaviour
+// coverage intact.
+func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow_Sharded() {
+	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	namespace := s.createNamespaceInCluster0(true)
+
+	taskqueue := "functional-local-force-replication-sharded-task-queue"
+	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	worker0.RegisterWorkflow(testWorkflowFn)
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
+
+	// Start wf1
+	workflowID := "sharded-force-replication-test-wf-1"
+	run1, err := client0.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+	s.logger.Info("start wf1", tag.WorkflowRunID(run1.GetRunID()))
+	// wait until wf1 complete
+	err = run1.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Update ns to have 2 clusters
+	s.updateNamespaceClusters(namespace, 0, s.clusters)
+
+	// Wait for wf1 to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 1)
+
+	// Start force-replicate wf — sharded variant lives on its own
+	// dedicated task queue (MigrationShardedActivityTQ) and is
+	// registered under workflow name "force-replication-sharded".
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	forceReplicationWorkflowID := "sharded-force-replication-wf"
+	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 forceReplicationWorkflowID,
+		TaskQueue:          primitives.MigrationShardedActivityTQ,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication-sharded", migration.ShardedForceReplicationParams{
+		Namespace:         namespace,
+		TargetClusterName: s.clusters[1].ClusterName(),
+	})
+	s.NoError(err)
+	err = sysWfRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Verify all wf in ns is now available in cluster2
+	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	verify := func(wfID string, expectedRunID string) {
+		await.RequireTruef(s.T(), func() bool {
+			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
+			if err != nil {
+				return false
+			}
+			return desc1.WorkflowExecutionInfo.Execution.RunId == expectedRunID &&
+				desc1.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		}, 15*time.Second, 200*time.Millisecond, "workflow %s should be replicated to cluster2", wfID)
+	}
+	verify(workflowID, run1.GetRunID())
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	worker1.RegisterWorkflow(testWorkflowFn)
+	s.NoError(worker1.Start())
+	defer worker1.Stop()
+
+	// Test reset workflow in cluster1
+	resetResp, err := client1.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      run1.GetRunID(),
+		},
+		Reason:                    "force-replication-sharded-test",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+
+	resetRun := client1.GetWorkflow(testCtx, workflowID, resetResp.GetRunId())
+	err = resetRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	await.RequireTruef(s.T(), func() bool {
+		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
+		if err != nil {
+			return false
+		}
+		return descResp.GetWorkflowExecutionInfo().Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 15*time.Second, 200*time.Millisecond, "reset workflow should be visible on cluster2")
+}
+
+// TestForceMigration_ResetWorkflow_Sharded is the sharded-variant
+// duplicate of TestForceMigration_ResetWorkflow. Same intent as the
+// legacy version: replicate a (reset → completed) workflow pair across
+// clusters and confirm both runs are visible on the target. Asserts
+// the verification count reported by the sharded child workflow.
+func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow_Sharded() {
+	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	namespace := s.createNamespaceInCluster0(true)
+
+	taskqueue := "functional-force-replication-sharded-reset-task-queue"
+	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	worker0.RegisterWorkflow(testWorkflowFn)
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
+
+	// Start wf1
+	workflowID := "sharded-force-replication-test-reset-wf-1"
+	run1, err := client0.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+	s.logger.Info("start wf1", tag.WorkflowRunID(run1.GetRunID()))
+	// wait until wf1 complete
+	err = run1.Get(testCtx, nil)
+	s.NoError(err)
+
+	resp, err := client0.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      run1.GetRunID(),
+		},
+		Reason:                    "test",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRun := client0.GetWorkflow(testCtx, workflowID, resp.GetRunId())
+	err = resetRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Update ns to have 2 clusters
+	s.updateNamespaceClusters(namespace, 0, s.clusters)
+
+	// Wait for both workflow runs (original + reset) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 2)
+
+	// Start force-replicate wf
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	forceReplicationWorkflowID := "sharded-force-replication-wf"
+	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 forceReplicationWorkflowID,
+		TaskQueue:          primitives.MigrationShardedActivityTQ,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication-sharded", migration.ShardedForceReplicationParams{
+		Namespace:         namespace,
+		TargetClusterName: s.clusters[1].ClusterName(),
+	})
+	s.NoError(err)
+	err = sysWfRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// ReplicateBatch activities run in child workflows, so verify the count
+	// returned by each completed sharded worker child.
+	var totalVerifiedCount int64
+	histIter := sysClient.GetWorkflowHistory(testCtx, forceReplicationWorkflowID, sysWfRun.GetRunID(),
+		false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for histIter.HasNext() {
+		event, err := histIter.Next()
+		s.NoError(err)
+		if event.GetEventType() != enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
+			continue
+		}
+		attrs := event.GetChildWorkflowExecutionCompletedEventAttributes()
+		if attrs.GetWorkflowType().GetName() != "force-replication-sharded-worker" {
+			continue
+		}
+		var result struct {
+			VerifiedCount int64
+		}
+		s.NoError(payloads.Decode(attrs.GetResult(), &result))
+		totalVerifiedCount += result.VerifiedCount
+	}
+	// Expect exactly 2 verified workflow runs: original run + reset run
+	s.Equal(int64(2), totalVerifiedCount,
+		"sharded force-replication should have verified exactly 2 workflow runs (original + reset run)")
 
 	s.waitForClusterSynced()
 

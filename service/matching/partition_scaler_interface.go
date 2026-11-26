@@ -4,6 +4,8 @@ package matching
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -11,8 +13,8 @@ import (
 // PartitionScalerFactory is a pluggable interface to control partition scaling.
 type PartitionScalerFactory interface {
 	// New will be called for a new root partition. It should return a new PartitionScaler
-	// (or nil to disable).
-	New(nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType) PartitionScaler
+	// (or nil to disable). logger and metricsHandler are scoped to that task queue.
+	New(nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType, logger log.Logger, metricsHandler metrics.Handler) PartitionScaler
 }
 
 // PartitionScaler is an instance of a scaler for one task queue.
@@ -49,4 +51,5 @@ type PartitionScalerDecision struct {
 	NewTarget    int        // if zero, disable managed scaling, otherwise set partition target
 	BacklogCap   int        // target cap for backlog count; must be zero when NewTarget is zero
 	PrivateState *anypb.Any // optional private state to be stored with target
+	Reason       string     // optional human-readable explanation of the decision, for logging only
 }

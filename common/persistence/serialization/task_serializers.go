@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -32,6 +33,8 @@ func serializeTransferTask(
 		transferTask = transferChildWorkflowTaskToProto(task)
 	case *tasks.CloseExecutionTask:
 		transferTask = transferCloseTaskToProto(task)
+	case *tasks.ReleaseLimiterTask:
+		transferTask = transferReleaseLimiterTaskToProto(task)
 	case *tasks.ResetWorkflowTask:
 		transferTask = transferResetTaskToProto(task)
 	case *tasks.DeleteExecutionTask:
@@ -80,6 +83,8 @@ func deserializeTransferTask(
 		task = transferChildWorkflowTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
 		task = transferCloseTaskFromProto(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_RELEASE_LIMITER:
+		task = transferReleaseLimiterTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		task = transferResetTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
@@ -134,7 +139,7 @@ func serializeTimerTask(
 		timerTask = timerChasmTaskToProto(task)
 	case *tasks.ChasmTaskPure:
 		timerTask = timerChasmPureTaskToProto(task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		timerTask = timeSkippingTimerTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
@@ -142,7 +147,7 @@ func serializeTimerTask(
 	return encoder.TimerTaskInfoToBlob(timerTask)
 }
 
-func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
+func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingFastForwardTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:         task.NamespaceID,
 		WorkflowId:          task.WorkflowID,
@@ -159,8 +164,8 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistenc
 	}
 }
 
-func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingTimerTask {
-	return &tasks.TimeSkippingTimerTask{
+func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingFastForwardTimerTask {
+	return &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
 			info.WorkflowId,
@@ -452,6 +457,39 @@ func transferActivityTaskFromProto(
 	}
 }
 
+func transferReleaseLimiterTaskToProto(
+	task *tasks.ReleaseLimiterTask,
+) *persistencespb.TransferTaskInfo {
+	return &persistencespb.TransferTaskInfo{
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_RELEASE_LIMITER,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskDetails: &persistencespb.TransferTaskInfo_ReleaseLimiterTaskDetails_{
+			ReleaseLimiterTaskDetails: &persistencespb.TransferTaskInfo_ReleaseLimiterTaskDetails{
+				Limiters: task.Limiters,
+			},
+		},
+	}
+}
+
+func transferReleaseLimiterTaskFromProto(
+	task *persistencespb.TransferTaskInfo,
+) *tasks.ReleaseLimiterTask {
+	return &tasks.ReleaseLimiterTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			task.NamespaceId,
+			task.WorkflowId,
+			task.RunId,
+		),
+		VisibilityTimestamp: task.VisibilityTime.AsTime(),
+		TaskID:              task.TaskId,
+		Limiters:            task.GetReleaseLimiterTaskDetails().GetLimiters(),
+	}
+}
+
 func transferWorkflowTaskToProto(
 	workflowTask *tasks.WorkflowTask,
 ) *persistencespb.TransferTaskInfo {
@@ -632,6 +670,7 @@ func transferCloseTaskToProto(
 				// We set this to true even though it's no longer checked in case someone downgrades to a version that
 				// still checks this field.
 				CanSkipVisibilityArchival: true,
+				SkipParentVerification:    closeTask.SkipParentVerification,
 			},
 		},
 	}
@@ -646,10 +685,11 @@ func transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:    closeTask.VisibilityTime.AsTime(),
+		TaskID:                 closeTask.TaskId,
+		Version:                closeTask.Version,
+		DeleteAfterClose:       closeTask.DeleteAfterClose,
+		SkipParentVerification: closeTask.GetCloseExecutionTaskDetails().GetSkipParentVerification(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -1135,6 +1175,7 @@ func visibilityDeleteTaskToProto(
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
+		CreateTime:            timestamppb.New(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:     deleteVisibilityTask.IsRetentionDelete,
 		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
 			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
@@ -1159,6 +1200,7 @@ func visibilityDeleteTaskFromProto(
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
+		CreateTime:                     timestamp.TimeValue(deleteVisibilityTask.CreateTime),
 		IsRetentionDelete:              deleteVisibilityTask.IsRetentionDelete,
 	}
 }
@@ -1417,6 +1459,7 @@ func replicationSyncVersionedTransitionTaskToProto(
 		NextEventId:            syncVersionedTransitionTask.NextEventID,
 		NewRunId:               syncVersionedTransitionTask.NewRunID,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		CurrentVersionHistory:  syncVersionedTransitionTask.CurrentVersionHistory,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
@@ -1458,6 +1501,7 @@ func replicationSyncVersionedTransitionTaskFromProto(
 		NewRunID:               syncVersionedTransitionTask.NewRunId,
 		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		CurrentVersionHistory:  syncVersionedTransitionTask.CurrentVersionHistory,
 		TaskEquivalents:        taskEquivalents,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,

@@ -403,6 +403,24 @@ func enableChildWorkflowResend(cluster parentChildCluster) parentChildScenarioSt
 	}
 }
 
+func enableAsyncParentWorkflowResend(cluster parentChildCluster) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("enable async parent workflow resend on %s", cluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.EnableAsyncParentWorkflowResend,
+				true,
+			))
+			return nil
+		},
+	}
+}
+
 func setStandbyTaskResendDelay(
 	cluster parentChildCluster,
 	taskType enumsspb.TaskType,
@@ -562,6 +580,34 @@ func confirmWorkflowIsMissingOnCluster(
 		name: fmt.Sprintf("confirm %s is missing on %s", workflow, cluster),
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
 			return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
+		},
+	}
+}
+
+func deleteWorkflowOnCluster(cluster parentChildCluster, workflow parentChildWorkflow) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("delete %s on %s", workflow, cluster),
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			workflowID, err := runtime.workflowID(workflow)
+			if err != nil {
+				return err
+			}
+			_, err = runtime.suite.clusters[cluster].FrontendClient().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+				Namespace: runtime.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runtime.workflowRunID(workflow),
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return runtime.waitForExpectation(ctx, parentChildExpectation{
+				name: fmt.Sprintf("%s is deleted on %s", workflow, cluster),
+				check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+					return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
+				},
+			})
 		},
 	}
 }

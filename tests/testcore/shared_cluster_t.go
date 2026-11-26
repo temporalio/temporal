@@ -11,7 +11,7 @@ import (
 )
 
 // sharedClusterT is the testlogger.CleanupCapableT that backs a shared
-// FunctionalTestBase's logger. It tracks the cluster's active tests and
+// functionalTestBase's logger. It tracks the cluster's active tests and
 // routes T-shaped calls to them, so one logger can serve many tests across
 // the cluster's lifetime.
 type sharedClusterT struct {

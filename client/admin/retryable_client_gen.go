@@ -56,6 +56,36 @@ func (c *retryableClient) AddTasks(
 	return resp, err
 }
 
+func (c *retryableClient) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	var resp *adminservice.ApplyNamespaceMutationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ApplyNamespaceMutation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ApplyRemoteClusterNamespaceRepair(
+	ctx context.Context,
+	request *adminservice.ApplyRemoteClusterNamespaceRepairRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyRemoteClusterNamespaceRepairResponse, error) {
+	var resp *adminservice.ApplyRemoteClusterNamespaceRepairResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ApplyRemoteClusterNamespaceRepair(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
@@ -80,6 +110,21 @@ func (c *retryableClient) CloseShard(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.CloseShard(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	var resp *adminservice.CountExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountExecutions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -296,6 +341,21 @@ func (c *retryableClient) GetNamespaceReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetRemoteClusterNamespace(
+	ctx context.Context,
+	request *adminservice.GetRemoteClusterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetRemoteClusterNamespaceResponse, error) {
+	var resp *adminservice.GetRemoteClusterNamespaceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetRemoteClusterNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
@@ -440,6 +500,21 @@ func (c *retryableClient) ListClusters(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ListClusters(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListExecutionsResponse, error) {
+	var resp *adminservice.ListExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListExecutions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

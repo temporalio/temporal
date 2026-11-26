@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -229,27 +230,22 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	release(err4)
 }
 
-// TestHistoryCacheEvictionReleasesPaginationBuffer verifies that when a cached context
-// holding an in-flight pagination buffer is evicted, the bytes it
-// reserved on the shared pagination limiter are released. Without a Clear() on the eviction
-// path those bytes leak and eventually reject all paginated completions on the host.
-func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() {
-	// Count-based cache with room for a single entry, so the next insert forces eviction.
+func (s *workflowCacheSuite) newSingleEntryCacheWithBufferedPage(
+	workflowID string,
+) (*workflow.ContextImpl, *historyi.MockMutableState, historyi.ReleaseWorkflowContextFunc) {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	// Production shards always have a finalizer, so give the test shard one too
 	s.mockShard.SetFinalizerForTest(finalizer.New(s.mockShard.GetLogger(), metrics.NoopMetricsHandler))
-	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
-	limiter := s.cache.(*cacheImpl).paginationLimiter
 
 	we := commonpb.WorkflowExecution{
-		WorkflowId: "wf-cache-test-eviction-buffer",
+		WorkflowId: workflowID,
 		RunId:      uuid.NewString(),
 	}
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
-		namespaceID,
+		namespace.ID("test_namespace_id"),
 		&we,
 		locks.PriorityHigh,
 	)
@@ -265,7 +261,6 @@ func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() 
 	wfCtx := ctx.(*workflow.ContextImpl)
 	wfCtx.MutableState = mock
 
-	// Buffer an intermediate page; this reserves bytes on the shared limiter.
 	page := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		IntermediatePage: true,
 		PageNumber:       0,
@@ -277,28 +272,54 @@ func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() 
 		}},
 	}
 	s.NoError(wfCtx.AppendTaskCompletionPage(10, 1, page))
-	s.Positive(limiter.Used())
+	s.Positive(s.cache.(*cacheImpl).paginationLimiter.Used())
+	return wfCtx, mock, release
+}
 
-	// Unpin the entry so it is eligible for eviction.
-	release(nil)
-
-	// Insert a second workflow, forcing eviction of the first from the cache.
-	we2 := commonpb.WorkflowExecution{
-		WorkflowId: "wf-cache-test-eviction-buffer-2",
+// forceEviction loads and releases another workflow, which evicts the single
+// unpinned entry from a cache built by newSingleEntryCacheWithBufferedPage.
+func (s *workflowCacheSuite) forceEviction(workflowID string) {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
 		RunId:      uuid.NewString(),
 	}
-	_, release2, err := s.cache.GetOrCreateWorkflowExecution(
+	_, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
-		namespaceID,
-		&we2,
+		namespace.ID("test_namespace_id"),
+		&we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	release2(nil)
+	release(nil)
+}
+
+// TestHistoryCacheEvictionReleasesPaginationBuffer verifies that when a cached context
+// holding an in-flight pagination buffer is evicted, the bytes it
+// reserved on the shared pagination limiter are released. Without a Clear() on the eviction
+// path those bytes leak and eventually reject all paginated completions on the host.
+func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() {
+	_, _, release := s.newSingleEntryCacheWithBufferedPage("wf-cache-test-eviction-buffer")
+
+	// Unpin the entry so it is eligible for eviction.
+	release(nil)
+	s.forceEviction("wf-cache-test-eviction-buffer-2")
 
 	// The evicted context must have released its reserved pagination bytes.
-	s.Equal(int64(0), limiter.Used())
+	s.Equal(int64(0), s.cache.(*cacheImpl).paginationLimiter.Used())
+}
+
+func (s *workflowCacheSuite) TestHistoryCacheEvictionSkipsClearWhenWorkflowContextIsLocked() {
+	wfCtx, mock, release := s.newSingleEntryCacheWithBufferedPage("wf-cache-test-eviction-locked-buffer")
+
+	// Violate the cache protocol to verify eviction does not clear a locked context.
+	release(nil)
+	s.NoError(wfCtx.Lock(context.Background(), locks.PriorityHigh))
+	defer wfCtx.Unlock()
+	s.forceEviction("wf-cache-test-eviction-locked-buffer-2")
+
+	s.Positive(s.cache.(*cacheImpl).paginationLimiter.Used())
+	s.Same(mock, wfCtx.MutableState)
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
@@ -908,6 +929,187 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 	release1(nil)
+}
+
+// newSizeBasedCache returns a test shard and a host-level cache whose size-based limit is 1000 bytes.
+func (s *workflowCacheSuite) newSizeBasedCache(ctrl *gomock.Controller) (*shard.ContextTest, *cacheImpl) {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
+	mockShard := shard.NewTestContext(
+		ctrl,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		config,
+	)
+	c := NewHostLevelCache(config, mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
+	return mockShard, c.(*cacheImpl)
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedReleaseMeasuresContextUnderLock() {
+	mockShard, c := s.newSizeBasedCache(s.controller)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := c.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+
+	mockMS := historyi.NewMockMutableState(s.controller)
+	mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+	// Another request may change the mutable state as soon as the workflow lock is released,
+	// so the size must be measured while the lock is still held.
+	mockMS.EXPECT().GetApproximatePersistedSize().DoAndReturn(func() int {
+		if ctx.TryLock(locks.PriorityLow) {
+			ctx.Unlock()
+			s.Fail("workflow context was measured without its lock")
+		}
+		return 400
+	}).Times(1)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS
+	release(nil)
+
+	keySize := len(namespaceID) + len(execution.GetWorkflowId()) + len(execution.GetRunId())
+	s.Equal(keySize+400, c.Size())
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedReleaseAfterClearUpdatesSize() {
+	testCases := []struct {
+		name    string
+		release func(historyi.ReleaseWorkflowContextFunc)
+	}{
+		{
+			name: "release with error",
+			release: func(release historyi.ReleaseWorkflowContextFunc) {
+				release(errors.New("test error"))
+			},
+		},
+		{
+			name: "release while panicking",
+			release: func(release historyi.ReleaseWorkflowContextFunc) {
+				defer func() { _ = recover() }()
+				defer release(nil)
+				panic("test panic")
+			},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctrl := gomock.NewController(t)
+			mockShard, c := s.newSizeBasedCache(ctrl)
+
+			namespaceID := namespace.ID("test_namespace_id")
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow ID",
+				RunId:      uuid.NewString(),
+			}
+			ctx, release, err := c.GetOrCreateWorkflowExecution(
+				context.Background(),
+				mockShard,
+				namespaceID,
+				&execution,
+				locks.PriorityHigh,
+			)
+			require.NoError(t, err)
+			mockMS := historyi.NewMockMutableState(ctrl)
+			mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+			mockMS.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+			mockMS.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).Times(1)
+			mockMS.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().Times(1)
+			ctx.(*workflow.ContextImpl).MutableState = mockMS
+			release(nil)
+			keySize := len(namespaceID) + len(execution.GetWorkflowId()) + len(execution.GetRunId())
+			require.Equal(t, keySize+400, c.Size())
+
+			// The release clears the context, which drops its mutable state, so it must record the smaller size.
+			_, release, err = c.GetOrCreateWorkflowExecution(
+				context.Background(),
+				mockShard,
+				namespaceID,
+				&execution,
+				locks.PriorityHigh,
+			)
+			require.NoError(t, err)
+			tc.release(release)
+			require.Equal(t, keySize, c.Size())
+		})
+	}
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedReleaseUnlocksWhenMeasurementPanics() {
+	mockShard, c := s.newSizeBasedCache(s.controller)
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := c.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespace.ID("test_namespace_id"),
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	mockMS := historyi.NewMockMutableState(s.controller)
+	mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockMS.EXPECT().GetApproximatePersistedSize().DoAndReturn(func() int {
+		panic("test panic")
+	}).Times(1)
+	ctx.(*workflow.ContextImpl).MutableState = mockMS
+
+	s.Panics(func() { release(nil) })
+	s.True(ctx.TryLock(locks.PriorityHigh), "workflow lock is still held after release")
+	ctx.Unlock()
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_SizeBasedLockFailureDoesNotMeasureContext() {
+	mockShard, c := s.newSizeBasedCache(s.controller)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := c.GetOrCreateWorkflowExecution(
+		context.Background(),
+		mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	mockMS := historyi.NewMockMutableState(s.controller)
+	mockMS.EXPECT().IsDirty().Return(false).AnyTimes()
+	ctx.(*workflow.ContextImpl).MutableState = mockMS
+
+	// The first request still holds the workflow lock, so this request fails to acquire it and releases
+	// the cache entry. That release must not measure the context, because this request never held its lock.
+	// The mock has no expectation for GetApproximatePersistedSize yet, so a call to it fails the test.
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err = c.GetOrCreateWorkflowExecution(
+		canceledCtx,
+		mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.ErrorIs(err, consts.ErrResourceExhaustedBusyWorkflow)
+
+	mockMS.EXPECT().GetApproximatePersistedSize().Return(400).Times(1)
+	release(nil)
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {

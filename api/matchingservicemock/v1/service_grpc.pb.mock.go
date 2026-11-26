@@ -502,6 +502,26 @@ func (mr *MockMatchingServiceClientMockRecorder) GetWorkerVersioningRules(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerVersioningRules), varargs...)
 }
 
+// GrantEagerDispatch mocks base method.
+func (m *MockMatchingServiceClient) GrantEagerDispatch(ctx context.Context, in *matchingservice.GrantEagerDispatchRequest, opts ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GrantEagerDispatch", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GrantEagerDispatchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GrantEagerDispatch indicates an expected call of GrantEagerDispatch.
+func (mr *MockMatchingServiceClientMockRecorder) GrantEagerDispatch(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GrantEagerDispatch", reflect.TypeOf((*MockMatchingServiceClient)(nil).GrantEagerDispatch), varargs...)
+}
+
 // ListNexusEndpoints mocks base method.
 func (m *MockMatchingServiceClient) ListNexusEndpoints(ctx context.Context, in *matchingservice.ListNexusEndpointsRequest, opts ...grpc.CallOption) (*matchingservice.ListNexusEndpointsResponse, error) {
 	m.ctrl.T.Helper()
@@ -1249,6 +1269,21 @@ func (m *MockMatchingServiceServer) GetWorkerVersioningRules(arg0 context.Contex
 func (mr *MockMatchingServiceServerMockRecorder) GetWorkerVersioningRules(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerVersioningRules", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerVersioningRules), arg0, arg1)
+}
+
+// GrantEagerDispatch mocks base method.
+func (m *MockMatchingServiceServer) GrantEagerDispatch(arg0 context.Context, arg1 *matchingservice.GrantEagerDispatchRequest) (*matchingservice.GrantEagerDispatchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GrantEagerDispatch", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GrantEagerDispatchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GrantEagerDispatch indicates an expected call of GrantEagerDispatch.
+func (mr *MockMatchingServiceServerMockRecorder) GrantEagerDispatch(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GrantEagerDispatch", reflect.TypeOf((*MockMatchingServiceServer)(nil).GrantEagerDispatch), arg0, arg1)
 }
 
 // ListNexusEndpoints mocks base method.

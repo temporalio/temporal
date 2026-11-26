@@ -53,7 +53,7 @@ func (s *TestEnvSuite) TestDedicatedClusterGuard_ConcurrentRecord() {
 func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 	testLogger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	env := &TestEnv{
-		FunctionalTestBase: &FunctionalTestBase{externalNamespace: namespace.Name("external")},
+		functionalTestBase: &functionalTestBase{externalNamespace: namespace.Name("external")},
 		Logger:             testLogger,
 		nsName:             namespace.Name("primary"),
 		nsID:               namespace.ID("primary-id"),

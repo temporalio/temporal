@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/httpfaults"
@@ -35,6 +36,7 @@ func HTTPCallerProviderProvider(
 	testHooks testhooks.TestHooks,
 	config *Config,
 ) (HTTPCallerProvider, error) {
+	logger = log.With(logger, tag.NexusStageHandlerOutbound)
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
@@ -43,11 +45,12 @@ func HTTPCallerProviderProvider(
 	if err != nil {
 		return nil, err
 	}
-	defaultClient := &http.Client{Transport: defaultTransport}
+	defaultClient := &http.Client{Transport: commonnexus.RejectRedirects(defaultTransport)}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 
 	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
+		routingLogger := log.With(logger, tag.WorkflowNamespaceID(key.NamespaceID))
 		caller := func(r *http.Request) (*http.Response, error) {
 			return routeRequest(r,
 				clusterMetadata,
@@ -56,7 +59,7 @@ func HTTPCallerProviderProvider(
 				callbackTokenGenerator,
 				defaultClient,
 				localClient,
-				logger,
+				routingLogger,
 				config.InspectSourceHeader(),
 			)
 		}

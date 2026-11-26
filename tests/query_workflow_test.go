@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
@@ -141,6 +142,110 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
+func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
+	env := testcore.NewEnv(s.T())
+	tv := env.Tv()
+
+	var workflowFn func(ctx workflow.Context, gen int) error
+
+	workflowFn = func(ctx workflow.Context, gen int) error {
+		_ = workflow.SetQueryHandler(ctx, tv.QueryType(), func() (int, error) {
+			return gen, nil
+		})
+		workflow.GetSignalChannel(ctx, tv.SignalName()).Receive(ctx, nil)
+		return workflow.NewContinueAsNewError(ctx, workflowFn, gen+1)
+	}
+
+	ctx := s.Context()
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+
+	query := func(s *QueryWorkflowSuite, runID string) (int, *commonpb.Link_Workflow) {
+		resp, err := env.FrontendClient().QueryWorkflow(
+			ctx,
+			&workflowservice.QueryWorkflowRequest{
+				Namespace: env.Namespace().String(),
+				Execution: tv.WithRunID(runID).WorkflowExecution(),
+				Query:     &querypb.WorkflowQuery{QueryType: tv.QueryType()},
+			},
+		)
+		s.NoError(err)
+		link := resp.GetLink().GetWorkflow()
+		s.NotNil(link, "query must carry a link of type workflow")
+		s.Equal(env.Namespace().String(), link.GetNamespace())
+		s.Equal(tv.WorkflowID(), link.GetWorkflowId())
+		s.Equal("Query processed", link.GetReason())
+		var result int
+		s.NoError(payloads.Decode(resp.QueryResult, &result))
+		return result, link
+	}
+
+	firstRun, err := env.SdkClient().ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			ID:        tv.WorkflowID(),
+			TaskQueue: env.WorkerTaskQueue(),
+		},
+		workflowFn,
+		0,
+	)
+	s.NoError(err)
+	firstRunID := firstRun.GetRunID()
+
+	// continue-as-new, then wait for the new run to become the current one
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, tv.WorkflowID(), firstRunID, tv.SignalName(), nil))
+	var secondRunID string
+	s.Await(func(s *QueryWorkflowSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, tv.WorkflowID(), "")
+		s.NoError(err)
+		secondRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+		s.NotEqual(firstRunID, secondRunID)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 100*time.Millisecond)
+
+	s.RunSequential("explicit run ID targets the closed original run", func(s *QueryWorkflowSuite) {
+		result, link := query(s, firstRunID)
+		s.Equal(0, result)
+		s.Equal(firstRunID, link.GetRunId())
+	})
+
+	s.RunSequential("empty run ID resolves to the continued-as-new run", func(s *QueryWorkflowSuite) {
+		result, link := query(s, "")
+		s.Equal(1, result)
+		s.Equal(secondRunID, link.GetRunId())
+	})
+
+	s.RunSequential("empty run ID resolves to the reset run", func(s *QueryWorkflowSuite) {
+		var workflowTaskCompletedEventID int64
+		s.Await(func(s *QueryWorkflowSuite) {
+			hist := env.RequireHistory(s, tv.WithRunID(secondRunID).WorkflowExecution())
+			for _, event := range hist {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+					workflowTaskCompletedEventID = event.GetEventId()
+					break
+				}
+			}
+			s.Positive(workflowTaskCompletedEventID, "expected a completed workflow task")
+		}, 10*time.Second, 100*time.Millisecond)
+		resetResp, err := env.FrontendClient().ResetWorkflowExecution(
+			ctx,
+			&workflowservice.ResetWorkflowExecutionRequest{
+				Namespace:                 env.Namespace().String(),
+				WorkflowExecution:         tv.WithRunID(secondRunID).WorkflowExecution(),
+				Reason:                    "reset for query link test",
+				RequestId:                 tv.RequestID(),
+				WorkflowTaskFinishEventId: workflowTaskCompletedEventID,
+			},
+		)
+		s.NoError(err)
+		s.NotEmpty(resetResp.GetRunId())
+		s.NotEqual(secondRunID, resetResp.GetRunId())
+
+		result, link := query(s, "")
+		s.Equal(1, result)
+		s.Equal(resetResp.GetRunId(), link.GetRunId())
+	})
+}
+
 func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 	env := testcore.NewEnv(s.T())
 	queryName := "query"
@@ -153,19 +258,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		workflow.GetSignalChannel(ctx, signalName).Receive(ctx, &orderStatus)
 		return nil
 	}
-	ctx := s.Context()
-
 	env.SdkWorker().RegisterWorkflow(workflowFn)
-
-	wid := "nexus-query-workflow-tests"
-	run, err := env.SdkClient().ExecuteWorkflow(
-		ctx,
-		sdkclient.StartWorkflowOptions{
-			ID:        wid,
-			TaskQueue: env.WorkerTaskQueue()},
-		workflowFn,
-	)
-	s.NoError(err)
 
 	type testCase struct {
 		name                 string
@@ -176,10 +269,10 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		queryRejectCondition enumspb.QueryRejectCondition
 	}
 
-	runTestCase := func(tc testCase) {
-		resp, err := env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+	assertQueryOutcome := func(s *QueryWorkflowSuite, run sdkclient.WorkflowRun, tc testCase) {
+		resp, err := env.FrontendClient().QueryWorkflow(s.Context(), &workflowservice.QueryWorkflowRequest{
 			Namespace:            env.Namespace().String(),
-			Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
+			Execution:            &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 			Query:                tc.query,
 			QueryRejectCondition: tc.queryRejectCondition,
 		})
@@ -191,7 +284,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		link := resp.GetLink().GetWorkflow()
 		s.NotNil(link, "query must carry a link of type workflow")
 		s.Equal(env.Namespace().String(), link.GetNamespace())
-		s.Equal(wid, link.GetWorkflowId())
+		s.Equal(run.GetID(), link.GetWorkflowId())
 		s.Equal(run.GetRunID(), link.GetRunId())
 		s.Equal(tc.reason, link.GetReason())
 		if tc.result != "" {
@@ -199,10 +292,23 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		}
 	}
 
-	runCases := func(groupName string, cases []testCase) {
+	runCases := func(groupName string, cases []testCase, completeBeforeQuery bool) {
 		for _, tc := range cases {
-			s.T().Run(groupName+"/"+tc.name, func(t *testing.T) { //nolint:testifylint // subtests need serialized execution(running, completed)
-				runTestCase(tc)
+			s.Run(groupName+"/"+tc.name, func(s *QueryWorkflowSuite) {
+				wid := testcore.RandomizeStr("nexus-query-workflow-tests")
+				run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+					ID:        wid,
+					TaskQueue: env.WorkerTaskQueue(),
+				}, workflowFn)
+				s.NoError(err)
+
+				if completeBeforeQuery {
+					// set the query result via signal so that query "reload" on completed workflow is verified inline
+					s.NoError(env.SdkClient().SignalWorkflow(s.Context(), wid, "", signalName, "order-delivered"))
+					s.NoError(run.Get(s.Context(), nil))
+				}
+
+				assertQueryOutcome(s, run, tc)
 			})
 		}
 	}
@@ -239,12 +345,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 			result: "initialized",
 		},
 	}
-	runCases("running-workflow", runningWorkflowTestCases)
-	runCases("running-workflow", invalidTestCases)
-
-	// set the query result via signal so that query "reload" on completed workflow is verified inline
-	s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, "", signalName, "order-delivered"))
-	s.NoError(run.Get(ctx, nil))
+	runCases("running-workflow", runningWorkflowTestCases, false)
+	runCases("running-workflow", invalidTestCases, false)
 
 	completedWorkflowTestCases := []testCase{
 		{
@@ -261,8 +363,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		},
 	}
 
-	runCases("completed-workflow", completedWorkflowTestCases)
-	runCases("completed-workflow", invalidTestCases)
+	runCases("completed-workflow", completedWorkflowTestCases, true)
+	runCases("completed-workflow", invalidTestCases, true)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
@@ -332,8 +434,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	env := testcore.NewEnv(s.T())
-	// stop the worker, so the workflow won't be started before query
-	env.SdkWorker().Stop()
+	// Don't call env.SdkWorker() as it lazily starts a worker. This ensures no worker polls this task queue
+	// until the queryWorker starts.
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"
@@ -383,6 +485,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	queryWorker.RegisterWorkflow(workflowFn)
 	err = queryWorker.Start()
 	s.NoError(err)
+	// Unlike env.SdkWorker(), this worker isn't stopped by the env's cleanup; stop it so its
+	// pollers don't outlive the test.
+	defer queryWorker.Stop()
 
 	// wait query
 	wg.Wait()
@@ -398,13 +503,18 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	env := testcore.NewEnv(s.T())
 	testname := s.T().Name()
 	var failures atomic.Int32
+	handlerErrors := make(chan error, 1)
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		err := workflow.SetQueryHandler(ctx, testname, func() (string, error) {
 			return "", nil
 		})
 
 		if err != nil {
-			s.T().Fatalf("SetQueryHandler failed: %s", err.Error())
+			select {
+			case handlerErrors <- err:
+			default:
+			}
+			return "", err
 		}
 		failures.Add(1)
 		// force workflow task to fail
@@ -428,10 +538,17 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
+	var handlerErr error
 	s.AwaitTrue(func() bool {
 		// wait for workflow task to fail 3 times
-		return failures.Load() >= 3
+		select {
+		case handlerErr = <-handlerErrors:
+			return true
+		default:
+			return failures.Load() >= 3
+		}
 	}, 10*time.Second, 50*time.Millisecond)
+	s.NoError(handlerErr, "SetQueryHandler failed")
 
 	_, err = env.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)

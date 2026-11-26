@@ -191,11 +191,17 @@ func NewVisibility(
 	return visibility
 }
 
+// NewVisibilityWithData creates a Visibility component with the provided custom search attributes and memo.
+// Returns an InvalidArgument error if any custom search attribute key is reserved (see sadefs.IsReserved).
 func NewVisibilityWithData(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 	customMemo map[string]*commonpb.Payload,
-) *Visibility {
+) (*Visibility, error) {
+	if err := validateCustomSearchAttributes(customSearchAttributes); err != nil {
+		return nil, err
+	}
+
 	visibility := &Visibility{
 		Data: &persistencespb.ChasmVisibilityData{
 			TransitionCount: 0,
@@ -221,7 +227,7 @@ func NewVisibilityWithData(
 	}
 
 	visibility.generateTask(mutableContext)
-	return visibility
+	return visibility, nil
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {
@@ -248,12 +254,17 @@ func (v *Visibility) CustomSearchAttributes(
 //     the key is deleted from the existing search attributes if it exists.
 //     If all search attributes are removed, the underlying search attributes node is deleted.
 //   - If `customSearchAttributes` is empty, this is a no-op.
+//   - If any key in `customSearchAttributes` is reserved (see sadefs.IsReserved),
+//     an InvalidArgument error is returned and the existing search attributes are left unchanged.
 func (v *Visibility) MergeCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) {
+) error {
 	if len(customSearchAttributes) == 0 {
-		return
+		return nil
+	}
+	if err := validateCustomSearchAttributes(customSearchAttributes); err != nil {
+		return err
 	}
 
 	currentSA, ok := v.SA.TryGet(mutableContext)
@@ -271,15 +282,22 @@ func (v *Visibility) MergeCustomSearchAttributes(
 	}
 
 	v.generateTask(mutableContext)
+	return nil
 }
 
 // ReplaceCustomSearchAttributes replaces the existing custom search attribute fields with the provided ones.
 // Nil/empty payload values are filtered.
 // If `customSearchAttributes` is empty or all values are nil after filtering, the underlying search attributes node is deleted.
+// If any key in `customSearchAttributes` is reserved (see sadefs.IsReserved),
+// an InvalidArgument error is returned and the existing search attributes are left unchanged.
 func (v *Visibility) ReplaceCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) {
+) error {
+	if err := validateCustomSearchAttributes(customSearchAttributes); err != nil {
+		return err
+	}
+
 	// Filter out nil/empty payload values.
 	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
 
@@ -287,7 +305,7 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 		_, ok := v.SA.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
-			return
+			return nil
 		}
 
 		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
@@ -299,6 +317,20 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 	}
 
 	v.generateTask(mutableContext)
+	return nil
+}
+
+// validateCustomSearchAttributes rejects custom search attribute keys that are reserved for
+// system, predefined, or CHASM search attributes, including any key with the "Temporal" prefix.
+// Custom search attributes with these names cannot be registered, so they would otherwise
+// collide with (or be written directly into) system-owned visibility fields.
+func validateCustomSearchAttributes(customSearchAttributes map[string]*commonpb.Payload) error {
+	for key := range customSearchAttributes {
+		if sadefs.IsReserved(key) {
+			return serviceerror.NewInvalidArgumentf("search attribute %s is reserved by system", key)
+		}
+	}
+	return nil
 }
 
 // CustomMemo returns the stored custom memo fields.

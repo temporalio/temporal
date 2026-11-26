@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
@@ -248,7 +247,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the activity to complete the workflow.
-	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
+	s.Snd(env.activityCompletedCh, struct{}{})
 
 	// assert that the workflow completes now.
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -340,7 +339,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 	// point back at the first task (ScheduledEventId 2) and be attributed to
 	// the history service, not a worker.
 	s.Await(func(s *PauseWorkflowExecutionSuite) {
-		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		})
@@ -440,7 +439,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 
 	// The task resolved as completed (not failed), and the paused event -
 	// buffered while the task was in flight - is flushed right after it.
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	})
@@ -509,7 +508,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 	// not be silently dropped as stale - and the buffered paused event flushes
 	// right after it, same as a normal completion would.
 	s.Await(func(s *PauseWorkflowExecutionSuite) {
-		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		})
@@ -614,7 +613,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 	// scheduled: RespondWorkflowTaskFailed's own request to create one is
 	// suppressed by the same paused gate that applies to any in-flight
 	// resolution (completion, failure, or timeout).
-	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.RequireHistory(s, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	})
@@ -1055,7 +1054,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	s.NotNil(unpauseResp)
 
 	// Unblock the activity and send the signal to complete the workflow.
-	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
+	s.Snd(env.activityCompletedCh, struct{}{})
 	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -1279,7 +1278,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the activity and send the signal to complete the workflow.
-	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
+	s.Snd(env.activityCompletedCh, struct{}{})
 	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -1598,7 +1597,7 @@ func (s *PauseWorkflowExecutionSuite) TestSignalWithStartWhilePaused() {
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
-	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
+	s.Snd(env.activityCompletedCh, struct{}{})
 
 	// The buffered signal is delivered: the workflow completes and its result
 	// includes the signal payload.
@@ -1786,7 +1785,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseIdempotentSameRequestId() {
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
-	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
+	s.Snd(env.activityCompletedCh, struct{}{})
 	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "done")
 	s.NoError(err)
 	s.Await(func(s *PauseWorkflowExecutionSuite) {

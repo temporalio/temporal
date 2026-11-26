@@ -576,9 +576,12 @@ type TaskQueueTypeUserData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
 	Config         *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
-	FairnessState  v14.FairnessState      `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.enums.v1.FairnessState" json:"fairness_state,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Deprecated. Retained for compatibility with older servers during rolling upgrades.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+	FairnessState v14.FairnessState `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.enums.v1.FairnessState" json:"fairness_state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskQueueTypeUserData) Reset() {
@@ -625,6 +628,7 @@ func (x *TaskQueueTypeUserData) GetConfig() *v11.TaskQueueConfig {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 func (x *TaskQueueTypeUserData) GetFairnessState() v14.FairnessState {
 	if x != nil {
 		return x.FairnessState
@@ -797,11 +801,11 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\bversions\x18\x02 \x03(\v2F.temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntryR\bversions\x1a{\n" +
 	"\rVersionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
-	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\x8c\x02\n" +
+	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\x90\x02\n" +
 	"\x15TaskQueueTypeUserData\x12[\n" +
 	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12B\n" +
-	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\x12R\n" +
-	"\x0efairness_state\x18\x03 \x01(\x0e2+.temporal.server.api.enums.v1.FairnessStateR\rfairnessState\"\x8e\x03\n" +
+	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\x12V\n" +
+	"\x0efairness_state\x18\x03 \x01(\x0e2+.temporal.server.api.enums.v1.FairnessStateB\x02\x18\x01R\rfairnessState\"\x8e\x03\n" +
 	"\x11TaskQueueUserData\x12F\n" +
 	"\x05clock\x18\x01 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x12[\n" +
 	"\x0fversioning_data\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.VersioningDataR\x0eversioningData\x12]\n" +

@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/esconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
@@ -47,7 +48,7 @@ func (s *processorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	cfg := &ProcessorConfig{
+	cfg := &esconfig.ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
@@ -73,7 +74,7 @@ func (s *processorSuite) TearDownTest() {
 }
 
 func (s *processorSuite) TestNewESProcessorAndStartStop() {
-	config := &ProcessorConfig{
+	config := &esconfig.ProcessorConfig{
 		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -67,6 +68,13 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
+	if err := newMutableState.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
+		RequestID: startRequest.StartRequest.GetRequestId(),
+		Callbacks: startRequest.StartRequest.GetCompletionCallbacks(),
+	}); err != nil {
+		return nil, err
+	}
+
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
 		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -109,6 +117,10 @@ func NewWorkflowWithSignal(
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
 	if requestEagerExecution && newMutableState.HasPendingWorkflowTask() {
+		var workerControlQueue string
+		if startRequest.StartRequest.GetEagerWorkerCapabilities().GetSupportsWorkflowHeartbeatNotification() {
+			workerControlQueue = startRequest.StartRequest.GetEagerWorkerControlTaskQueue()
+		}
 		// TODO: get build ID from Starter so eager workflows can be versioned
 		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
@@ -121,6 +133,7 @@ func NewWorkflowWithSignal(
 			false,
 			nil,
 			-1, // sentinel: eager-exec path didn't consult matching, has no routing revision
+			workerControlQueue,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history

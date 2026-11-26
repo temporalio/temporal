@@ -20,6 +20,9 @@ func ResolveSearchAttributeAlias(
 ) (fieldName string, fieldType enumspb.IndexedValueType, retErr error) {
 	// resolveCSA only returns true if `alias` is a custom search attribute.
 	resolveCSA := func(alias string) bool {
+		if saMapper == nil {
+			return false
+		}
 		fn, err := saMapper.GetFieldName(alias, namespaceName.String())
 		if err != nil {
 			return false
@@ -31,6 +34,7 @@ func ResolveSearchAttributeAlias(
 		fieldName, fieldType = fn, ft
 		return true
 	}
+
 	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
 	resolveChasmSA := func(alias string) bool {
 		if chasmMapper == nil {

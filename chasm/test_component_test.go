@@ -64,6 +64,13 @@ type (
 		SubComponent2Data *protoMessageType
 	}
 
+	TestTimeSkippingImplComponent struct {
+		UnimplementedComponent
+
+		ComponentData        *protoMessageType
+		isExecutionSkippable bool
+	}
+
 	TestSubComponent interface {
 		GetData() string
 	}
@@ -82,6 +89,8 @@ var (
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
 	_ RootComponent                      = (*TestComponent)(nil)
+	_ RootComponent                      = (*TestTimeSkippingImplComponent)(nil)
+	_ TimeSkippingRuntimeGate            = (*TestTimeSkippingImplComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
@@ -180,6 +189,26 @@ func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
 
 func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
+}
+
+func (gc *TestTimeSkippingImplComponent) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (gc *TestTimeSkippingImplComponent) ContextMetadata(_ Context) map[string]string {
+	return nil
+}
+
+func (gc *TestTimeSkippingImplComponent) Terminate(
+	_ MutableContext,
+	_ TerminateComponentRequest,
+) (TerminateComponentResponse, error) {
+	return TerminateComponentResponse{}, nil
+}
+
+// IsExecutionSkippable implements the TimeSkippingRuntimeGate interface.
+func (gc *TestTimeSkippingImplComponent) IsExecutionSkippable(_ Context) bool {
+	return gc.isExecutionSkippable
 }
 
 func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
