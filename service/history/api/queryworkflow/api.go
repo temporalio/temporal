@@ -368,8 +368,10 @@ func queryDirectlyThroughMatching(
 		false,
 	)
 
+	sessionBound := msResp.GetSessionState() != nil
 	exclusiveWorker := msResp.GetSessionState().GetExclusiveWorker()
-	// Queries for exclusive workers must not fall back to the normal task queue.
+	// Queries for exclusive workers must not fall back to the normal task queue. For now, a query on a workflow bound to
+	// a multi-session worker does not fall back either (MTC-919).
 	if exclusiveWorker || (msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
 		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace())) {
@@ -389,7 +391,7 @@ func queryDirectlyThroughMatching(
 		// caller's own deadline.
 		var stickyContext context.Context
 		var cancel context.CancelFunc
-		if exclusiveWorker {
+		if sessionBound {
 			stickyContext, cancel = context.WithCancel(ctx)
 		} else {
 			stickyContext, cancel = rpc.ResetContextTimeout(ctx, timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
@@ -406,8 +408,13 @@ func queryDirectlyThroughMatching(
 					QueryRejected: matchingResp.GetQueryRejected(),
 				}}, nil
 		}
-		if exclusiveWorker {
+		if sessionBound {
 			// A query never moves a workflow off its bound worker, so its error is returned as is.
+			// TODO (Shivam): For a non-exclusive binding, Matching rejects the query at once when the bound worker has
+			// not polled recently, so the query fails even if the worker is alive, and an idle workflow of a dead worker
+			// stays unqueryable until something else moves it. Agreed approach (MTC-919): Matching checks the worker's
+			// heartbeats for queries as it does for tasks, so a live worker's query waits until the caller's deadline;
+			// only when the worker is dead does History unbind the workflow and retry the query on the normal queue.
 			return nil, err
 		}
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {

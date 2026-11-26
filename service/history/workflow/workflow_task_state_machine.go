@@ -1046,8 +1046,8 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
 
 	// Ordinary sticky failures get one retry on the normal queue before creating a transient task.
-	// Single-session failures retain their destination and increment attempts. This is because single-session
-	// workflow and activity tasks, bar the very first one, are only placed on the sticky queue.
+	// Bound workflows keep their binding and increment attempts: an exclusive binding never changes, and a
+	// non-exclusive binding moves only when its worker is gone.
 	if m.ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure) {
 		incrementAttempt = false
 	}
@@ -1401,7 +1401,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// If effective behavior changes we also want to reschedule the pending activities, so
 		// they go to the right matching queues.
 		wfBehaviorBefore != wfBehaviorAfter {
-		if err := m.ms.reschedulePendingActivities(wftScheduleToClose); err != nil {
+		if err := m.ms.reschedulePendingActivities(activityRescheduleForDeploymentTransition, wftScheduleToClose); err != nil {
 			return err
 		}
 	}

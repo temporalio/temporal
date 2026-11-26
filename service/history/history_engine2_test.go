@@ -5210,3 +5210,78 @@ func (m *createWorkflowExecutionRequestMatcher) Matches(x any) bool {
 func (m *createWorkflowExecutionRequestMatcher) String() string {
 	return "CreateWorkflowExecutionRequest match condition"
 }
+
+/*
+TestRecordWorkflowTaskStartedBindsMultiSessionWorker tests a workflow task start by a multi-session worker:
+ 1. Start from the normal queue, either for a workflow with no binding or one bound to worker X.
+ 2. The worker gets full history (sticky execution disabled), since a worker coming from the normal queue has
+    nothing cached, even though the start binds the workflow to it.
+ 3. The persisted state binds the workflow to the polling worker: its sticky queue is the worker's queue, with no
+    sticky schedule-to-start timeout.
+*/
+func (s *engine2Suite) TestRecordWorkflowTaskStartedBindsMultiSessionWorker() {
+	for _, tc := range []struct {
+		name    string
+		boundTo string
+	}{
+		{name: "first bind"},
+		{name: "move from a dead worker", boundTo: "worker-x-sticky"},
+	} {
+		s.Run(tc.name, func() {
+			s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
+				HistoryEvents: []*historypb.HistoryEvent{
+					{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+					{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+					{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+				},
+				NextPageToken: []byte{},
+				Size:          3,
+			}, nil).AnyTimes()
+			s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+			s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+				Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+			we := &commonpb.WorkflowExecution{WorkflowId: "wId-" + tc.name, RunId: tests.RunID}
+			tl := "testTaskQueue"
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
+				we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "identity")
+			if tc.boundTo != "" {
+				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+				ms.GetExecutionInfo().StickyTaskQueue = tc.boundTo
+			}
+			wt := addWorkflowTaskScheduledEvent(ms)
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
+			var persisted *persistencespb.WorkflowExecutionInfo
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					persisted = request.UpdateWorkflowMutation.ExecutionInfo
+					return tests.UpdateWorkflowExecutionResponse, nil
+				})
+
+			response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
+				NamespaceId:       tests.NamespaceID.String(),
+				WorkflowExecution: we,
+				ScheduledEventId:  wt.ScheduledEventID,
+				RequestId:         "reqId",
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Identity:  "worker-y",
+					SessionOptions: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+						MultiSession: &sessionpb.MultiSessionOptions{},
+					}},
+					WorkerInstanceKey: "worker-y-sticky",
+				},
+			})
+
+			s.Require().NoError(err)
+			s.False(response.GetStickyExecutionEnabled(), "a worker coming from the normal queue needs full history")
+			s.Require().NotNil(persisted)
+			s.Equal("worker-y-sticky", persisted.GetStickyTaskQueue())
+			s.Require().NotNil(persisted.GetSessionState())
+			s.False(persisted.GetSessionState().GetExclusiveWorker())
+			s.Nil(persisted.GetStickyScheduleToStartTimeout())
+		})
+	}
+}

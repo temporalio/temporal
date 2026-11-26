@@ -129,6 +129,9 @@ func Invoke(
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			currentTaskQueue := mutableState.CurrentTaskQueue()
 			pollerTaskQueue := req.PollRequest.TaskQueue
+
+			// The clear below also clears a non-exclusive binding, so read the bound worker's sticky queue first.
+			previousWorkerStickyQueue := mutableState.SessionWorkerQueue()
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
 				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
@@ -190,6 +193,9 @@ func Invoke(
 			if newSingleSessionBinding {
 				// Bind after the task start is accepted so both changes commit in the same transaction.
 				mutableState.BindExclusiveWorker(stableIdentity)
+				// TODO (Shivam): A single-session worker can acquire a workflow that already has a non-exclusive binding.
+				// Its session activities stay queued at the previously bound worker. Decide how exclusive and non-exclusive
+				// workers on one task queue interact (reschedule, reject the acquisition, or keep unsupported).
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
@@ -256,6 +262,22 @@ func Invoke(
 			)
 			if err != nil {
 				return nil, err
+			}
+
+			// Runs after the deployment transition, which clears stickiness, so the session follows this worker. It
+			// also runs after the response is built: a worker that polled the normal queue has nothing cached and
+			// must receive full history, even though the restored sticky queue now points at it.
+			bindingUpdated, err := mutableState.UpdateNonExclusiveWorkerBinding(
+				req.PollRequest.GetSessionOptions(),
+				req.PollRequest.GetWorkerInstanceKey(),
+				previousWorkerStickyQueue,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if bindingUpdated {
+				// A speculative task that binds, moves, or drops a session must be persisted.
+				updateAction.Noop = false
 			}
 
 			return updateAction, nil

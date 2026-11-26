@@ -1443,6 +1443,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	}
 	if sticky && !stickyWorkerAvailable(pm) {
 		// Only a workflow bound to a single-session worker waits for it; other sticky queries are reported unavailable.
+		// TODO (Shivam): A query on a workflow bound to a multi-session worker fails here instead of waiting for a live worker (MTC-919).
 		if !queryRequest.GetSessionDirective().GetIsExclusiveWorkerAssigned() {
 			return nil, serviceerrors.NewStickyWorkerUnavailable()
 		}

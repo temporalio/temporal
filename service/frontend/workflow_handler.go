@@ -1161,7 +1161,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetWorkerVersionCapabilities()); err != nil {
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
 	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
@@ -1424,7 +1424,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetWorkerVersionCapabilities()); err != nil {
+	if err := validateWorkerSessionOptions(request.GetSessionOptions(), request.GetTaskQueue(), request.GetWorkerInstanceKey(), request.GetDeploymentOptions(), request.GetWorkerVersionCapabilities()); err != nil {
 		return nil, err
 	}
 	if err := wh.checkExclusiveWorkerSessionsEnabled(request.GetNamespace(), request.GetSessionOptions()); err != nil {
@@ -8055,20 +8055,34 @@ func validateWorkerSessionOptions(
 	options *sessionpb.WorkerSessionOptions,
 	taskQueue *taskqueuepb.TaskQueue,
 	workerInstanceKey string,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
 	versionCapabilities *commonpb.WorkerVersionCapabilities,
 ) error {
 	if options == nil {
 		return nil
 	}
-	if taskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
-		return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
+	sticky := taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY
+	normalQueue := taskQueue.GetName()
+	if sticky {
+		normalQueue = taskQueue.GetNormalName()
 	}
-	if singleSession := options.GetSingleSession(); singleSession != nil {
-		if workerInstanceKey == "" {
-			// Matching looks a session worker up by its instance key in its heartbeat registry.
-			return serviceerror.NewInvalidArgument("session worker instance key is required")
+	if workerInstanceKey == "" {
+		// Matching looks a session worker up by its instance key in its heartbeat registry.
+		return serviceerror.NewInvalidArgument("session worker instance key is required")
+	}
+	switch options.GetAdmission().(type) {
+	case *sessionpb.WorkerSessionOptions_MultiSession:
+		// Sent on both normal and sticky polls.
+		if deploymentOptions.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED || versionCapabilities.GetUseVersioning() {
+			// TODO (Shivam): Bindings of multi-session workers do not follow versioning transitions yet (MTC-934).
+			return serviceerror.NewInvalidArgument("multi-session workers do not support worker versioning yet")
 		}
-		if singleSession.GetStableIdentity() == "" {
+	case *sessionpb.WorkerSessionOptions_SingleSession:
+		// Sent on sticky polls only.
+		if !sticky {
+			return serviceerror.NewInvalidArgument("Worker session options require a sticky task queue")
+		}
+		if options.GetSingleSession().GetStableIdentity() == "" {
 			return serviceerror.NewInvalidArgument("single-session stable identity is required")
 		}
 		if versionCapabilities.GetUseVersioning() {
@@ -8076,14 +8090,17 @@ func validateWorkerSessionOptions(
 			// (MTC-934).
 			return serviceerror.NewInvalidArgument("single-session workers do not support this worker versioning mode yet")
 		}
-		workerStickyQueue := taskqueue.SessionWorkerStickyQueue(options, workerInstanceKey)
-		if workerStickyQueue == taskQueue.GetNormalName() {
-			return serviceerror.NewInvalidArgument("session worker's sticky queue must not be the normal task queue")
-		}
-		if taskQueue.GetName() != workerStickyQueue {
-			return serviceerror.NewInvalidArgument(
-				"session worker's sticky queue must be named after its instance key (multi-session) or stable identity (single-session)")
-		}
+	default:
+		// Without a mode, the server cannot tell which queue the worker's sticky queue is named after.
+		return serviceerror.NewInvalidArgument("session options require an admission mode")
+	}
+	workerStickyQueue := taskqueue.SessionWorkerStickyQueue(options, workerInstanceKey)
+	if workerStickyQueue == normalQueue {
+		return serviceerror.NewInvalidArgument("session worker's sticky queue must not be the normal task queue")
+	}
+	if sticky && taskQueue.GetName() != workerStickyQueue {
+		return serviceerror.NewInvalidArgument(
+			"session worker's sticky queue must be named after its instance key (multi-session) or stable identity (single-session)")
 	}
 	return nil
 }

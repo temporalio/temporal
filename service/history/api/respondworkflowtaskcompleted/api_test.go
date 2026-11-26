@@ -1578,3 +1578,58 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionCompletionDestinati
 		})
 	}
 }
+
+/*
+TestNonExclusiveBindingSurvivesCompletion tests that a completion never moves or drops a non-exclusive binding:
+ 1. Start a workflow task with the session and sticky queue on worker queue X.
+ 2. Complete it with matching or other sticky attributes, without sticky attributes,
+    or as a heartbeat that exceeds the workflow task heartbeat timeout.
+ 3. The bound worker and sticky queue stay X, with no sticky timeout.
+*/
+func (s *WorkflowTaskCompletedHandlerSuite) TestNonExclusiveBindingSurvivesCompletion() {
+	for _, tc := range []struct {
+		name              string
+		stickyName        string
+		heartbeatTimedOut bool
+	}{
+		{name: "matching sticky attributes", stickyName: "X"},
+		{name: "other sticky attributes", stickyName: "Y"},
+		{name: "no sticky attributes"},
+		{name: "heartbeat timeout", stickyName: "X", heartbeatTimedOut: true},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
+			wfContext, token := s.createStartedWorkflowWithStartedWFT(tv)
+			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+			s.Require().NoError(err)
+			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+			ms.GetExecutionInfo().StickyTaskQueue = "X"
+			request := &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: token, Identity: "worker"}
+			if tc.stickyName != "" {
+				request.StickyAttributes = tv.StickyExecutionAttributes(3 * time.Second)
+				request.StickyAttributes.WorkerTaskQueue.Name = tc.stickyName
+			}
+			if tc.heartbeatTimedOut {
+				request.ForceCreateNewWorkflowTask = true
+				original := s.workflowTaskCompletedHandler.config.WorkflowTaskHeartbeatTimeout
+				s.workflowTaskCompletedHandler.config.WorkflowTaskHeartbeatTimeout = func(string) time.Duration { return 0 }
+				defer func() { s.workflowTaskCompletedHandler.config.WorkflowTaskHeartbeatTimeout = original }()
+			}
+
+			_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(), CompleteRequest: request,
+			})
+
+			if tc.heartbeatTimedOut {
+				s.ErrorContains(err, "workflow task heartbeat timeout")
+			} else {
+				s.Require().NoError(err)
+			}
+			s.Equal("X", ms.SessionWorkerQueue())
+			s.Nil(ms.GetExecutionInfo().GetStickyScheduleToStartTimeout())
+		})
+	}
+}

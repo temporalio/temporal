@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -1382,13 +1383,13 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 
 func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	for _, tc := range []struct {
-		name             string
-		session          bool
-		missingPlacement bool
+		name           string
+		session        bool
+		droppedSession bool
 	}{
 		{name: "regular activity with sticky workflow"},
 		{name: "workflow-session activity", session: true},
-		{name: "workflow-session activity awaiting placement", session: true, missingPlacement: true},
+		{name: "workflow-session activity after the session was dropped", session: true, droppedSession: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -1447,7 +1448,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			if tc.session {
 				activityInfo.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
 			}
-			if !tc.missingPlacement {
+			if tc.session && !tc.droppedSession {
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+			}
+			if tc.droppedSession {
+				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+			} else {
 				mutableState.SetStickyTaskQueue("sticky-worker", durationpb.New(time.Second))
 			}
 
@@ -1469,31 +1475,30 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			expectedTaskQueue := &taskqueuepb.TaskQueue{Name: activityInfo.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-			if tc.session && !tc.missingPlacement {
+			if tc.session && !tc.droppedSession {
 				expectedTaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
 			}
-			if !tc.missingPlacement {
-				s.mockMatchingClient.EXPECT().AddActivityTask(
-					gomock.Any(),
-					pm.Eq(&matchingservice.AddActivityTaskRequest{
-						NamespaceId:            s.namespaceID.String(),
-						Execution:              execution,
-						TaskQueue:              expectedTaskQueue,
-						ScheduledEventId:       activityInfo.ScheduledEventId,
-						ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
-						Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
-						VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
-					}),
-					gomock.Any(),
-				).Return(&matchingservice.AddActivityTaskResponse{}, nil)
+			expectedRequest := func(taskQueue *taskqueuepb.TaskQueue) *matchingservice.AddActivityTaskRequest {
+				var sessionDirective *taskqueuespb.TaskSessionDirective
+				if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+					sessionDirective = &taskqueuespb.TaskSessionDirective{}
+				}
+				return &matchingservice.AddActivityTaskRequest{
+					NamespaceId:            s.namespaceID.String(),
+					Execution:              execution,
+					TaskQueue:              taskQueue,
+					SessionDirective:       sessionDirective,
+					ScheduledEventId:       activityInfo.ScheduledEventId,
+					ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
+					Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
+					VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
+				}
 			}
+			s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
+				Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 			resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-			if tc.missingPlacement {
-				s.Require().ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
-			} else {
-				s.Require().NoError(resp.ExecutionErr)
-			}
+			s.Require().NoError(resp.ExecutionErr)
 		})
 	}
 }

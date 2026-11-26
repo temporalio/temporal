@@ -733,68 +733,71 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 }
 
 /*
-TestSingleSessionQueryDoesNotFallback tests queries for a workflow bound to exclusive worker S:
+TestSessionQueryDoesNotFallback tests queries for a workflow bound to worker S, exclusively or not:
 1. Load the persisted workflow binding and issue a query with a caller deadline.
 2. Send exactly one query to sticky queue S while preserving that deadline.
-3. Return the result or Matching error without retrying on the normal queue.
+3. Return the result or Matching error without unbinding the workflow or retrying on the normal queue.
 */
-func (s *engineSuite) TestSingleSessionQueryDoesNotFallback() {
+func (s *engineSuite) TestSessionQueryDoesNotFallback() {
 	s.historyEngine.matchingClient = s.mockMatchingClient
 	s.historyEngine.rawMatchingClient = s.mockMatchingClient
-	for _, tc := range []struct {
-		name string
-		err  error
-	}{
-		{name: "success"},
-		{name: "worker unavailable", err: &serviceerrors.StickyWorkerUnavailable{}},
-		{name: "deadline", err: context.DeadlineExceeded},
-		{name: "cancelled", err: context.Canceled},
-		{name: "internal", err: serviceerror.NewInternal("failure")},
-	} {
-		s.Run(tc.name, func() {
-			t := s.T()
-			execution := &commonpb.WorkflowExecution{WorkflowId: t.Name(), RunId: tests.RunID}
-			ms := workflow.TestLocalMutableState(s.mockShard, s.eventsCache, tests.LocalNamespaceEntry,
-				execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-			addWorkflowExecutionStartedEvent(ms, execution, "wType", "foo", payloads.EncodeString("input"),
-				100*time.Second, 50*time.Second, 200*time.Second, "worker")
-			wt := addWorkflowTaskScheduledEvent(ms)
-			started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
-			addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
-			ms.SetStickyTaskQueue("S", nil)
-			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: true}
-			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
+	for _, exclusive := range []bool{true, false} {
+		for _, tc := range []struct {
+			name string
+			err  error
+		}{
+			{name: "success"},
+			{name: "worker unavailable", err: &serviceerrors.StickyWorkerUnavailable{}},
+			{name: "deadline", err: context.DeadlineExceeded},
+			{name: "cancelled", err: context.Canceled},
+			{name: "internal", err: serviceerror.NewInternal("failure")},
+		} {
+			s.Run(fmt.Sprintf("exclusive=%t/%s", exclusive, tc.name), func() {
+				t := s.T()
+				execution := &commonpb.WorkflowExecution{WorkflowId: t.Name(), RunId: tests.RunID}
+				ms := workflow.TestLocalMutableState(s.mockShard, s.eventsCache, tests.LocalNamespaceEntry,
+					execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+				addWorkflowExecutionStartedEvent(ms, execution, "wType", "foo", payloads.EncodeString("input"),
+					100*time.Second, 50*time.Second, 200*time.Second, "worker")
+				wt := addWorkflowTaskScheduledEvent(ms)
+				started := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "foo", "worker")
+				addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, started.GetEventId(), "worker")
+				ms.SetStickyTaskQueue("S", nil)
+				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{ExclusiveWorker: exclusive}
+				// The workflow is never updated: a failed query does not unbind it.
+				s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+					&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(t.Context(), ms)}, nil)
 
-			ctx, cancel := context.WithTimeout(contextutil.WithMetadataContext(t.Context()), time.Minute)
-			defer cancel()
-			expectedResult := payloads.EncodeBytes([]byte{1, 2, 3})
-			s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(callCtx context.Context, req *matchingservice.QueryWorkflowRequest, _ ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
-					require.NoError(t, callCtx.Err())
-					require.Equal(t, "S", req.GetTaskQueue().GetName())
-					require.Equal(t, enumspb.TASK_QUEUE_KIND_STICKY, req.GetTaskQueue().GetKind())
-					deadline, ok := callCtx.Deadline()
-					require.True(t, ok)
-					callerDeadline, _ := ctx.Deadline()
-					require.Equal(t, callerDeadline, deadline)
-					return &matchingservice.QueryWorkflowResponse{QueryResult: expectedResult}, tc.err
-				}).Times(1)
-			response, err := s.historyEngine.QueryWorkflow(ctx, &historyservice.QueryWorkflowRequest{
-				NamespaceId: tests.NamespaceID.String(),
-				Request: &workflowservice.QueryWorkflowRequest{
-					Execution: execution,
-					Query:     &querypb.WorkflowQuery{},
-				},
+				ctx, cancel := context.WithTimeout(contextutil.WithMetadataContext(t.Context()), time.Minute)
+				defer cancel()
+				expectedResult := payloads.EncodeBytes([]byte{1, 2, 3})
+				s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(callCtx context.Context, req *matchingservice.QueryWorkflowRequest, _ ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+						require.NoError(t, callCtx.Err())
+						require.Equal(t, "S", req.GetTaskQueue().GetName())
+						require.Equal(t, enumspb.TASK_QUEUE_KIND_STICKY, req.GetTaskQueue().GetKind())
+						deadline, ok := callCtx.Deadline()
+						require.True(t, ok)
+						callerDeadline, _ := ctx.Deadline()
+						require.Equal(t, callerDeadline, deadline)
+						return &matchingservice.QueryWorkflowResponse{QueryResult: expectedResult}, tc.err
+					}).Times(1)
+				response, err := s.historyEngine.QueryWorkflow(ctx, &historyservice.QueryWorkflowRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					Request: &workflowservice.QueryWorkflowRequest{
+						Execution: execution,
+						Query:     &querypb.WorkflowQuery{},
+					},
+				})
+				if tc.err != nil {
+					require.ErrorIs(t, err, tc.err)
+					require.Nil(t, response)
+				} else {
+					require.NoError(t, err)
+					protorequire.ProtoEqual(t, expectedResult, response.GetResponse().GetQueryResult())
+				}
 			})
-			if tc.err != nil {
-				require.ErrorIs(t, err, tc.err)
-				require.Nil(t, response)
-			} else {
-				require.NoError(t, err)
-				protorequire.ProtoEqual(t, expectedResult, response.GetResponse().GetQueryResult())
-			}
-		})
+		}
 	}
 }
 
