@@ -53,6 +53,16 @@ type (
 		ExporterConfig telemetry.ExportConfig `yaml:"otel"`
 		// Visibility related config
 		Visibility Visibility `yaml:"visibility"`
+		// Failpoints related config
+		Failpoints Failpoints `yaml:"failpoints"`
+	}
+
+	// Failpoints let tests and tools change the behavior of server code at named points.
+	// They are installed only if Enabled is true. The server reads it once at startup.
+	Failpoints struct {
+		// Enabled installs failpoints and logs a warning at startup.
+		// It is false by default, and then nothing about failpoints is active.
+		Enabled bool `yaml:"enabled"`
 	}
 
 	// Service contains the service specific config items
