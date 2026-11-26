@@ -182,6 +182,8 @@ func fetchPage(
 	switch executionType := targetExecutionType(config.batchType); executionType {
 	case enumspb.EXECUTION_TYPE_ACTIVITY:
 		targetExecutionInfo, nextPageToken, err = listActivityExecutions(ctx, sdkClient, config, pageToken)
+	case enumspb.EXECUTION_TYPE_NEXUS_OPERATION:
+		targetExecutionInfo, nextPageToken, err = listNexusOperationExecutions(ctx, sdkClient, config, pageToken)
 	case enumspb.EXECUTION_TYPE_WORKFLOW:
 		var resp *workflowservice.ListWorkflowExecutionsResponse
 		resp, err = sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -238,6 +240,36 @@ func listActivityExecutions(
 			Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
 			BusinessId: activityExecution.GetActivityId(),
 			RunId:      activityExecution.GetRunId(),
+		})
+	}
+	return executions, resp.GetNextPageToken(), nil
+}
+
+// listNexusOperationExecutions lists a page of standalone Nexus operation
+// executions as target executions.
+func listNexusOperationExecutions(
+	ctx context.Context,
+	sdkClient sdkclient.Client,
+	config batchProcessorConfig,
+	pageToken []byte,
+) ([]*commonpb.Execution, []byte, error) {
+	resp, err := sdkClient.WorkflowService().ListNexusOperationExecutions(ctx,
+		&workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace:     config.targetNamespace,
+			PageSize:      int32(pageSize),
+			NextPageToken: pageToken,
+			Query:         config.adjustedQuery,
+		})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	executions := make([]*commonpb.Execution, 0, len(resp.GetOperations()))
+	for _, operationExecution := range resp.GetOperations() {
+		executions = append(executions, &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+			BusinessId: operationExecution.GetOperationId(),
+			RunId:      operationExecution.GetRunId(),
 		})
 	}
 	return executions, resp.GetNextPageToken(), nil
@@ -506,6 +538,15 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				if err == nil {
 					count = resp.GetCount()
 				}
+			case enumspb.EXECUTION_TYPE_NEXUS_OPERATION:
+				var resp *workflowservice.CountNexusOperationExecutionsResponse
+				resp, err = sdkClientForTargetNS.WorkflowService().CountNexusOperationExecutions(ctx, &workflowservice.CountNexusOperationExecutionsRequest{
+					Namespace: targetNS,
+					Query:     visibilityQuery,
+				})
+				if err == nil {
+					count = resp.GetCount()
+				}
 			case enumspb.EXECUTION_TYPE_WORKFLOW:
 				var resp *workflowservice.CountWorkflowExecutionsResponse
 				resp, err = sdkClientForTargetNS.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
@@ -583,7 +624,8 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 		enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
 		enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS,
 		enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
-		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION:
 		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningOrPausedQueryFilter)
 	default:
 		return query
@@ -730,6 +772,42 @@ func (a *activities) processSingleTask(
 					Identity:   operation.CancelActivitiesOperation.GetIdentity(),
 					Reason:     operation.CancelActivitiesOperation.GetReason(),
 					RequestId:  deterministicRequestID(batchOperation.Request.GetJobId(), "cancel-activity", execution.GetBusinessId(), execution.GetRunId()),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation:
+		err = processTargetTask(ctx, limiter, task,
+			func(execution *commonpb.Execution) error {
+				_, err := frontendClient.TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+					Namespace:   targetNamespace,
+					OperationId: execution.GetBusinessId(),
+					RunId:       execution.GetRunId(),
+					Identity:    operation.TerminateNexusOperationsOperation.GetIdentity(),
+					Reason:      operation.TerminateNexusOperationsOperation.GetReason(),
+					RequestId:   deterministicRequestID(batchOperation.Request.GetJobId(), "terminate-nexus-operation", execution.GetBusinessId(), execution.GetRunId()),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation:
+		err = processTargetTask(ctx, limiter, task,
+			func(execution *commonpb.Execution) error {
+				_, err := frontendClient.DeleteNexusOperationExecution(ctx, &workflowservice.DeleteNexusOperationExecutionRequest{
+					Namespace:   targetNamespace,
+					OperationId: execution.GetBusinessId(),
+					RunId:       execution.GetRunId(),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation:
+		err = processTargetTask(ctx, limiter, task,
+			func(execution *commonpb.Execution) error {
+				_, err := frontendClient.RequestCancelNexusOperationExecution(ctx, &workflowservice.RequestCancelNexusOperationExecutionRequest{
+					Namespace:   targetNamespace,
+					OperationId: execution.GetBusinessId(),
+					RunId:       execution.GetRunId(),
+					Identity:    operation.CancelNexusOperationsOperation.GetIdentity(),
+					Reason:      operation.CancelNexusOperationsOperation.GetReason(),
+					RequestId:   deterministicRequestID(batchOperation.Request.GetJobId(), "cancel-nexus-operation", execution.GetBusinessId(), execution.GetRunId()),
 				})
 				return err
 			})
@@ -931,7 +1009,7 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 		return true
 	}
 
-	if isExpectedActivityBatchTaskFailure(err, batchType) {
+	if isExpectedTargetBatchTaskFailure(err, batchType) {
 		return true
 	}
 
@@ -945,26 +1023,31 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 	return false
 }
 
-// isExpectedActivityBatchTaskFailure reports terminal outcomes that are valid for an activity batch target.
-func isExpectedActivityBatchTaskFailure(err error, batchType enumspb.BatchOperationType) bool {
-	if batchType != enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY &&
-		batchType != enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY {
+// isExpectedTargetBatchTaskFailure reports terminal outcomes that are valid for
+// a standalone activity or Nexus operation batch target.
+func isExpectedTargetBatchTaskFailure(err error, batchType enumspb.BatchOperationType) bool {
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION:
+	default:
 		return false
 	}
 
-	// A FailedPrecondition from an activity terminate/cancel means the target
-	// is in a state that will never permit the operation: a terminal status,
-	// or an already-recorded terminate/cancel request with a different request
-	// ID. Retrying cannot change either, so fail fast instead of spending every
+	// A FailedPrecondition from a terminate/cancel means the target is in a
+	// state that will never permit the operation: a terminal status, or an
+	// already-recorded terminate/cancel request with a different request ID.
+	// Retrying cannot change either, so fail fast instead of spending every
 	// AttemptsOnRetryableError -- processTaskWithRetries retries in place with
 	// no backoff.
 	//
-	// Only these two are listed. UNPAUSE_ACTIVITY, UPDATE_ACTIVITY_OPTIONS,
-	// and RESET_ACTIVITY get the same open-status filter appended by
-	// adjustQueryBatchTypeEnum and so reach this path too, but their
-	// FailedPreconditions include states a retry does clear (pending reset,
-	// pending cancellation, deferred Reset(RestoreOriginalOptions)).
-	// DELETE_ACTIVITY gets no Running filter at all, so it never sees the
+	// Only terminate/cancel are listed. UNPAUSE_ACTIVITY,
+	// UPDATE_ACTIVITY_OPTIONS, and RESET_ACTIVITY get the same open-status
+	// filter appended by adjustQueryBatchTypeEnum and so reach this path too,
+	// but their FailedPreconditions include states a retry does clear (pending
+	// reset, pending cancellation, deferred Reset(RestoreOriginalOptions)).
+	// Deletes get no Running filter at all, so they never see the
 	// stale-visibility case this guards against.
 	_, isFailedPrecondition := errors.AsType[*serviceerror.FailedPrecondition](err)
 	return isFailedPrecondition
@@ -991,7 +1074,7 @@ func (a *activities) processTaskWithRetries(
 			break
 		}
 
-		if !isExpectedActivityBatchTaskFailure(err, batchOperation.BatchType) {
+		if !isExpectedTargetBatchTaskFailure(err, batchOperation.BatchType) {
 			metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 			logger.Error("Failed to process batch operation task", tag.Error(err))
 		}

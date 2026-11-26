@@ -6312,7 +6312,7 @@ type StartAdminBatchOperationRequest_RefreshTasksOperation struct {
 }
 
 type StartAdminBatchOperationRequest_DelegationOperation struct {
-	// Supported types are workflow and activity termination and deletion.
+	// Supported types are workflow, activity, and Nexus operation termination and deletion.
 	DelegationOperation v16.BatchOperationType `protobuf:"varint,11,opt,name=delegation_operation,json=delegationOperation,proto3,enum=temporal.api.enums.v1.BatchOperationType,oneof"`
 }
 

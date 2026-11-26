@@ -1260,6 +1260,11 @@ Links embedded in completion callbacks are not included; they count toward callb
 		false,
 		`FrontendEnableBatchOperationsForStandaloneActivities controls whether the frontend accepts the batch cancel, terminate, and delete standalone activity operation fields`,
 	)
+	FrontendEnableBatchOperationsForStandaloneNexusOperations = NewNamespaceBoolSetting(
+		"frontend.enableBatchOperationsForStandaloneNexusOperations",
+		false,
+		`FrontendEnableBatchOperationsForStandaloneNexusOperations controls whether the frontend accepts the batch cancel, terminate, and delete standalone Nexus operation fields`,
+	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",

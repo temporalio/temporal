@@ -342,3 +342,86 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchDeleteActivities_RunsInSyst
 	s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, resp.GetInfo().GetStatus())
 	s.awaitActivityVisibilityCount(env.TestEnv, externalNS, query, 1)
 }
+
+func (s *AdminBatchDelegationTestSuite) awaitNexusOperationVisibilityCount(
+	env *testcore.TestEnv,
+	namespace string,
+	query string,
+	expected int64,
+) {
+	s.Await(func(s *AdminBatchDelegationTestSuite) {
+		resp, err := env.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+			Namespace: namespace,
+			Query:     query,
+		})
+		s.NoError(err)
+		s.Equal(expected, resp.GetCount())
+	}, 20*time.Second, 500*time.Millisecond)
+}
+
+func (s *AdminBatchDelegationTestSuite) TestTdbgBatchDeleteNexusOperations_RunsInSystemNamespaceAgainstTargetNamespace() {
+	env := newNexusStandaloneBatchEnv(s.T(), true)
+
+	ns := env.Namespace().String()
+	endpoint := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+	query := nexusEndpointQuery(endpoint)
+
+	operations := make([]startedNexusOperation, 0, 2)
+	for i := range 2 {
+		operations = append(operations, env.startBatchTarget(s, endpoint, fmt.Sprintf("admin-batch-delete-nexus-%d", i)))
+	}
+	nonMatchingEndpoint := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+	nonMatching := env.startBatchTarget(s, nonMatchingEndpoint, "non-matching")
+	externalNS := env.ExternalNamespace().String()
+	externalResp, err := env.startNexusOperation(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
+		Namespace:   externalNS,
+		OperationId: "external-namespace",
+		Endpoint:    endpoint,
+	})
+	s.NoError(err)
+	s.awaitNexusOperationVisibilityCount(env.TestEnv, ns, query, 2)
+	s.awaitNexusOperationVisibilityCount(env.TestEnv, externalNS, query, 1)
+
+	jobID := uuid.NewString()
+	s.NoError(s.runTdbg(env.TestEnv,
+		"--"+tdbg.FlagYes,
+		"--"+tdbg.FlagNamespace, ns,
+		"delegated-batch", "start",
+		"--"+tdbg.FlagBatchType, "delete-nexus-operations",
+		"--"+tdbg.FlagVisibilityQuery, query,
+		"--"+tdbg.FlagReason, "test batch Nexus operation delete from the system namespace",
+		"--"+tdbg.FlagJobID, jobID,
+	))
+
+	batchWorkflowID := ns + ":" + jobID
+	s.Await(func(s *AdminBatchDelegationTestSuite) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
+		})
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}, 60*time.Second, time.Second)
+
+	for _, operation := range operations {
+		env.awaitBatchDeleted(s, operation)
+	}
+	s.awaitNexusOperationVisibilityCount(env.TestEnv, ns, query, 0)
+
+	resp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+		Namespace:   ns,
+		OperationId: nonMatching.operationID,
+		RunId:       nonMatching.runID,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, resp.GetInfo().GetStatus())
+
+	resp, err = env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+		Namespace:   externalNS,
+		OperationId: "external-namespace",
+		RunId:       externalResp.GetRunId(),
+	})
+	s.NoError(err)
+	s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, resp.GetInfo().GetStatus())
+	s.awaitNexusOperationVisibilityCount(env.TestEnv, externalNS, query, 1)
+}

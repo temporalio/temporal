@@ -5890,8 +5890,16 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			!wh.IsStandaloneActivityEnabled(request.Namespace) {
 			return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported for this namespace", op)
 		}
+	case *workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation,
+		*workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation,
+		*workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation:
+		if !wh.config.EnableBatchOperationsForStandaloneNexusOperations(request.Namespace) ||
+			!wh.config.EnableChasm(request.Namespace) ||
+			!wh.config.StandaloneNexusOperationsEnabled(request.Namespace) {
+			return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported for this namespace", op)
+		}
 	default:
-		// Other operation types are not gated by the standalone-activity batch operators check.
+		// Other operation types are not gated by the standalone batch operation checks.
 	}
 
 	if err := batcher.ValidateBatchOperation(request); err != nil {
@@ -5949,6 +5957,14 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY
 		identity = op.CancelActivitiesOperation.GetIdentity()
+	case *workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation:
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION
+		identity = op.TerminateNexusOperationsOperation.GetIdentity()
+	case *workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation:
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION
+	case *workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation:
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION
+		identity = op.CancelNexusOperationsOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
 		identity = op.TerminationOperation.GetIdentity()
@@ -6103,8 +6119,9 @@ func buildUnpauseActivityVisibilityQuery(q string, activityType string) (string,
 // snakeCaseBatchType maps a batch operation type enum to the canonical string
 // stored in the batcher workflow memo (see batcher.BatchType* constants).
 // Workflow operation strings retain their legacy values so old frontends can
-// read batches created during a rolling upgrade. Activity operation strings are
-// execution-type explicit because they did not exist before this feature.
+// read batches created during a rolling upgrade. Activity and Nexus operation
+// strings are execution-type explicit because they did not exist before the
+// execution-type split.
 func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
 	//nolint:staticcheck // SA1019: legacy (non-*_WORKFLOW) enum values are deprecated but still valid input
 	switch batchType {
@@ -6132,6 +6149,12 @@ func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
 		return batcher.BatchTypeCancelActivities
 	case enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
 		return batcher.BatchTypeDeleteActivities
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION:
+		return batcher.BatchTypeTerminateNexusOperations
+	case enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION:
+		return batcher.BatchTypeCancelNexusOperations
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION:
+		return batcher.BatchTypeDeleteNexusOperations
 	default:
 		return ""
 	}
@@ -7409,6 +7432,13 @@ func batchOperationTypeFromString(operationTypeString string) enumspb.BatchOpera
 		return enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY
 	case batcher.BatchTypeDeleteActivities:
 		return enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY
+	// Nexus operation batch operations.
+	case batcher.BatchTypeTerminateNexusOperations:
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION
+	case batcher.BatchTypeCancelNexusOperations:
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION
+	case batcher.BatchTypeDeleteNexusOperations:
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION
 	default:
 		return enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
 	}

@@ -74,7 +74,7 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 			s.NoError(err)
 
 			// Describe/List should report the correct operation type for the batch.
-			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, expectedQuery, expectedExecutions)
+			assertBatchOperationType(ctx, t, env.TestEnv, jobID, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, expectedQuery, expectedExecutions)
 
 			// All three activities must reach the Canceled status.
 			for _, a := range activities {

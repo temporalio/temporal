@@ -69,6 +69,16 @@ const (
 	BatchTypeUnpauseActivities = "unpause_activities"
 	// BatchTypeUpdateActivitiesOptions is batch type for updating the options of activities
 	BatchTypeUpdateActivitiesOptions = "update_activity_options"
+
+	// Nexus operation batch operation memo type strings. Each operation is
+	// suffixed with the execution type it targets (nexus operations).
+
+	// BatchTypeTerminateNexusOperations is batch type for terminating nexus operations
+	BatchTypeTerminateNexusOperations = "terminate_nexus_operations"
+	// BatchTypeCancelNexusOperations is batch type for canceling nexus operations
+	BatchTypeCancelNexusOperations = "cancel_nexus_operations"
+	// BatchTypeDeleteNexusOperations is batch type for deleting nexus operations
+	BatchTypeDeleteNexusOperations = "delete_nexus_operations"
 )
 
 var (
@@ -181,6 +191,10 @@ func targetExecutionType(batchType enumspb.BatchOperationType) enumspb.Execution
 		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
 		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
 		return enumspb.EXECUTION_TYPE_ACTIVITY
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION:
+		return enumspb.EXECUTION_TYPE_NEXUS_OPERATION
 	default:
 		return enumspb.EXECUTION_TYPE_WORKFLOW
 	}
@@ -194,6 +208,10 @@ func TargetExecutionTypeForRequest(request *workflowservice.StartBatchOperationR
 		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
 		return enumspb.EXECUTION_TYPE_ACTIVITY
+	case *workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation,
+		*workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation,
+		*workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation:
+		return enumspb.EXECUTION_TYPE_NEXUS_OPERATION
 	default:
 		return enumspb.EXECUTION_TYPE_WORKFLOW
 	}
@@ -253,7 +271,10 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	switch op := params.GetOperation().(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
-		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation,
+		*workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation,
+		*workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation:
 		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {

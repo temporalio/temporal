@@ -248,6 +248,9 @@ func (s *batcherSuite) TestTargetExecutionType() {
 		{enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{enumspb.BATCH_OPERATION_TYPE_CANCEL_NEXUS_OPERATION, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
 	} {
 		s.Run(tc.batchType.String(), func() {
 			s.Equal(tc.expected, targetExecutionType(tc.batchType))
@@ -274,6 +277,9 @@ func (s *batcherSuite) TestTargetExecutionTypeForRequest() {
 		{"terminate activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{"cancel activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
 		{"delete activities", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{}}, enumspb.EXECUTION_TYPE_ACTIVITY},
+		{"terminate nexus operations", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{}}, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{"cancel nexus operations", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_CancelNexusOperationsOperation{}}, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
+		{"delete nexus operations", &workflowservice.StartBatchOperationRequest{Operation: &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{}}, enumspb.EXECUTION_TYPE_NEXUS_OPERATION},
 	} {
 		s.Run(tc.name, func() {
 			s.Equal(tc.expected, TargetExecutionTypeForRequest(tc.request))

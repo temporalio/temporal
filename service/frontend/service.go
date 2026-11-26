@@ -213,8 +213,9 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Admin batch operations only run in the temporal-system namespace, so this limit is global.
-	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFn
-	EnableBatchOperationsForStandaloneActivities dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxConcurrentAdminBatchOperation                  dynamicconfig.IntPropertyFn
+	EnableBatchOperationsForStandaloneActivities      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableBatchOperationsForStandaloneNexusOperations dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -418,11 +419,12 @@ func NewConfig(
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
 		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
-		EnableBatcher:                                dynamicconfig.FrontendEnableBatcher.Get(dc),
-		MaxConcurrentBatchOperation:                  dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
-		MaxExecutionCountBatchOperation:              dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperation.Get(dc),
-		EnableBatchOperationsForStandaloneActivities: dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities.Get(dc),
+		EnableBatcher:                                     dynamicconfig.FrontendEnableBatcher.Get(dc),
+		MaxConcurrentBatchOperation:                       dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
+		MaxExecutionCountBatchOperation:                   dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
+		MaxConcurrentAdminBatchOperation:                  dynamicconfig.FrontendMaxConcurrentAdminBatchOperation.Get(dc),
+		EnableBatchOperationsForStandaloneActivities:      dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities.Get(dc),
+		EnableBatchOperationsForStandaloneNexusOperations: dynamicconfig.FrontendEnableBatchOperationsForStandaloneNexusOperations.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
 		EnableUpdateWorkflowExecutionAsyncAccepted:                 dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),

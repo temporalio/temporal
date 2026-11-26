@@ -1690,6 +1690,17 @@ func createDelegatedBatchRequest(
 		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
 			DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
 		}
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminateNexusOperationsOperation{
+			TerminateNexusOperationsOperation: &batchpb.BatchOperationTerminateNexusOperations{
+				Identity: adminRequest.GetIdentity(),
+				Reason:   adminRequest.GetReason(),
+			},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeleteNexusOperationsOperation{
+			DeleteNexusOperationsOperation: &batchpb.BatchOperationDeleteNexusOperations{},
+		}
 	default:
 		return nil, serviceerror.NewInvalidArgumentf(
 			"batch operation type %v cannot be delegated to the admin API", batchType)

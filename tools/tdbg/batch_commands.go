@@ -14,10 +14,12 @@ import (
 )
 
 const (
-	batchTypeTerminateWorkflows  = "terminate-workflows"
-	batchTypeDeleteWorkflows     = "delete-workflows"
-	batchTypeTerminateActivities = "terminate-activities"
-	batchTypeDeleteActivities    = "delete-activities"
+	batchTypeTerminateWorkflows       = "terminate-workflows"
+	batchTypeDeleteWorkflows          = "delete-workflows"
+	batchTypeTerminateActivities      = "terminate-activities"
+	batchTypeDeleteActivities         = "delete-activities"
+	batchTypeTerminateNexusOperations = "terminate-nexus-operations"
+	batchTypeDeleteNexusOperations    = "delete-nexus-operations"
 )
 
 var batchTypes = []string{
@@ -25,6 +27,8 @@ var batchTypes = []string{
 	batchTypeDeleteWorkflows,
 	batchTypeTerminateActivities,
 	batchTypeDeleteActivities,
+	batchTypeTerminateNexusOperations,
+	batchTypeDeleteNexusOperations,
 }
 
 func newAdminBatchCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
@@ -140,7 +144,8 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	}
 	confirmation := fmt.Sprintf("Proceed with %s on the currently matching %d %s?", batchType, matchCount, targetKind)
 	if delegatedType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW ||
-		delegatedType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY {
+		delegatedType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY ||
+		delegatedType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION {
 		confirmation = "Termination applies only to Running or Paused executions; the number affected may be lower than the query match count.\n" + confirmation
 	}
 	prompter.Prompt(confirmation)
@@ -194,6 +199,16 @@ func countDelegatedBatchExecutions(
 			return 0, "", fmt.Errorf("unable to count activity executions: %w", err)
 		}
 		return resp.GetCount(), "activities", nil
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION:
+		resp, err := workflowClient.CountNexusOperationExecutions(ctx, &workflowservice.CountNexusOperationExecutionsRequest{
+			Namespace: nsName,
+			Query:     query,
+		})
+		if err != nil {
+			return 0, "", fmt.Errorf("unable to count Nexus operation executions: %w", err)
+		}
+		return resp.GetCount(), "Nexus operations", nil
 	default:
 		return 0, "", fmt.Errorf("unsupported delegated batch operation: %v", batchType)
 	}
@@ -245,6 +260,10 @@ func delegatedBatchType(batchType string) (enumspb.BatchOperationType, error) {
 		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, nil
 	case batchTypeDeleteActivities:
 		return enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, nil
+	case batchTypeTerminateNexusOperations:
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_NEXUS_OPERATION, nil
+	case batchTypeDeleteNexusOperations:
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_NEXUS_OPERATION, nil
 	default:
 		return enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
 			fmt.Errorf("unknown batch type %q, expected one of: %s", batchType, strings.Join(batchTypes, ", "))
