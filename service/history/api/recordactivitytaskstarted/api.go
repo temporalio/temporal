@@ -266,6 +266,18 @@ func recordActivityTaskStarted(
 	); err != nil {
 		return nil, rejectCodeUndefined, err
 	}
+	if ai.GetSessionState().GetWorkflowSession() != nil {
+		// The worker starting a session activity moves the workflow's binding, as a workflow task start does. Nothing
+		// cleared stickiness on this path, so the current binding is the previous one.
+		_, err := mutableState.UpdateNonExclusiveWorkerBinding(
+			request.PollRequest.GetSessionOptions(),
+			request.PollRequest.GetWorkerInstanceKey(),
+			mutableState.SessionWorkerQueue(),
+		)
+		if err != nil {
+			return nil, rejectCodeUndefined, err
+		}
+	}
 
 	scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 	config := shardContext.GetConfig()

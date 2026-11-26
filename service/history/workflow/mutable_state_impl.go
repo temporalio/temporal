@@ -1575,9 +1575,9 @@ func (ms *MutableStateImpl) SessionWorkerQueue() string {
 }
 
 // UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that services it: a multi-session worker
-// starting its workflow task becomes its bound worker, and nil options (a worker without sessions started a task)
-// unbind it. It reports whether the binding changed, and reschedules the pending session activities when it did.
-// previousWorkerStickyQueue is the bound worker's sticky queue, read before the start cleared stickiness.
+// starting one of its tasks becomes its bound worker, and nil options (a worker without sessions started a task)
+// unbind it. It reports whether the binding changed, and reschedules the pending workflow task and session activities
+// when it did. previousWorkerStickyQueue is the bound worker's sticky queue, read before the start cleared stickiness.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
 	workerInstanceKey string,
@@ -1613,6 +1613,11 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	default:
 		// First bind, rebind after an unbind, or move to another worker.
 		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
+	}
+	// A workflow task start leaves nothing to reschedule here: its own task is already started. An activity start
+	// must not leave a copy of the pending workflow task on the previous worker, where it could move the session back.
+	if err := ms.reschedulePendingWorkflowTask(); err != nil {
+		return false, err
 	}
 	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
 }

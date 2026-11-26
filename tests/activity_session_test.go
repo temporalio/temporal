@@ -82,6 +82,15 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
+	// A worker polls its sticky activity queue from startup; without a recent poll Matching treats it as gone.
+	_, err = poller.PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue: tv.StickyTaskQueue(), SessionOptions: multiSessionWorkerOptions(),
+		WorkerInstanceKey: tv.StickyTaskQueue().GetName(),
+	}).HandleTask(tv, func(*workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		require.FailNow(t, "no activity task expected while registering the sticky activity poller")
+		return nil, nil
+	}, taskpoller.WithTimeout(stickyPollTimeout))
+	require.Error(t, err)
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		SessionOptions: multiSessionWorkerOptions(), WorkerInstanceKey: tv.StickyTaskQueue().GetName(),
 	}).HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
