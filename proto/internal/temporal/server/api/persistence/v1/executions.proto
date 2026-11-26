@@ -332,6 +332,16 @@ message WorkflowExecutionInfo {
   // never reads or sets it. The value describes the local copy of the record, so it is not
   // replicated, and applying a replicated snapshot or mutation keeps the local value.
   bytes persistence_metadata = 118;
+
+  // The workflow's session binding. Unset when the workflow is not bound to a worker.
+  SessionState session_state = 119;
+}
+
+// Note: This is experimental and could change in the near future.
+message SessionState {
+  // Present when the workflow is bound to a worker servicing sessions; the bound worker's queue is
+  // WorkflowExecutionInfo.sticky_task_queue. True for a single-session worker, false for a multi-session worker.
+  bool exclusive_worker = 1;
 }
 
 message TimeSkippingInfo {

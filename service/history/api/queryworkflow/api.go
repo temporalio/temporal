@@ -368,9 +368,11 @@ func queryDirectlyThroughMatching(
 		false,
 	)
 
-	if msResp.GetIsStickyTaskQueueEnabled() &&
+	exclusiveWorker := msResp.GetSessionState().GetExclusiveWorker()
+	// Queries for exclusive workers must not fall back to the normal task queue.
+	if exclusiveWorker || (msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
-		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
+		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace())) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
 			NamespaceId:      namespaceID,
@@ -382,7 +384,15 @@ func queryDirectlyThroughMatching(
 
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
-		stickyContext, cancel := rpc.ResetContextTimeout(ctx, timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
+		// Note: A workflow bound to a worker servicing sessions has no sticky timeout, so its query is sent with the
+		// caller's own deadline.
+		var stickyContext context.Context
+		var cancel context.CancelFunc
+		if exclusiveWorker {
+			stickyContext, cancel = context.WithCancel(ctx)
+		} else {
+			stickyContext, cancel = rpc.ResetContextTimeout(ctx, timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
+		}
 		stickyStartTime := time.Now().UTC()
 		matchingResp, err := rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
 		metrics.DirectQueryDispatchStickyLatency.With(metricsHandler).Record(time.Since(stickyStartTime))
@@ -394,6 +404,10 @@ func queryDirectlyThroughMatching(
 					QueryResult:   matchingResp.GetQueryResult(),
 					QueryRejected: matchingResp.GetQueryRejected(),
 				}}, nil
+		}
+		if exclusiveWorker {
+			// A query never moves a workflow off its bound worker, so its error is returned as is.
+			return nil, err
 		}
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {
 			return nil, err

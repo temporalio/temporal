@@ -37,7 +37,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mutableState.ClearStickyTaskQueue()
+			mutableState.ClearStickyTaskQueue(historyi.StickyClearForResetStickyTaskQueue)
 			return &api.UpdateWorkflowAction{
 				Noop:               true,
 				CreateWorkflowTask: false,

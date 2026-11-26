@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -34,6 +36,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/hooks"
@@ -3060,4 +3063,90 @@ func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager(
 	limiter.wholeQueueLimit = simplelimiter.MakeParams(1, 0)
 	partitionMgr.rateLimitManager = limiter
 	return partitionMgr
+}
+
+/*
+TestSingleSessionPollRouting tests delegation to the physical queue manager:
+1. Submit single-session workflow and activity polls, plus an ordinary sticky poll.
+2. Verify the partition manager passes the original metadata to the physical queue.
+3. Return its task and preserve the caller's acquisition flag.
+*/
+func (s *PartitionManagerTestSuite) TestSingleSessionPollRouting() {
+	for _, tc := range []struct {
+		name     string
+		activity bool
+		ordinary bool
+	}{
+		{name: "single session workflow"},
+		{name: "single session activity", activity: true},
+		{name: "ordinary sticky poll", ordinary: true},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			tv := testvars.New(t)
+			pm := s.newEagerDispatchPartitionManager(0, nil)
+			taskType := enumspb.TASK_QUEUE_TYPE_WORKFLOW
+			if tc.activity {
+				taskType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+			}
+			pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+			metadata := &pollMetadata{}
+			if !tc.ordinary {
+				metadata.sessionOptions = &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+				}}
+			}
+			response := &matchingservice.PollWorkflowTaskQueueResponse{TaskToken: []byte("token")}
+			expected := newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: response})
+			queue.EXPECT().PollTask(gomock.Any(), metadata).Return(expected, nil)
+			queue.EXPECT().MakePollerScalingDecision(gomock.Any(), gomock.Any(), expected).Return(nil)
+			ctx := context.WithValue(t.Context(), identityKey, tv.WorkerIdentity())
+			queue.EXPECT().UpdatePollerInfo(pollerIdentity(tv.WorkerIdentity()), metadata).Times(2)
+			task, _, err := pm.PollTask(ctx, metadata)
+			require.NoError(t, err)
+			require.Same(t, expected, task)
+			require.False(t, metadata.isSingleSessionAcquisitionInProgress())
+		})
+	}
+}
+
+/*
+TestStickyBacklogNotificationBeforeQueueInitialization tests an early backlog advertisement:
+1. Deliver a remote backlog update before the sticky queue finishes initialization.
+2. Verify notification handling waits rather than discarding the update.
+3. Finish initialization and verify the queue receives the advertised partition and priority.
+*/
+func (s *PartitionManagerTestSuite) TestStickyBacklogNotificationBeforeQueueInitialization() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		tv := testvars.New(t)
+		pm := s.newEagerDispatchPartitionManager(0, nil)
+		pm.partition = newTestTaskQueue(namespaceID, tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+			StickyPartition(tv.StickyTaskQueue().GetName())
+		queue := pm.defaultQueue().(*MockphysicalTaskQueueManager)
+		pm.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
+		queue.EXPECT().UpdateRemotePriorityBacklogs(remotePriorityBacklogSet{
+			{partition: 2, priority: 3}: {},
+		})
+		done := make(chan struct{}, 1)
+		go func() {
+			pm.ephemeralDataChanged(&taskqueuespb.EphemeralData{
+				Partition: []*taskqueuespb.EphemeralData_ByPartition{{
+					Partition: 2,
+					Version: []*taskqueuespb.EphemeralData_ByVersion{{
+						BacklogPriorityLevels: 1 << 3,
+					}},
+				}},
+			})
+			done <- struct{}{}
+		}()
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("backlog notification must wait for queue initialization")
+		default:
+		}
+		pm.defaultQueueFuture.Set(queue, nil)
+		await.Rcv(t, done)
+	})
 }

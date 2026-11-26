@@ -168,7 +168,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// Otherwise, leave it nil here to avoid clearing the workflow context (but still return error to the caller).
 			errForRelease = retError
 		}
-		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() {
+		if retError != nil && currentWorkflowTask != nil && currentWorkflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && ms.IsStickyTaskQueueSet() &&
+			!ms.HasExclusiveBinding() {
 			// If, while completing WFT, error is occurred and returned to the worker then worker will clear its cache.
 			// New WFT will also be created on sticky task queue and sent to worker.
 			// Because worker doesn't have a workflow in cache, it needs to replay it from the beginning,
@@ -180,6 +181,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// and will have full history attached to it.
 			// This is NOT 100% bulletproof solution because this write operation may also fail.
 			// TODO: remove this call when GetWorkflowExecutionHistory includes speculative WFT events.
+			//
+			// TODO(Shivam): This piece of code seems stale given that history.sendTransientOrSpeculativeWorkflowTaskEvents is true by default.
+			// Revisit this if exclusive workers in the future need added support for this.
 			if clearStickyErr := handler.clearStickyTaskQueue(ctx, workflowLease.GetContext()); clearStickyErr != nil {
 				handler.logger.Error("Failed to clear stickiness after speculative workflow task failed to complete.",
 					tag.NewErrorTag("clear-sticky-error", clearStickyErr),
@@ -207,6 +211,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
+	if ms.HasExclusiveBinding() {
+		requestedStickyQueue := request.GetStickyAttributes().GetWorkerTaskQueue()
+		if requestedStickyQueue != nil && requestedStickyQueue.GetName() != ms.SessionWorkerQueue() {
+			releaseLeaseWithError = false
+			return nil, serviceerror.NewInvalidArgument("workflow is bound to another single-session destination")
+		}
 	}
 
 	// We don't accept the request to create a new workflow task if the workflow is paused.
@@ -350,7 +362,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			if err != nil {
 				return nil, err
 			}
-			ms.ClearStickyTaskQueue()
+			ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 			wtHeartbeatTimedOut = true
 		}
 	}
@@ -368,7 +380,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		metrics.CompleteWorkflowTaskWithStickyDisabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		ms.ClearStickyTaskQueue()
+		ms.ClearStickyTaskQueue(historyi.StickyClearForCacheDisabled)
 	} else {
 		metrics.CompleteWorkflowTaskWithStickyEnabledCounter.With(handler.metricsHandler).Record(
 			1,
@@ -1196,7 +1208,7 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 	if err != nil {
 		return err
 	}
-	ms.ClearStickyTaskQueue()
+	ms.ClearStickyTaskQueue(historyi.StickyClearForWorkflowTaskFailure)
 	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 	if err != nil {
 		return err

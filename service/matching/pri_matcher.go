@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -38,14 +40,21 @@ type priTaskMatcher struct {
 	// Background context used for forwarding tasks. Closed when task queue is closed.
 	tqCtx context.Context
 
-	partition        tqid.Partition
-	fwdr             *priForwarder
-	client           matchingservice.MatchingServiceClient
-	validator        taskValidator
-	rateLimitManager *rateLimitManager
-	metricsHandler   metrics.Handler // namespace metric scope
-	logger           log.Logger
-	markAlive        func() // function to mark the physical task queue alive
+	partition                 tqid.Partition
+	fwdr                      *priForwarder
+	client                    matchingservice.MatchingServiceClient
+	validator                 taskValidator
+	rateLimitManager          *rateLimitManager
+	metricsHandler            metrics.Handler // namespace metric scope
+	logger                    log.Logger
+	markAlive                 func() // function to mark the physical task queue alive
+	isExclusiveWorkerAssigned func() bool
+	assignExclusiveWorker     func() error
+
+	// Single Session Acquisition knobs
+	singleSessionAcquisitionMutex      sync.Mutex
+	singleSessionAcquisitionInProgress bool
+	singleSessionAcquisitionCV         *locks.ConditionVariableImpl
 
 	priorityBacklogForwarders *goro.KeyedSet[remotePriorityBacklog]
 }
@@ -104,6 +113,8 @@ func newPriTaskMatcher(
 	rateLimitManager *rateLimitManager,
 	onRateLimited func(),
 	markAlive func(),
+	isExclusiveWorkerAssigned func() bool,
+	assignExclusiveWorker func() error,
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:                    config,
@@ -117,6 +128,8 @@ func newPriTaskMatcher(
 		validator:                 validator,
 		rateLimitManager:          rateLimitManager,
 		markAlive:                 markAlive,
+		isExclusiveWorkerAssigned: isExclusiveWorkerAssigned,
+		assignExclusiveWorker:     assignExclusiveWorker,
 		priorityBacklogForwarders: goro.NewKeyedSet[remotePriorityBacklog](tqCtx),
 	}
 
@@ -566,7 +579,96 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 // On success, the returned task could be a query task or a regular task
 // Returns errNoTasks when context deadline is exceeded
 func (tm *priTaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	// Assuming that session acquisition (ie for the very first time) via a WFT only. Might change this in the future.
+	if tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY &&
+		tm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW &&
+		pollMetadata.sessionOptions.GetSingleSession() != nil {
+		return tm.pollForSingleSessionWorker(ctx, pollMetadata)
+	}
 	return tm.poll(ctx, pollMetadata, false)
+}
+
+func (tm *priTaskMatcher) pollForSingleSessionWorker(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(tm.tqCtx, cancel)
+	defer stop()
+	if err := tm.tqCtx.Err(); err != nil {
+		return nil, err
+	}
+	ctx = callCtx
+
+	shouldAcquire, err := tm.beginSingleSessionAcquisition(ctx, pollMetadata.conditions.GetNoWait())
+	if err != nil {
+		return nil, err
+	}
+	if !shouldAcquire {
+		return tm.poll(ctx, pollMetadata, false)
+	}
+
+	// TODO(Shivam): Reconcile uncertain starts after errors, cancellation, or timeouts
+	// before allowing another acquisition. Failure handling is deferred for now.
+	defer tm.finishSingleSessionAcquisition()
+	acquisitionMetadata := *pollMetadata
+	acquisitionMetadata.singleSessionAcquisitionInProgress = true
+	// This poll, with stable identity set, now has the opportunity to be forwarded to the normal task queue for matching with a task.
+	// Once matched, no more polls with a stable identity are forwarded to the normal task queue.
+	task, err := ForwardPollWithTarget(ctx, &acquisitionMetadata, tm.client, tm.partition, tm.partition.TaskQueue().RootPartition())
+	if err != nil {
+		return nil, err
+	}
+	if err := tm.assignExclusiveWorker(); err != nil {
+		return nil, err
+	}
+	return task, nil
+}
+
+func (tm *priTaskMatcher) beginSingleSessionAcquisition(ctx context.Context, noWait bool) (bool, error) {
+	// The main idea here is to have a sequential allowance of pollers that are polling with the
+	// same stable identity so that we do not have multiple pollers for the same identity acquiring tasks
+	// from multiple workflows at the same time
+	tm.singleSessionAcquisitionMutex.Lock()
+	defer tm.singleSessionAcquisitionMutex.Unlock()
+
+	for {
+		if tm.isExclusiveWorkerAssigned() {
+			// An exclusive worker has already acquired the workflow that is on this sticky task queue.
+			// No new acquisitions are allowed and this poller should only poll the sticky task queue.
+			return false, nil
+		}
+		if ctx.Err() != nil {
+			return false, errNoTasks
+		}
+		if !tm.singleSessionAcquisitionInProgress {
+			break
+		}
+		if noWait {
+			return false, errNoTasks
+		}
+		tm.markAlive()
+		if tm.singleSessionAcquisitionCV == nil {
+			tm.singleSessionAcquisitionCV = locks.NewConditionVariable(&tm.singleSessionAcquisitionMutex)
+		}
+		// This poller shall wait until a previous poller completes its acquisition or returns with an empty poll.
+		// Note: Calling Wait here shall release singleSessionAcquisitionMutex so that some other poller can enter
+		// this method
+		tm.singleSessionAcquisitionCV.Wait(ctx.Done())
+	}
+	if tm.partition.TaskQueue().Name() == "" {
+		return false, serviceerror.NewInvalidArgument("single-session workflow polls require a normal task queue name")
+	}
+	tm.singleSessionAcquisitionInProgress = true
+	return true, nil
+}
+
+func (tm *priTaskMatcher) finishSingleSessionAcquisition() {
+	tm.singleSessionAcquisitionMutex.Lock()
+	defer tm.singleSessionAcquisitionMutex.Unlock()
+	tm.singleSessionAcquisitionInProgress = false
+	if tm.singleSessionAcquisitionCV != nil {
+		// Wake up all pollers that are waiting for this acquisition to complete
+		tm.singleSessionAcquisitionCV.Broadcast()
+	}
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
@@ -651,6 +753,15 @@ func (tm *priTaskMatcher) poll(
 		queryOnly:    queryOnly,
 		forwardCtx:   ctx,
 		pollMetadata: pollMetadata,
+	}
+
+	if pollMetadata.sessionOptions.GetSingleSession() != nil &&
+		(pollMetadata.conditions.GetNoWait() ||
+			(tm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !pollMetadata.isSingleSessionAcquisitionInProgress())) {
+		// Only an acquisition owner may forward. NoWait cannot await an asynchronous forward. In other words,
+		// if the poller is not the acquisition owner, it will not forward the poll, preventing multiple pollers
+		// from acquiring different workflow tasks at the same time for the same stable identity.
+		poller.forwardCtx = nil
 	}
 
 	var res *matchResult

@@ -1255,6 +1255,11 @@ Links embedded in completion callbacks are not included; they count toward callb
 to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
+	EnableExclusiveWorkerSessions = NewNamespaceBoolSetting(
+		"frontend.enableExclusiveWorkerSessions",
+		false,
+		`EnableExclusiveWorkerSessions allows workflow and activity polls with single-session worker options.`,
+	)
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
 		"frontend.workerVersioningDataAPIs",
 		false,

@@ -405,6 +405,7 @@ func MutableStateToGetResponse(
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,
 		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueSet(),
+		SessionState:                          common.CloneProto(executionInfo.GetSessionState()),
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
