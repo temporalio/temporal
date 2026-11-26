@@ -401,7 +401,6 @@ func (c *cacheImpl) makeReleaseFunc(
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
-					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					wfContext.Clear()
 					c.unlockAndRelease(cacheKey, item)
 				} else {
