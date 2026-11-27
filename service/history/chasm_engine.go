@@ -536,8 +536,24 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	}
 
 	if decision.PersistNow {
-		if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
-			return nil, err
+		// The write is skipped if the update has nothing to persist, e.g. when it only changed ephemeral components.
+		// Pollers aren't notified then, just as for a persisted write without CHASM node changes: no persisted state
+		// changed, so no poll predicate can change. In verify mode the write isn't skipped, but is checked to persist
+		// nothing that skipping it would have dropped.
+		// TODO: Remove verify mode (VerifyCHASMSkipCleanUpdates and verifyOnly) once the skip is enabled by default.
+		// It's only there to validate the skip during its rollout.
+		nsName := mutableState.GetNamespaceEntry().Name().String()
+		verifyOnly := e.config.VerifyCHASMSkipCleanUpdates(nsName)
+		skipped := false
+		if verifyOnly || e.config.EnableCHASMSkipCleanUpdates(nsName) {
+			if skipped, err = mutableState.CloseTransactionIfClean(verifyOnly); err != nil {
+				return nil, err
+			}
+		}
+		if !skipped {
+			if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		// The transition stays in the cached mutable state until the next normal transaction closes.
