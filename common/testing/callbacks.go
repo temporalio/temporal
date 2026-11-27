@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/callbacks"
+	"go.temporal.io/server/common/metrics"
 )
 
 // NewCallbacksValidatorConfig returns a valid callbacks.ValidatorConfig that can be
@@ -18,6 +19,7 @@ func NewCallbacksValidatorConfig() callbacks.ValidatorConfig {
 		},
 	}
 	return callbacks.ValidatorConfig{
+		MetricsHandler:                   metrics.NoopMetricsHandler,
 		TotalCallbacksMaxSize:            func(string) int { return 2 * 1024 * 1024 },
 		MaxCallbacksPerExecution:         func(string) int { return 10 },
 		MaxIDLengthLimit:                 func() int { return 100 },

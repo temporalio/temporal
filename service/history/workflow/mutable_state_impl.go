@@ -3582,7 +3582,8 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	completionCallbacks []*commonpb.Callback,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	namespaceName := ms.GetNamespaceEntry().Name().String()
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(namespaceName)
 	// BUG: This limit is checked from an Apply* function, which MutableStateRebuilder also
 	// drives during NDC replication, history import, and reset. If the check fails there (say
 	// MaxCallbacksPerWorkflow was lowered after the callbacks were attached) it rejects an
@@ -3592,6 +3593,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	// The newer CHASM path only validates in request handlers instead; see [ValidateCallbackAddition].
 	// This HSM path is kept as-is to avoid churn as we work on removing it.
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
+		metrics.RecordAttachLimitExceeded(ms.metricsHandler, namespaceName, metrics.AttachLimitMaxCallbacksPerWorkflow)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,

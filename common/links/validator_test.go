@@ -10,6 +10,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/links"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/proto"
 )
@@ -445,4 +447,60 @@ func TestSanitize(t *testing.T) {
 		require.Equal(t, []*commonpb.Link{a, b}, kept)
 		require.EqualError(t, err, "unsupported link variant")
 	})
+}
+
+func TestLinkAttachmentLimitMetrics(t *testing.T) {
+	t.Parallel()
+	oneLink := []*commonpb.Link{{
+		Variant: &commonpb.Link_BatchJob_{BatchJob: &commonpb.Link_BatchJob{JobId: "job"}},
+	}}
+	for _, tc := range []struct {
+		name  string
+		check func(t *testing.T, validator links.Validator)
+		limit string
+	}{
+		{"request count", func(t *testing.T, validator links.Validator) {
+			require.Error(t, validator.Validate("test-namespace", oneLink, []*commonpb.Callback{{Links: oneLink}}))
+		}, "max_links_per_request"},
+		{"component count", func(t *testing.T, validator links.Validator) {
+			require.Error(t, validator.ValidateAdditions("test-namespace", oneLink, links.Usage{Count: 1}))
+		}, "max_links_per_component"},
+		{"individual size", func(t *testing.T, validator links.Validator) {
+			require.Error(t, validator.Validate("test-namespace", []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{BatchJob: &commonpb.Link_BatchJob{JobId: "oversized"}},
+			}}, nil))
+		}, "link_max_size"},
+		{"component size", func(t *testing.T, validator links.Validator) {
+			require.Error(t, validator.ValidateAdditions("test-namespace", oneLink, links.Usage{TotalSize: oneLink[0].Size()}))
+		}, "total_links_max_size"},
+		{"malformed input", func(t *testing.T, validator links.Validator) {
+			require.Error(t, validator.Validate("test-namespace", []*commonpb.Link{{}}, nil))
+		}, ""},
+		{"sanitized links", func(t *testing.T, validator links.Validator) {
+			_, err := validator.Sanitize("test-namespace", append([]*commonpb.Link{oneLink[0]}, oneLink...))
+			require.Error(t, err)
+		}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			cfg := test.NewLinksValidatorConfig()
+			cfg.MetricsHandler = handler
+			cfg.MaxLinksPerRequest = limit(1)
+			cfg.MaxLinksPerExecution = limit(1)
+			cfg.LinkMaxSize = limit(oneLink[0].Size())
+			cfg.TotalLinksMaxSize = limit(oneLink[0].Size())
+			tc.check(t, test.NewLinksValidator(t, cfg))
+
+			recordings := capture.SnapshotMetric(metrics.AttachLimitExceeded.Name())
+			if tc.limit == "" {
+				require.Empty(t, recordings)
+				return
+			}
+			require.Len(t, recordings, 1)
+			require.Equal(t, int64(1), recordings[0].Value)
+			require.Equal(t, map[string]string{"namespace": "test-namespace", "limit": tc.limit}, recordings[0].Tags)
+		})
+	}
 }

@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus"
 	"go.uber.org/mock/gomock"
@@ -53,6 +55,7 @@ func newValidatorConfig() ValidatorConfig {
 		},
 	}
 	return ValidatorConfig{
+		MetricsHandler:                   metrics.NoopMetricsHandler,
 		MaxCallbacksPerExecution:         func(string) int { return 10 },
 		TotalCallbacksMaxSize:            func(string) int { return 2 * 1024 * 1024 },
 		MaxIDLengthLimit:                 func() int { return 10 },
@@ -557,6 +560,63 @@ func TestValidateAdditions(t *testing.T) {
 			var failedPreconditionErr *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &failedPreconditionErr)
 			require.EqualError(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestCallbackAttachmentLimitMetrics(t *testing.T) {
+	t.Parallel()
+	validateTaskQueue := func(t *testing.T, validator Validator, taskQueue, message string) {
+		t.Helper()
+		cb := newNexusHandlerCallback()
+		cb.GetNexusHandler().TaskQueueName = taskQueue
+		err := validator.Validate(t.Context(), "test-namespace", []*commonpb.Callback{cb}, ValidatorOptions{
+			EnabledKinds: []Kind{KindNexusHandler},
+		})
+		require.ErrorContains(t, err, message)
+	}
+	for _, tc := range []struct {
+		name  string
+		check func(t *testing.T, validator Validator)
+		limit string
+	}{
+		{"request count", func(t *testing.T, validator Validator) {
+			require.Error(t, validator.Validate(t.Context(), "test-namespace", []*commonpb.Callback{{}, {}}, ValidatorOptions{}))
+		}, "max_callbacks_per_execution"},
+		{"execution count", func(t *testing.T, validator Validator) {
+			require.Error(t, validator.ValidateAdditions("test-namespace", []*commonpb.Callback{newNexusCallback()}, CurrentCallbacksInfo{Count: 1}))
+		}, "max_callbacks_per_execution"},
+		{"execution size", func(t *testing.T, validator Validator) {
+			require.Error(t, validator.ValidateAdditions("test-namespace", []*commonpb.Callback{newNexusCallback()}, CurrentCallbacksInfo{}))
+		}, "total_callbacks_max_size"},
+		{"task queue length", func(t *testing.T, validator Validator) {
+			validateTaskQueue(t, validator, "/_sys/long-name", "taskQueue length exceeds limit")
+		}, "max_id_length"},
+		{"reserved task queue name", func(t *testing.T, validator Validator) {
+			validateTaskQueue(t, validator, "/_sys/1", "task queue name cannot start with reserved prefix")
+		}, ""},
+		{"malformed input", func(t *testing.T, validator Validator) {
+			require.Error(t, validator.Validate(t.Context(), "test-namespace", []*commonpb.Callback{{}}, ValidatorOptions{}))
+		}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			cfg := newValidatorConfig()
+			cfg.MetricsHandler = handler
+			cfg.MaxCallbacksPerExecution = func(string) int { return 1 }
+			cfg.TotalCallbacksMaxSize = func(string) int { return 1 }
+			tc.check(t, mustNewValidator(t, cfg))
+
+			recordings := capture.SnapshotMetric(metrics.AttachLimitExceeded.Name())
+			if tc.limit == "" {
+				require.Empty(t, recordings)
+				return
+			}
+			require.Len(t, recordings, 1)
+			require.Equal(t, int64(1), recordings[0].Value)
+			require.Equal(t, map[string]string{"namespace": "test-namespace", "limit": tc.limit}, recordings[0].Tags)
 		})
 	}
 }

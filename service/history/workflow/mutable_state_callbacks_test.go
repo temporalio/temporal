@@ -390,3 +390,23 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionSignaledCountsWriteAndDupl
 	s.Require().NoError(err)
 	s.Equal(int64(10), wf.IncomingSignals[requestID].Get(ctx).GetEventId())
 }
+
+func (s *mutableStateSuite) TestHSMCallbackAttachmentLimitMetric() {
+	s.mockConfig.MaxCallbacksPerWorkflow = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
+	ms := s.mutableState
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	ms.metricsHandler = handler
+
+	err := ms.addCompletionCallbacksHsm(&historypb.HistoryEvent{}, "request", testCompletionCallbacks(1))
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+
+	recordings := capture.SnapshotMetric(metrics.AttachLimitExceeded.Name())
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(map[string]string{
+		"namespace": s.namespaceEntry.Name().String(),
+		"limit":     "max_callbacks_per_workflow",
+	}, recordings[0].Tags)
+}
