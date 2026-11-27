@@ -1,0 +1,20 @@
+version: 0.14.0
+
+profiles:
+  testx: on
+
+format:
+  go:
+    formatter: gofmt # onelint:override defaults
+    gci: on
+
+lint:
+  go:
+    gofix: on
+    golangci-lint:
+      analyzers:
+        errortype:
+          version: v0.0.7
+        nilaway: off
+        workflowcheck: off
+    gomodtidy: on
