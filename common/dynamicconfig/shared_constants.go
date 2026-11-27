@@ -1,6 +1,7 @@
 package dynamicconfig
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -336,6 +337,22 @@ const (
 type HistoryReplicationRateLimiterSettings struct {
 	Enabled bool
 	Scope   string
+}
+
+func convertServerVersionCheckSchedule(v any) ([]time.Duration, error) {
+	schedule, err := ConvertStructure([]time.Duration(nil))(v)
+	if err != nil {
+		return nil, err
+	}
+	if len(schedule) == 0 {
+		return nil, errors.New("server version check schedule must not be empty")
+	}
+	for i, after := range schedule {
+		if after <= 0 || (i > 0 && after <= schedule[i-1]) {
+			return nil, fmt.Errorf("server version check schedule must be positive and strictly increasing: %v", schedule)
+		}
+	}
+	return schedule, nil
 }
 
 func convertHistoryReplicationRateLimiterSettings(v any) (HistoryReplicationRateLimiterSettings, error) {
