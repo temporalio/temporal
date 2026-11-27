@@ -11,12 +11,15 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	sessionpb "go.temporal.io/api/session/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -55,6 +58,8 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type (
@@ -1659,6 +1664,79 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestSingleSessionAutoUpgradeCompleti
 			s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, historyEvents[0].GetEventType())
 			s.Require().Equal(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
+				historyEvents[0].GetWorkflowTaskFailedEventAttributes().GetCause(),
+			)
+		})
+	}
+}
+
+/*
+TestCompletionWaitsForSessionWorker tests that only a session worker completes a workflow that owes session work:
+ 1. Start a workflow task, optionally with a pending session activity and a binding to multi-session worker X.
+ 2. Complete the task.
+ 3. Fail it only when the workflow is unbound and has a pending session activity: a worker without sessions started
+    the task, and the activity waits for a session worker to bind the workflow. Complete it otherwise.
+*/
+func (s *WorkflowTaskCompletedHandlerSuite) TestCompletionWaitsForSessionWorker() {
+	for _, tc := range []struct {
+		name            string
+		bound           bool
+		sessionActivity bool
+		failed          bool
+	}{
+		{name: "unbound with a waiting session activity", sessionActivity: true, failed: true},
+		{name: "bound with a session activity", bound: true, sessionActivity: true},
+		{name: "unbound without session activities"},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+			wfContext, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+			ms, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+			s.Require().NoError(err)
+			if tc.bound {
+				ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
+				ms.GetExecutionInfo().StickyTaskQueue = "X"
+			}
+			if tc.sessionActivity {
+				_, err := ms.ApplyActivityTaskScheduledEvent(0, &historypb.HistoryEvent{
+					EventId:   100,
+					EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+							ActivityId:             "session-activity",
+							ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
+							TaskQueue:              &taskqueuepb.TaskQueue{Name: tv.TaskQueue().GetName()},
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
+							SessionOptions: &sessionpb.ActivitySessionOptions{
+								Placement: &sessionpb.ActivitySessionOptions_WorkflowSession{WorkflowSession: &emptypb.Empty{}},
+							},
+						}},
+				})
+				s.Require().NoError(err)
+			}
+			writtenHistoryCh := s.captureWrittenHistory(1)
+
+			_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken: serializedTaskToken,
+					Identity:  tv.Any().String(),
+				},
+			})
+
+			historyEvents := await.Rcv(s.T(), writtenHistoryCh)
+			if !tc.failed {
+				s.Require().NoError(err)
+				s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, historyEvents[0].GetEventType())
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, historyEvents[0].GetEventType())
+			s.Require().Equal(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
 				historyEvents[0].GetWorkflowTaskFailedEventAttributes().GetCause(),
 			)
 		})

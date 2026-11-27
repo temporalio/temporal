@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
@@ -259,7 +258,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	if ai.Stamp != task.Stamp || ai.Paused {
+	if ai.Stamp != task.Stamp || ai.Paused || workflow.WaitsForSessionBinding(mutableState, ai) {
 		release(nil)                    // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrStaleReference // drop the task
 	}
@@ -350,12 +349,25 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		historyi.TransactionPolicyActive,
 	)
 
-	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
-		// sticky worker is unavailable, switch to original normal task queue. Matching does not report an exclusive worker as
-		// unavailable. The exception is versioning (old build-ID assignment rules, or a deployment version the sticky queue
-		// does not belong to), which can still send the first task of a workflow with an exclusive binding here.
-		// TODO (Shivam): handle exclusive bindings on versioned task queues, for workflow tasks and session activities alike
-		// (MTC-934).
+	if !common.IsStickyWorkerUnavailable(err) {
+		return err
+	}
+	switch sessionDirective := workflow.TaskSessionDirective(sessionState, taskQueue); {
+	case isSingleSessionTask(sessionDirective):
+		// A single-session workflow never leaves its worker. Matching only reports that worker unavailable when the
+		// sticky queue does not belong to the task's deployment version, which is not handled yet; retry rather than
+		// send the task elsewhere.
+		// TODO (Shivam): handle exclusive bindings on versioned task queues, for workflow tasks and session activities
+		// alike (MTC-934).
+		return err
+	case isMultiSessionTask(sessionDirective):
+		return unbindFromDeadSessionWorker(ctx, t.shardContext, t.cache, &historyservice.UnbindWorkflowFromSessionWorkerRequest{
+			NamespaceId: transferTask.NamespaceID,
+			Execution:   &commonpb.WorkflowExecution{WorkflowId: transferTask.WorkflowID, RunId: transferTask.RunID},
+			WorkerQueue: taskQueue.GetName(),
+		})
+	default:
+		// sticky worker is unavailable, switch to original normal task queue.
 		taskQueue = &taskqueuepb.TaskQueue{
 			// do not use task.TaskQueue which is sticky, use original normal task queue from mutable state
 			Name: normalTaskQueueName,
@@ -366,8 +378,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// timeout timer task is already created which will timeout this task if no worker pick it up in 5s anyway.
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
-		// will re-create a new non-sticky task and reset sticky. A bound workflow's task has no such timer and waits for
-		// its worker or the queue's drain.
+		// will re-create a new non-sticky task and reset sticky.
 		err = t.pushWorkflowTask(
 			ctx,
 			transferTask,

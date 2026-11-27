@@ -1612,6 +1612,16 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 	return ms.executionInfo.StickyTaskQueue != ""
 }
 
+// HasPendingSessionActivities reports whether any pending activity follows the workflow's session.
+func (ms *MutableStateImpl) HasPendingSessionActivities() bool {
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.GetSessionState().GetWorkflowSession() != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // SessionWorkerQueue returns the sticky queue of the worker the workflow is bound to, or "" if it is not bound.
 func (ms *MutableStateImpl) SessionWorkerQueue() string {
 	if ms.executionInfo.GetSessionState() == nil {
@@ -10487,6 +10497,10 @@ func (ms *MutableStateImpl) reschedulePendingActivities(reason activityReschedul
 		})
 		if err != nil {
 			return err
+		}
+		if reason == activityRescheduleForSessionMove && WaitsForSessionBinding(ms, ai) {
+			// Unbound: the new stamp only invalidates the queued copies; the next binding reissues the activity.
+			continue
 		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
 		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)

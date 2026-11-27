@@ -456,7 +456,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 		if activityInfo.Attempt > task.Attempt ||
 			activityInfo.Stamp != task.Stamp ||
 			activityInfo.StartedEventId != common.EmptyEventID ||
-			activityInfo.Paused {
+			activityInfo.Paused ||
+			workflow.WaitsForSessionBinding(mutableState, activityInfo) {
 			return nil, nil
 		}
 
@@ -779,7 +780,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityScheduleToStartTimeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
-	resp, err := addActivityTask(ctx, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
+	resp, err := addActivityTask(ctx, t.shardContext, t.cache, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,
@@ -792,7 +793,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
 		Stamp:                  activityTask.Stamp,
-	})
+	}, historyi.TransactionPolicyPassive)
 
 	if err != nil {
 		return err

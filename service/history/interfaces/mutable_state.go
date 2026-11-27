@@ -285,6 +285,8 @@ type (
 		ClearStickyTaskQueue(reason StickyClearReason) bool
 		IsStickyTaskQueueSet() bool
 		SessionWorkerQueue() string
+		// HasPendingSessionActivities reports whether any pending activity follows the workflow's session.
+		HasPendingSessionActivities() bool
 		// HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
 		HasExclusiveBinding() bool
 		// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil if it is not bound.

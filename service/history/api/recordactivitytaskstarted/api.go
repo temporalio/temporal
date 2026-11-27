@@ -14,10 +14,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/priorities"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -183,6 +185,21 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask(errorMessage)
 	}
 
+	if ai.GetSessionState().GetWorkflowSession() != nil &&
+		request.PollRequest.GetTaskQueue().GetName() != mutableState.SessionWorkerQueue() {
+		// Session activities are only dispatched to the bound worker's sticky queue, so this copy was put on another queue
+		// (the normal queue) by an older server version. Drop it: a session activity never runs off its bound worker, and
+		// the next binding reissues it.
+		softassert.Fail(shardContext.GetLogger(), "session activity task was on a queue other than its bound worker's sticky queue",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(request.GetWorkflowExecution().GetRunId()),
+			tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+			tag.TaskQueueName(request.PollRequest.GetTaskQueue().GetName()),
+		)
+		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask("session activity started off its bound worker's sticky queue")
+	}
+
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
 	//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
@@ -265,18 +282,6 @@ func recordActivityTaskStarted(
 		clock,
 	); err != nil {
 		return nil, rejectCodeUndefined, err
-	}
-	if ai.GetSessionState().GetWorkflowSession() != nil {
-		// The worker starting a session activity moves the workflow's binding, as a workflow task start does. Nothing
-		// cleared stickiness on this path, so the current binding is the previous one.
-		_, err := mutableState.UpdateNonExclusiveWorkerBinding(
-			request.PollRequest.GetSessionOptions(),
-			request.PollRequest.GetWorkerInstanceKey(),
-			mutableState.SessionWorkerQueue(),
-		)
-		if err != nil {
-			return nil, rejectCodeUndefined, err
-		}
 	}
 
 	scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())

@@ -239,6 +239,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingW
 	s.processPendingActivityTask(true, false)
 }
 
+// TestProcessActivityTask_PendingWorkflowSessionAfterUnbind tests that a session activity of an unbound workflow is
+// not pushed: it waits for a session worker to bind the workflow, as on the active side.
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_PendingWorkflowSessionAfterUnbind() {
 	s.processPendingActivityTask(true, true)
 }
@@ -306,6 +308,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) processPendingActivityTask(useSe
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	if useSession && sessionDropped {
+		s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
+		resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+		s.NoError(resp.ExecutionErr, "nothing is pushed to Matching")
+		return
+	}
 
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)

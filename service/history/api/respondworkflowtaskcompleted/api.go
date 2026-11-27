@@ -442,6 +442,16 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				"auto-upgrade versioning behavior is not supported on single-session workers: set the pinned behavior on "+
 					"the workflow or the worker's default, or remove the workflow's auto-upgrade versioning override"),
 			false)
+	} else if !wtHeartbeatTimedOut && ms.SessionWorkerQueue() == "" && ms.HasPendingSessionActivities() {
+		// Session activities run only on the worker the workflow is bound to, and only a session worker starting a
+		// workflow task binds it. Until one does, a worker without sessions cannot complete the workflow's tasks; the
+		// task is retried until a session worker takes it, binds the workflow, and the waiting activities are sent to it.
+		wtFailedCause = newWorkflowTaskFailedCause(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
+			serviceerror.NewInvalidArgument(
+				"session activities are waiting for a session worker: only a worker servicing sessions can complete this "+
+					"workflow's tasks until one binds it"),
+			false)
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(

@@ -1499,20 +1499,35 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 					VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
 				}
 			}
-			if tc.workerGone {
-				gomock.InOrder(
-					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
-						Return(nil, &serviceerrors.StickyWorkerUnavailable{}),
-					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(normalTaskQueue)), gomock.Any()).
-						Return(&matchingservice.AddActivityTaskResponse{}, nil),
-				)
-			} else {
+			var mutation *persistence.WorkflowMutation
+			switch {
+			case tc.droppedSession:
+				// An unbound workflow's session activity waits for the next binding: nothing goes to Matching.
+			case tc.workerGone:
+				// The dead worker is reported, so the workflow is unbound in place instead of redirecting the activity.
+				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
+					Return(nil, &serviceerrors.StickyWorkerUnavailable{})
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						mutation = &request.UpdateWorkflowMutation
+						return tests.UpdateWorkflowExecutionResponse, nil
+					})
+			default:
 				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), pm.Eq(expectedRequest(expectedTaskQueue)), gomock.Any()).
 					Return(&matchingservice.AddActivityTaskResponse{}, nil)
 			}
 
 			resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+			if tc.droppedSession {
+				s.ErrorIs(resp.ExecutionErr, consts.ErrActivityTaskNotFound)
+				return
+			}
 			s.Require().NoError(resp.ExecutionErr)
+			if tc.workerGone {
+				s.Require().NotNil(mutation)
+				s.Nil(mutation.ExecutionInfo.GetSessionState())
+				s.Empty(mutation.ExecutionInfo.GetStickyTaskQueue())
+			}
 		})
 	}
 }

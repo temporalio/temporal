@@ -1926,6 +1926,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	s.processPendingActivityRetryTimer(true, false)
 }
 
+// TestProcessActivityRetryTimer_PendingWorkflowSessionAfterUnbind tests that a session activity of an unbound workflow is
+// not pushed: it waits for a session worker to bind the workflow, as on the active side.
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PendingWorkflowSessionAfterUnbind() {
 	s.processPendingActivityRetryTimer(true, true)
 }
@@ -2003,6 +2005,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) processPendingActivityRetryTimer(us
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	if useSession && sessionDropped {
+		s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.NoError(resp.ExecutionErr, "nothing is pushed to Matching")
+		return
+	}
 
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)

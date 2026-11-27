@@ -59,5 +59,9 @@ func unbindWorkflowFromSessionWorker(mutableState historyi.MutableState, workerQ
 	if err != nil {
 		return nil, err
 	}
-	return &api.UpdateWorkflowAction{Noop: !unbound}, nil
+	return &api.UpdateWorkflowAction{
+		Noop: !unbound,
+		// Session activities wait while the workflow is unbound; a workflow task lets a session worker bind it.
+		CreateWorkflowTask: unbound && mutableState.HasPendingSessionActivities(),
+	}, nil
 }

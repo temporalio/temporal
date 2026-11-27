@@ -11235,6 +11235,8 @@ TestReschedulePendingActivitiesForSessionMove tests which pending activities fol
 */
 func (s *mutableStateSuite) TestReschedulePendingActivitiesForSessionMove() {
 	now := s.mutableState.Now()
+	s.mutableState.executionInfo.SessionState = &persistencespb.SessionState{}
+	s.mutableState.executionInfo.StickyTaskQueue = "X"
 	ready := s.addSessionTestActivity(10, true)
 	notInSession := s.addSessionTestActivity(11, false)
 	started := s.addSessionTestActivity(12, true)
@@ -11276,6 +11278,18 @@ func (s *mutableStateSuite) TestReschedulePendingActivitiesForSessionMove() {
 	}
 }
 
+// TestReschedulePendingActivitiesForSessionMove_Unbound tests that a session move to no worker only invalidates the
+// queued copies of ready session activities: they get a new stamp but no task, and wait for the next binding.
+func (s *mutableStateSuite) TestReschedulePendingActivitiesForSessionMove_Unbound() {
+	ready := s.addSessionTestActivity(10, true)
+	stampBefore := ready.Stamp
+
+	s.Require().NoError(s.mutableState.reschedulePendingActivities(activityRescheduleForSessionMove, 0))
+
+	s.Equal(stampBefore+1, ready.Stamp)
+	s.Empty(s.activityTransferTasks())
+}
+
 func (s *mutableStateSuite) TestReschedulePendingActivitiesForSessionMove_NothingToReschedule() {
 	for _, tc := range []struct {
 		name  string
@@ -11304,7 +11318,8 @@ TestUpdateNonExclusiveWorkerBinding tests how a task start changes a non-exclusi
  1. Set the session state and sticky queue the workflow had, and the bound worker's queue read before the start.
  2. Apply the starting poller's session options and instance key, with one ready session activity pending.
  3. A bind, move or unbind sets the binding and the sticky queue (the worker's instance key, or none) and
-    reschedules the activity; a restart from the normal queue by the same worker only restores the binding;
+    invalidates the activity's queued copy; a bind or move also sends it to the new worker, while an unbind leaves it
+    waiting for the next binding. A restart from the normal queue by the same worker only restores the binding;
     everything else changes nothing.
 */
 func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
@@ -11377,7 +11392,12 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			s.Nil(s.mutableState.executionInfo.GetStickyScheduleToStartTimeout())
 			if tc.wantReschedule {
 				s.Equal(stampBefore+1, activity.Stamp)
-				s.Len(s.activityTransferTasks(), 1)
+				if tc.wantSticky != "" {
+					s.Len(s.activityTransferTasks(), 1)
+				} else {
+					// Unbound: the activity waits for the next binding instead of going to the normal queue.
+					s.Empty(s.activityTransferTasks())
+				}
 			} else {
 				s.Equal(stampBefore, activity.Stamp)
 				s.Empty(s.activityTransferTasks())

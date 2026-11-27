@@ -40,17 +40,28 @@ func TestUnbindWorkflowFromSessionWorker(t *testing.T) {
 		})
 	}
 
-	t.Run("bound to the drained worker", func(t *testing.T) {
-		ms := historyi.NewMockMutableState(gomock.NewController(t))
-		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
-		ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
-		ms.EXPECT().HasExclusiveBinding().Return(false)
-		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(true, nil)
+	for _, tc := range []struct {
+		name                   string
+		pendingSessionActivity bool
+	}{
+		{name: "bound to the drained worker"},
+		{name: "bound to the drained worker with session activities waiting", pendingSessionActivity: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+			ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
+			ms.EXPECT().HasExclusiveBinding().Return(false)
+			ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(true, nil)
+			ms.EXPECT().HasPendingSessionActivities().Return(tc.pendingSessionActivity)
 
-		action, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
-		require.NoError(t, err)
-		require.False(t, action.Noop)
-	})
+			action, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
+			require.NoError(t, err)
+			require.False(t, action.Noop)
+			// A workflow task lets a session worker bind the workflow and pick up its waiting activities.
+			require.Equal(t, tc.pendingSessionActivity, action.CreateWorkflowTask)
+		})
+	}
 
 	t.Run("bound to a single-session worker", func(t *testing.T) {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
