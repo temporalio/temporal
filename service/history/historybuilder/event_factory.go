@@ -445,6 +445,13 @@ func (b *EventFactory) CreateWorkflowExecutionUpdateAcceptedEvent(
 			AcceptedRequest:                  acceptedRequest,
 		},
 	}
+	// Promote links from Nexus callbacks before the event enters the store.
+	event.Links = []*commonpb.Link{}
+	for _, cb := range acceptedRequest.GetCompletionCallbacks() {
+		if cb.GetNexus() != nil {
+			event.Links = append(event.Links, cb.GetLinks()...)
+		}
+	}
 	return event
 }
 

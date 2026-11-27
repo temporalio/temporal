@@ -155,6 +155,7 @@ func (s *historyBuilderSuite) SetupTest() {
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		"",
 		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 }
@@ -2150,6 +2151,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		"",
 		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{startEvent}
@@ -2198,6 +2200,7 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		"",
 		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 	historyBuilder.dbBufferBatch = nil
@@ -2700,6 +2703,7 @@ func (s *historyBuilderSuite) newBuilderWithMaxBatchBytes(limit int) *HistoryBui
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		"",
 		dynamicconfig.GetIntPropertyFn(limit),
 	)
 }
@@ -2791,6 +2795,7 @@ func (s *historyBuilderSuite) TestEventStore_NoRolloverOfFirstBatch() {
 		common.FirstEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		"",
 		dynamicconfig.GetIntPropertyFn(1),
 	)
 

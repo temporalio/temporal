@@ -46,6 +46,7 @@ type EventStore struct {
 	requestIDToEventID map[string]int64
 
 	metricsHandler metrics.Handler
+	namespaceTag   metrics.Tag
 }
 
 func (b *EventStore) IsDirty() bool {
@@ -102,6 +103,8 @@ func (b *EventStore) add(
 		b.appendToLatestBatch(event)
 		batchID = b.memLatestBatch[0].EventId
 	}
+	// Buffered events are counted here, since flushing appends them directly to the batch.
+	b.emitEventAttachmentMetrics(event)
 	return event, batchID
 }
 
