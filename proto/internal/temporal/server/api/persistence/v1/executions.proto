@@ -437,6 +437,10 @@ message RequestIDInfo {
   // Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
   // Used as an ordering key for lazy eviction when set.
   google.protobuf.Timestamp attach_time = 3;
+  // While the event is buffered, the one-based position in the buffer of the legacy-only
+  // Update event that wrote this entry. A negative value selects the first CHASM attachment.
+  // Zero means the writer did not record a position.
+  int64 buffered_event_position = 4;
 }
 
 // transfer column

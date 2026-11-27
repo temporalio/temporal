@@ -1660,9 +1660,13 @@ type RequestIDInfo struct {
 	EventId   int64                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
 	// Used as an ordering key for lazy eviction when set.
-	AttachTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=attach_time,json=attachTime,proto3" json:"attach_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AttachTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=attach_time,json=attachTime,proto3" json:"attach_time,omitempty"`
+	// While the event is buffered, the one-based position in the buffer of the legacy-only
+	// Update event that wrote this entry. A negative value selects the first CHASM attachment.
+	// Zero means the writer did not record a position.
+	BufferedEventPosition int64 `protobuf:"varint,4,opt,name=buffered_event_position,json=bufferedEventPosition,proto3" json:"buffered_event_position,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *RequestIDInfo) Reset() {
@@ -1714,6 +1718,13 @@ func (x *RequestIDInfo) GetAttachTime() *timestamppb.Timestamp {
 		return x.AttachTime
 	}
 	return nil
+}
+
+func (x *RequestIDInfo) GetBufferedEventPosition() int64 {
+	if x != nil {
+		return x.BufferedEventPosition
+	}
+	return 0
 }
 
 // transfer column
@@ -5340,13 +5351,14 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x16first_execution_run_id\x18\b \x01(\tR\x13firstExecutionRunId\x1ap\n" +
 	"\x0fRequestIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12G\n" +
-	"\x05value\x18\x02 \x01(\v21.temporal.server.api.persistence.v1.RequestIDInfoR\x05value:\x028\x01\"\xa8\x01\n" +
+	"\x05value\x18\x02 \x01(\v21.temporal.server.api.persistence.v1.RequestIDInfoR\x05value:\x028\x01\"\xe0\x01\n" +
 	"\rRequestIDInfo\x12?\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\x03R\aeventId\x12;\n" +
 	"\vattach_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"attachTime\"\x95\n" +
+	"attachTime\x126\n" +
+	"\x17buffered_event_position\x18\x04 \x01(\x03R\x15bufferedEventPosition\"\x95\n" +
 	"\n" +
 	"\x10TransferTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +

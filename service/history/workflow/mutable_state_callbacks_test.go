@@ -16,12 +16,15 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
@@ -66,6 +69,313 @@ func (s *mutableStateSuite) chasmWorkflowComponent(ms *MutableStateImpl) *chasmw
 	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
 	s.Require().NoError(err)
 	return wf
+}
+
+func (s *mutableStateSuite) TestUpdatePendingEventIDsMaintainsExistingCHASMStateAcrossGateChanges() {
+	ms := s.enableChasmCallbacks(10)
+
+	// Legacy request IDs are finalized without opening a CHASM Workflow root.
+	const legacyRequestID = "legacy-request-id"
+	ms.executionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		legacyRequestID: {EventId: common.BufferedEventID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+		"durable":       {EventId: 7, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+		"other-type":    {EventId: common.BufferedEventID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED},
+	}
+	s.mockConfig.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	s.mockConfig.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Require().NoError(ms.updatePendingEventIDs(nil, map[historybuilder.RequestEventKey]int64{
+		{RequestID: legacyRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}: 10,
+		{RequestID: "durable", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}:       11,
+		{RequestID: "other-type", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}:           12,
+	}, nil))
+	s.Equal(int64(10), ms.executionState.RequestIds[legacyRequestID].GetEventId())
+	s.Equal(int64(7), ms.executionState.RequestIds["durable"].GetEventId())
+	s.Equal(common.BufferedEventID, ms.executionState.RequestIds["other-type"].GetEventId())
+	s.mockConfig.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           "start-request-id",
+				CompletionCallbacks: testCompletionCallbacks(1),
+			},
+		},
+	)
+	s.Require().NoError(err)
+
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+
+	const (
+		signalRequestID   = "signal-request-id"
+		callbackRequestID = "callback-request-id"
+	)
+	s.Require().NoError(wf.AddIncomingSignalEvent(chasmCtx, signalRequestID, common.BufferedEventID))
+	s.Require().NoError(wf.AddUpdateCompletionCallbacks(
+		chasmCtx,
+		timestamppb.Now(), chasmworkflow.UpdateCallbackAttachment{EventReference: chasmworkflow.CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			EventID:   common.BufferedEventID,
+		}, UpdateID: "update-id", RequestID: callbackRequestID, Callbacks: testCompletionCallbacks(1), LegacyEventReference: nil}))
+
+	// Update callback references are finalized independently of the signal-backlink preview.
+	s.mockConfig.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Require().NoError(ms.updatePendingEventIDs(nil, map[historybuilder.RequestEventKey]int64{
+		{RequestID: signalRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}:          11,
+		{RequestID: callbackRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}: 12,
+	}, map[historybuilder.UpdateCallbackRequestKey]int64{
+		{UpdateID: "update-id", RequestID: callbackRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}: 12,
+	}))
+	s.Equal(common.BufferedEventID, wf.IncomingSignals[signalRequestID].Get(chasmCtx).GetEventId())
+	callbackReference, found := wf.LookupCallbackAttachmentEventReference(chasmCtx, "update-id", callbackRequestID)
+	s.True(found)
+	s.Equal(int64(12), callbackReference.EventID)
+
+	const (
+		secondSignalRequestID   = "second-signal-request-id"
+		secondCallbackRequestID = "second-callback-request-id"
+	)
+	s.Require().NoError(wf.AddIncomingSignalEvent(chasmCtx, secondSignalRequestID, common.BufferedEventID))
+	s.Require().NoError(wf.AddUpdateCompletionCallbacks(
+		chasmCtx,
+		timestamppb.Now(), chasmworkflow.UpdateCallbackAttachment{EventReference: chasmworkflow.CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			EventID:   common.BufferedEventID,
+		}, UpdateID: "update-id", RequestID: secondCallbackRequestID, Callbacks: testCompletionCallbacks(1), LegacyEventReference: nil}))
+
+	// Disabling Update callbacks stops new callback attachment but does not leave an existing
+	// buffered reference inconsistent with its history event.
+	s.mockConfig.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Require().NoError(ms.updatePendingEventIDs(nil, map[historybuilder.RequestEventKey]int64{
+		{RequestID: secondSignalRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}:          21,
+		{RequestID: secondCallbackRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}: 22,
+	}, map[historybuilder.UpdateCallbackRequestKey]int64{
+		{UpdateID: "update-id", RequestID: secondCallbackRequestID, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}: 22,
+	}))
+	s.Equal(int64(21), wf.IncomingSignals[secondSignalRequestID].Get(chasmCtx).GetEventId())
+	callbackReference, found = wf.LookupCallbackAttachmentEventReference(chasmCtx, "update-id", secondCallbackRequestID)
+	s.True(found)
+	s.Equal(int64(22), callbackReference.EventID)
+}
+
+func (s *mutableStateSuite) TestApplyUpdateRequestIDAndCallbacksDoesNotInventAttachmentReference() {
+	ms := s.enableChasmCallbacks(10)
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           "start-request-id",
+				CompletionCallbacks: testCompletionCallbacks(1),
+			},
+		},
+	)
+	s.Require().NoError(err)
+
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+	const (
+		updateID  = "update-id"
+		requestID = "request-id"
+	)
+	completionCallbacks := testCompletionCallbacks(1)
+	s.Require().NoError(wf.AddUpdateCompletionCallbacks(
+		chasmCtx,
+		timestamppb.Now(), chasmworkflow.UpdateCallbackAttachment{EventReference: chasmworkflow.CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+			EventID:   11,
+		}, UpdateID: updateID, RequestID: requestID, Callbacks: completionCallbacks, LegacyEventReference: nil}))
+	// Simulate pre-reference callback state whose legacy attachment entry is unavailable.
+	wf.Updates[updateID].Get(chasmCtx).CallbackAttachmentEventReferences = nil
+
+	s.Require().NoError(ms.applyUpdateRequestIDAndCallbacks(
+		&historypb.HistoryEvent{
+			EventId:   12,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			EventTime: timestamppb.Now(),
+		},
+		updateID,
+		requestID,
+		completionCallbacks,
+	))
+
+	_, legacyReferenceFound := ms.executionState.RequestIds[requestID]
+	s.False(legacyReferenceFound)
+	_, chasmReferenceFound := wf.LookupCallbackAttachmentEventReference(chasmCtx, updateID, requestID)
+	s.False(chasmReferenceFound)
+}
+
+func (s *mutableStateSuite) TestUpdateCallbackBackfillRequiresKnownEventOwnership() {
+	ms := s.enableChasmCallbacks(10)
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+
+	for _, tc := range []struct {
+		updateID                      string
+		legacyEventID, appliedEventID int64
+		wantBackfill                  bool
+	}{
+		{updateID: "different-event", legacyEventID: 11, appliedEventID: 12},
+		{updateID: "ambiguous-buffered-event", legacyEventID: common.BufferedEventID, appliedEventID: common.BufferedEventID},
+		{updateID: "matching-durable-event", legacyEventID: 13, appliedEventID: 13, wantBackfill: true},
+	} {
+		requestID := "request-" + tc.updateID
+		completionCallbacks := testCompletionCallbacks(1)
+		eventType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED
+		s.Require().NoError(wf.AddUpdateCompletionCallbacks(chasmCtx, timestamppb.Now(), chasmworkflow.UpdateCallbackAttachment{
+			UpdateID:  tc.updateID,
+			RequestID: requestID,
+			Callbacks: completionCallbacks,
+			EventReference: chasmworkflow.CallbackAttachmentEventReference{
+				EventType: eventType,
+				EventID:   tc.appliedEventID,
+			},
+		}))
+		updateComponent := wf.Updates[tc.updateID].Get(chasmCtx)
+		updateComponent.CallbackAttachmentEventReferences = nil
+		ms.AttachRequestID(requestID, eventType, tc.legacyEventID)
+
+		event := &historypb.HistoryEvent{EventId: tc.appliedEventID, EventType: eventType, EventTime: timestamppb.Now()}
+		s.Require().NoError(ms.applyUpdateRequestIDAndCallbacks(event, tc.updateID, requestID, completionCallbacks))
+
+		reference, found := wf.LookupCallbackAttachmentEventReference(chasmCtx, tc.updateID, requestID)
+		s.Equal(tc.wantBackfill, found, tc.updateID)
+		if tc.wantBackfill {
+			s.Equal(chasmworkflow.CallbackAttachmentEventReference{EventType: eventType, EventID: tc.appliedEventID}, reference)
+		}
+		s.Equal(tc.legacyEventID, ms.executionState.RequestIds[requestID].GetEventId())
+		s.Len(updateComponent.Callbacks, 1)
+	}
+}
+
+func (s *mutableStateSuite) TestFlushBufferedCallbackReferencesWithSharedRequestID() {
+	ms := s.enableChasmCallbacks(10)
+	const requestID = "shared-request-id"
+	addAttachment := func(updateID string) *historypb.HistoryEvent {
+		event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "", nil, nil, "", nil, nil, false,
+			[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
+				UpdateId:                    updateID,
+				AttachedRequestId:           requestID,
+				AttachedCompletionCallbacks: testCompletionCallbacks(1),
+			}},
+		)
+		s.Require().Equal(common.BufferedEventID, event.GetEventId())
+		s.Require().NoError(ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event))
+		return event
+	}
+	first := addAttachment("update-1")
+	duplicate := addAttachment("update-1")
+	second := addAttachment("update-2")
+	signal := ms.hBuilder.AddWorkflowExecutionSignaledEvent("signal", nil, "", nil, nil, requestID, nil)
+
+	s.Require().NoError(ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch()))
+	legacy := ms.executionState.RequestIds[requestID]
+	s.Equal(first.GetEventId(), legacy.GetEventId())
+	s.Equal(first.GetEventType(), legacy.GetEventType())
+
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	s.Require().NoError(err)
+	for updateID, event := range map[string]*historypb.HistoryEvent{"update-1": first, "update-2": second} {
+		s.Positive(event.GetEventId())
+		reference, found := wf.LookupCallbackAttachmentEventReference(ctx, updateID, requestID)
+		s.True(found)
+		s.Equal(chasmworkflow.CallbackAttachmentEventReference{EventType: event.GetEventType(), EventID: event.GetEventId()}, reference)
+		s.NotEqual(duplicate.GetEventId(), reference.EventID)
+		s.NotEqual(signal.GetEventId(), reference.EventID)
+	}
+}
+
+func (s *mutableStateSuite) TestLegacyUpdateCallbackRequestIDAcrossAdmissionAndAcceptance() {
+	for _, withPayload := range []bool{false, true} {
+		name := "WithoutAcceptedPayload"
+		if withPayload {
+			name = "WithAcceptedPayload"
+		}
+		s.Run(name, func() {
+			ms := s.mutableState
+			s.Require().False(ms.ChasmEnabled())
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+			request := &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: "update-id"},
+				RequestId:           "request-id",
+				CompletionCallbacks: testCompletionCallbacks(1),
+			}
+			admitted, err := ms.AddWorkflowExecutionUpdateAdmittedEvent(request, enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY)
+			s.Require().NoError(err)
+			s.Require().NoError(ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch()))
+
+			var acceptedRequest *updatepb.Request
+			if withPayload {
+				acceptedRequest = request
+			}
+			accepted, err := ms.AddWorkflowExecutionUpdateAcceptedEvent("update-id", "message-id", 1, acceptedRequest)
+			s.Require().NoError(err)
+
+			want := admitted
+			if withPayload {
+				want = accepted
+			}
+			info := ms.executionState.RequestIds["request-id"]
+			s.Equal(want.GetEventType(), info.GetEventType())
+			s.Equal(want.GetEventId(), info.GetEventId())
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestLegacyUpdateCallbackBufferedRequestIDKeepsLastWriteAcrossReload() {
+	ms := s.mutableState
+	s.Require().False(ms.ChasmEnabled())
+	const requestID = "request-id"
+	for _, updateID := range []string{"first-update", "last-update"} {
+		event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "", nil, nil, "", nil, nil, false,
+			[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
+				UpdateId:                    updateID,
+				AttachedRequestId:           requestID,
+				AttachedCompletionCallbacks: testCompletionCallbacks(1),
+			}},
+		)
+		s.Require().Equal(common.BufferedEventID, event.GetEventId())
+		s.Require().NoError(ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event))
+	}
+	mutation, err := ms.hBuilder.Finish(false)
+	s.Require().NoError(err)
+	buffer := mutation.MemBufferBatch
+	s.Require().Len(buffer, 2)
+	// Reconstruct the builder from the durable batch and clone the request-ID entry.
+	ms.hBuilder = historybuilder.New(clock.NewRealTimeSource(), nil, 1, 20, buffer, ms.metricsHandler, ms.config.MaximumEventBatchSizeInBytes)
+	ms.executionState = common.CloneProto(ms.executionState)
+	s.Require().NoError(ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch()))
+	info := ms.executionState.RequestIds[requestID]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, info.GetEventType())
+	s.Equal(buffer[1].GetEventId(), info.GetEventId())
+	s.Zero(info.GetBufferedEventPosition())
+}
+
+func (s *mutableStateSuite) TestFlushBufferedAdmittedCallbackReferenceReplacesFrameworkPlaceholder() {
+	ms := s.enableChasmCallbacks(10)
+	const updateID, requestID = "admitted-update", "admitted-request"
+	ms.AttachChasmRequestID(requestID)
+	s.Require().NotNil(ms.executionState.RequestIds[requestID].GetAttachTime())
+	event, err := ms.AddWorkflowExecutionUpdateAdmittedEvent(&updatepb.Request{
+		Meta:                &updatepb.Meta{UpdateId: updateID},
+		RequestId:           requestID,
+		CompletionCallbacks: testCompletionCallbacks(1),
+	}, enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY)
+	s.Require().NoError(err)
+	s.Require().Equal(common.BufferedEventID, event.GetEventId())
+	s.Require().NoError(ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch()))
+	s.Require().Positive(event.GetEventId())
+
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	s.Require().NoError(err)
+	ref, found := wf.LookupCallbackAttachmentEventReference(ctx, updateID, requestID)
+	s.True(found)
+	s.Equal(chasmworkflow.CallbackAttachmentEventReference{EventType: event.GetEventType(), EventID: event.GetEventId()}, ref)
+	legacy := ms.executionState.RequestIds[requestID]
+	s.Nil(legacy.GetAttachTime())
+	s.Equal(event.GetEventType(), legacy.GetEventType())
+	s.Equal(event.GetEventId(), legacy.GetEventId())
 }
 
 func (s *mutableStateSuite) TestChasmCompletionCallbacks_ValidateCallbackAddition() {
