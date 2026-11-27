@@ -22,6 +22,10 @@ const (
 	updateExecutionWithConditionQuery = updateExecutionQuery + `
  AND ((CAST(:db_record_version AS BIGINT) != 0 AND db_record_version = CAST(:db_record_version AS BIGINT) - 1)
       OR (CAST(:db_record_version AS BIGINT) = 0 AND next_event_id = :condition))`
+	// updateExecutionWithConditionOrRejectQuery divides by the updated row count,
+	// so a condition mismatch fails the statement.
+	updateExecutionWithConditionOrRejectQuery = `/* fails when the execution does not match the condition */ WITH updated AS (` + updateExecutionWithConditionQuery + `
+ RETURNING 1) SELECT 1/count(*) FROM updated`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
  WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
@@ -34,6 +38,9 @@ const (
 
 	writeLockExecutionQuery = lockExecutionQueryBase + ` FOR UPDATE`
 	readLockExecutionQuery  = lockExecutionQueryBase + ` FOR SHARE`
+	// writeLockExecutionExistsQuery divides by the matching row count, so a missing
+	// execution fails the statement.
+	writeLockExecutionExistsQuery = `/* fails when the execution does not exist */ SELECT 1/count(*) FROM (` + writeLockExecutionQuery + `) AS e`
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
 (shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
@@ -65,22 +72,27 @@ WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.business_id = $3 AND ce.a
 
 	lockCurrentExecutionQuery      = getCurrentExecutionQuery + ` FOR UPDATE`
 	lockCurrentChasmExecutionQuery = getCurrentChasmExecutionQuery + ` FOR UPDATE`
+	// The Exists and WithRunID queries divide by the matching row count, so a
+	// missing current execution or a run ID mismatch fails the statement.
+	lockCurrentExecutionExistsQuery         = `/* fails when the current execution does not exist */ SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c`
+	lockCurrentChasmExecutionExistsQuery    = `/* fails when the current execution does not exist */ SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c`
+	lockCurrentExecutionWithRunIDQuery      = `/* fails when the current execution has another run ID */ SELECT 1/count(*) FROM (` + lockCurrentExecutionQuery + `) AS c WHERE run_id = $4`
+	lockCurrentChasmExecutionWithRunIDQuery = `/* fails when the current execution has another run ID */ SELECT 1/count(*) FROM (` + lockCurrentChasmExecutionQuery + `) AS c WHERE run_id = $5`
 
-	updateCurrentExecutionsBase = ` SET
-run_id = :run_id,
-create_request_id = :create_request_id,
-state = :state,
-status = :status,
-start_time = :start_time,
-last_write_version = :last_write_version,
-data = :data,
-data_encoding = :data_encoding
+	updateCurrentExecutionsColumns = `(run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding)`
+	updateCurrentExecutionsValues  = `(:run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
+	updateCurrentExecutionsBase    = ` SET ` + updateCurrentExecutionsColumns + ` = ` + updateCurrentExecutionsValues + `
 WHERE
 shard_id = :shard_id AND
 namespace_id = :namespace_id
 `
 	updateCurrentExecutionsQuery      = `UPDATE current_executions` + updateCurrentExecutionsBase + ` AND workflow_id = :workflow_id`
 	updateCurrentChasmExecutionsQuery = `UPDATE current_chasm_executions` + updateCurrentExecutionsBase + ` AND business_id = :workflow_id AND archetype_id = :archetype_id`
+
+	updateCurrentExecutionsIfChangedCondition = `
+ AND ` + updateCurrentExecutionsColumns + ` IS DISTINCT FROM ` + updateCurrentExecutionsValues
+	updateCurrentExecutionsIfChangedQuery      = updateCurrentExecutionsQuery + updateCurrentExecutionsIfChangedCondition
+	updateCurrentChasmExecutionsIfChangedQuery = updateCurrentChasmExecutionsQuery + updateCurrentExecutionsIfChangedCondition
 
 	createHistoryImmediateTasksQuery = `INSERT INTO history_immediate_tasks(shard_id, category_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :category_id, :task_id, :data, :data_encoding)`
