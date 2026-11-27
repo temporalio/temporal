@@ -80,6 +80,8 @@ type executeTestCase struct {
 	ExpectedActionCount         int64
 	ExpectedOverlapSkipped      int64
 	ExpectedMissedCatchupWindow int64
+	// ExpectDropped means Validate rejects the task, so Execute never runs.
+	ExpectDropped bool
 
 	ValidateInvoker func(t *testing.T, invoker *scheduler.Invoker, env *invokerExecuteTestEnv)
 }
@@ -107,7 +109,7 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	// Set LastProcessedTime to current time to ensure time checks pass.
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 
-	executeTaskOnce(t, env, ctx, invoker)
+	require.Equal(t, c.ExpectDropped, executeTaskOnce(t, env, invoker))
 
 	// Validate the results.
 	// BufferedStarts now includes both pending and running starts (they're kept after starting).
@@ -137,15 +139,16 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 // executeTaskOnce runs a single InvokerExecuteTask pass against the live
 // Invoker and commits the resulting transition. Shared by the single-pass
 // table driver (runExecuteTestCase) and by tests that need to drive several
-// Execute passes in sequence.
-func executeTaskOnce(t *testing.T, env *invokerExecuteTestEnv, ctx chasm.MutableContext, invoker *scheduler.Invoker) {
+// Execute passes in sequence. It validates before executing, as the task
+// executor does, and reports whether Validate dropped the task.
+func executeTaskOnce(t *testing.T, env *invokerExecuteTestEnv, invoker *scheduler.Invoker) bool {
 	t.Helper()
 
-	// Create engine context for side effect task execution.
-	engineCtx := env.EngineContext()
-	err := env.handler.Execute(engineCtx, env.ComponentRef(ctx, invoker), chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	dropped, err := chasmtest.ExecuteSideEffectTask(context.Background(), env.engine, invoker, env.handler,
+		chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
+	return dropped
 }
 
 // Execute success case.
@@ -753,11 +756,12 @@ func TestExecuteTask_WithoutSkippedDurationStartTimeUsesWallClock(t *testing.T) 
 	}
 }
 
-// Execute is scheduled with an empty buffer.
+// An empty buffer gives Execute no work, so Validate drops the task.
 func TestExecuteTask_Empty(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts: nil,
+		ExpectDropped:         true,
 	})
 }
 
@@ -981,7 +985,7 @@ func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
 		if starts := invoker.GetBufferedStarts(); len(starts) > 0 {
 			attempted = append(attempted, starts[0].GetAttempt())
 		}
-		executeTaskOnce(t, env, ctx, invoker)
+		require.False(t, executeTaskOnce(t, env, invoker))
 	}
 	require.Less(t, iterations, maxIterations, "retry loop never terminated")
 
