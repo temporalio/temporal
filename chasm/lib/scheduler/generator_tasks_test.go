@@ -315,9 +315,9 @@ func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
 // so any occurrence at or before it has already been processed (or skipped) -
 // UpdateFutureActionTimes must not advertise it as still upcoming.
 //
-// Uses the scheduler-specific chasm test engine helper, rather than the
-// newTestEnv rapid harness, so the watermark mutation and the task execution
-// that reads it cross the same transaction boundary as production.
+// Uses the scheduler-specific chasm test engine helper, rather than testEnv's
+// open transaction, so the watermark mutation and the task execution that
+// reads it cross the same transaction boundary as production.
 func TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark(t *testing.T) {
 	env := newSchedulerTestEngine(t, defaultSchedule())
 
