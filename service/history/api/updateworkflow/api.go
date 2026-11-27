@@ -147,7 +147,7 @@ func (u *Updater) ApplyRequest(
 	u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
-	u.requestIDLink = u.captureRequestIDLink(ms)
+	u.requestIDLink = u.captureRequestIDLink(ctx, ms)
 	return action, nil
 }
 
@@ -296,17 +296,23 @@ func (u *Updater) applyRequest(
 //	    - No: is the Update already completed?
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
-func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
+func (u *Updater) captureRequestIDLink(ctx context.Context, ms historyi.MutableState) *commonpb.Link {
 	requestID, ok := u.requestIDWithCompletionCallbacks()
 	if !ok {
 		return nil
 	}
 
-	if link := u.existingRequestIDLink(ms, u.wfKey, requestID); link != nil {
+	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	link, err := u.existingRequestIDLink(ctx, ms, u.wfKey, updateID, requestID)
+	if err != nil {
+		u.logRequestIDLinkLookupError(updateID, requestID, err)
+		return nil
+	}
+	if link != nil {
 		return link
 	}
 
-	updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()]
+	updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[updateID]
 	if updateInfo.GetCompletion() != nil {
 		// If the update is already completed, the request's callbacks are not
 		// recorded so the requestIDRef is not captured as it will not resolve.
@@ -322,15 +328,36 @@ func (u *Updater) requestIDWithCompletionCallbacks() (string, bool) {
 }
 
 func (u *Updater) existingRequestIDLink(
+	ctx context.Context,
 	ms historyi.MutableState,
 	wfKey definition.WorkflowKey,
+	updateID string,
 	requestID string,
-) *commonpb.Link {
-	requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]
-	if requestIDInfo == nil {
-		return nil
+) (*commonpb.Link, error) {
+	eventReference, ok, err := workflow.ResolveCallbackAttachmentEventReference(
+		ctx,
+		ms,
+		updateID,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
 	}
-	return u.requestIDEventLink(wfKey, requestID, requestIDInfo.GetEventType())
+	if !ok {
+		return nil, nil
+	}
+	// RequestIdRef is workflow-scoped. Reusing a request ID across Updates or event kinds
+	// is ambiguous because DescribeWorkflow exposes one entry per request ID.
+	return u.requestIDEventLink(wfKey, requestID, eventReference.EventType), nil
+}
+
+func (u *Updater) logRequestIDLinkLookupError(updateID string, requestID string, err error) {
+	u.shardCtx.GetLogger().Warn(
+		"unable to resolve update callback request ID link",
+		tag.NewStringTag("update-id", updateID),
+		tag.RequestID(requestID),
+		tag.Error(err),
+	)
 }
 
 func (u *Updater) requestIDEventLink(
@@ -555,6 +582,7 @@ func (u *Updater) CreateResponse(
 
 // CreateCompletedResponse creates a completed Update response linked to its callback attachment or acceptance event when available.
 func (u *Updater) CreateCompletedResponse(
+	ctx context.Context,
 	ms historyi.MutableState,
 	wfKey definition.WorkflowKey,
 	outcome *updatepb.Outcome,
@@ -563,7 +591,17 @@ func (u *Updater) CreateCompletedResponse(
 ) *historyservice.UpdateWorkflowExecutionResponse {
 	resp := u.CreateResponse(wfKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext)
 	if requestID, ok := u.requestIDWithCompletionCallbacks(); ok {
-		if link := u.existingRequestIDLink(ms, wfKey, requestID); link != nil {
+		updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+		link, err := u.existingRequestIDLink(
+			ctx,
+			ms,
+			wfKey,
+			updateID,
+			requestID,
+		)
+		if err != nil {
+			u.logRequestIDLinkLookupError(updateID, requestID, err)
+		} else if link != nil {
 			resp.Response.Link = link
 			return resp
 		}

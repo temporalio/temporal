@@ -853,12 +853,20 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
 	}
-	requestIDInfo, exists := ms.executionState.RequestIds[requestID]
-	if exists {
+	eventReference, exists, linkErr := ResolveCallbackAttachmentEventReference(ctx, ms, updateID, requestID)
+	if linkErr != nil {
+		// Backlink lookup is best effort. Deliver the known outcome with a workflow-level link.
+		ms.logger.Warn(
+			"unable to resolve update callback request ID link",
+			tag.NewStringTag("update-id", updateID),
+			tag.RequestID(requestID),
+			tag.Error(linkErr),
+		)
+	} else if exists {
 		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
 			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 				RequestId: requestID,
-				EventType: requestIDInfo.GetEventType(),
+				EventType: eventReference.EventType,
 			},
 		}
 	}
@@ -1204,7 +1212,9 @@ func (ms *MutableStateImpl) FlushBufferedEvents() {
 	if ms.HasStartedWorkflowTask() {
 		return
 	}
-	ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch())
+	if err := ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch()); err != nil {
+		softassert.Fail(ms.logger, "failed to update pending event IDs", tag.Error(err))
+	}
 }
 
 func (ms *MutableStateImpl) UpdateCurrentVersion(

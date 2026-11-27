@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -3550,6 +3551,69 @@ func (s *mutableStateSuite) TestGetNexusUpdateCompletion_TransientReadErrorPropa
 	var unavailableErr *serviceerror.Unavailable
 	s.Equal(nexusrpc.CompleteOperationOptions{}, opts)
 	s.ErrorAs(err, &unavailableErr, "expect transientErr to be propagated back to caller")
+}
+
+func (s *mutableStateSuite) TestGetNexusUpdateCompletionPreservesOutcomeOnBacklinkReadError() {
+	ctx := s.T().Context()
+	ms := s.enableChasmCallbacks(10)
+	s.Require().NoError(s.mockShard.ChasmRegistry().Register(chasmcallback.NewNilLibrary()))
+	const updateID, requestID = "update-id", "request-id"
+
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{StartRequest: &workflowservice.StartWorkflowExecutionRequest{}},
+	)
+	s.Require().NoError(err)
+	accepted, err := ms.AddWorkflowExecutionUpdateAcceptedEvent(updateID, "message-id", 1, &updatepb.Request{
+		Meta:                &updatepb.Meta{UpdateId: updateID},
+		RequestId:           requestID,
+		CompletionCallbacks: testCompletionCallbacks(1),
+	})
+	s.Require().NoError(err)
+	completed, err := ms.AddWorkflowExecutionUpdateCompletedEvent(accepted.GetEventId(), &updatepb.Response{
+		Meta:    &updatepb.Meta{UpdateId: updateID},
+		Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+	})
+	s.Require().NoError(err)
+	_, _, err = ms.CloseTransactionAsMutation(ctx, historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(), gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID == completed.GetEventId() }),
+		gomock.Any(), gomock.Any(),
+	).Return(completed, nil).Times(2)
+
+	// Remove the legacy mirror so only the CHASM lookup can return the reference.
+	delete(ms.executionState.RequestIds, requestID)
+	workflowLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  ms.GetNamespaceEntry().Name().String(),
+		WorkflowId: ms.executionInfo.GetWorkflowId(),
+		RunId:      ms.executionState.GetRunId(),
+	}
+	attachmentLink := common.CloneProto(workflowLink)
+	attachmentLink.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+		RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+			RequestId: requestID,
+			EventType: accepted.GetEventType(),
+		},
+	}
+	opts, err := ms.GetNexusUpdateCompletion(ctx, updateID, requestID)
+	s.Require().NoError(err)
+	s.Equal(testPayloads.GetPayloads()[0], opts.Result)
+	s.Require().Len(opts.Links, 1)
+	s.Equal(commonnexus.ConvertLinkWorkflowEventToNexusLink(attachmentLink), opts.Links[0])
+
+	// An empty registry cannot resolve the Workflow component, but the outcome is still available.
+	registry := chasm.NewRegistry(s.logger)
+	ms.chasmTree = chasm.NewEmptyTree(registry, ms, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+	_, _, lookupErr := ms.ChasmWorkflowComponentReadOnly(ctx)
+	s.Require().Error(lookupErr)
+
+	opts, err = ms.GetNexusUpdateCompletion(ctx, updateID, requestID)
+	s.Require().NoError(err)
+	s.Equal(testPayloads.GetPayloads()[0], opts.Result)
+	s.Require().Len(opts.Links, 1)
+	s.Equal(commonnexus.ConvertLinkWorkflowEventToNexusLink(workflowLink), opts.Links[0])
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {

@@ -264,6 +264,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestI
 		GetExecutionState().
 		Return(executionState).
 		Times(2)
+	s.currentMutableState.EXPECT().ChasmEnabled().Return(false)
 	s.currentMutableState.EXPECT().
 		GetUpdateNexusSerializationContext(testUpdateID).
 		Return(nil)
