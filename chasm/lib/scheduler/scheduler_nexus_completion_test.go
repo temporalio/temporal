@@ -43,7 +43,7 @@ type nexusCompletionTestCase struct {
 }
 
 func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, ctx, env := setupSchedulerForTest(t)
 
 	invoker := sched.Invoker.Get(ctx)
 
@@ -59,10 +59,10 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	err := sched.HandleNexusCompletion(ctx, tc.completion)
 	require.NoError(t, err)
 
-	_, err = node.CloseTransaction(context.Background(), true)
+	err = env.CloseTransaction()
 	require.NoError(t, err)
 
-	readCtx := chasm.NewContext(context.Background(), node)
+	readCtx := env.ReadContext()
 
 	if tc.expectNoOp {
 		currentLastCompletion := sched.LastCompletionResult.Get(readCtx)
@@ -175,7 +175,7 @@ func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *t
 		{name: "backfiller", manual: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sched, ctx, node := setupSchedulerForTest(t)
+			sched, ctx, env := setupSchedulerForTest(t)
 			initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
 			sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
 			sched.Schedule.Policies.PauseOnFailure = true
@@ -195,10 +195,10 @@ func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *t
 				CloseTime: timestamppb.Now(),
 			})
 			require.NoError(t, err)
-			_, err = node.CloseTransaction(context.Background(), true)
+			err = env.CloseTransaction()
 			require.NoError(t, err)
 
-			readCtx := chasm.NewContext(context.Background(), node)
+			readCtx := env.ReadContext()
 			require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
 			require.False(t, sched.Schedule.State.Paused)
 			invoker := sched.Invoker.Get(readCtx)
@@ -398,7 +398,7 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 }
 
 func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, ctx, env := setupSchedulerForTest(t)
 	sched.Schedule.Policies.PauseOnFailure = true
 	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
 		{
@@ -408,11 +408,11 @@ func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
 			Attempt:    1,
 		},
 	}
-	_, err := node.CloseTransaction(context.Background(), true)
+	err := env.CloseTransaction()
 	require.NoError(t, err)
 
 	describeResponse, err := sched.Describe(
-		chasm.NewContext(context.Background(), node),
+		env.ReadContext(),
 		&schedulerpb.DescribeScheduleRequest{
 			NamespaceId: namespaceID,
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{
@@ -426,7 +426,7 @@ func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
 	staleDescription := describeResponse.GetFrontendResponse()
 	require.False(t, staleDescription.GetSchedule().GetState().GetPaused())
 
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx = env.MutableContext()
 	err = sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
 		RequestId: "req-1",
 		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
@@ -435,12 +435,12 @@ func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
 		CloseTime: timestamppb.Now(),
 	})
 	require.NoError(t, err)
-	_, err = node.CloseTransaction(context.Background(), true)
+	err = env.CloseTransaction()
 	require.NoError(t, err)
 	require.True(t, sched.Schedule.GetState().GetPaused())
 	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
 
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx = env.MutableContext()
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.UpdateScheduleRequest{
@@ -637,7 +637,7 @@ func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
 		{name: "value, previous state", initial: previous, success: value, want: &schedulerpb.LastCompletionResult{Success: value}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sched, ctx, node := setupSchedulerForTest(t)
+			sched, ctx, env := setupSchedulerForTest(t)
 			sched.LastCompletionResult = chasm.NewDataField(ctx, common.CloneProto(tc.initial))
 			start := &schedulespb.BufferedStart{
 				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
@@ -653,10 +653,10 @@ func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
 				CloseTime: timestamppb.Now(),
 			})
 			require.NoError(t, err)
-			_, err = node.CloseTransaction(context.Background(), true)
+			err = env.CloseTransaction()
 			require.NoError(t, err)
 
-			readCtx := chasm.NewContext(context.Background(), node)
+			readCtx := env.ReadContext()
 			require.True(t, proto.Equal(tc.want, sched.LastCompletionResult.Get(readCtx)))
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.GetCompleted().GetStatus())
 		})
