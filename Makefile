@@ -295,10 +295,11 @@ lint-code-fast: lint-code
 
 # Lints Go code with the build tags $(1).
 define lint-go
-	@$(ONELINT_GO) $(if $(filter true,$(GOLANGCI_LINT_FIX)),fix,check) --only=format,gomodtidy,gofix,golangci-lint --build-tags=$(1) --new-from-rev=$(GOLANGCI_LINT_BASE_REV)
+	@$(ONELINT_GO) $(if $(filter true,$(GOLANGCI_LINT_FIX)),fix,check) --only=gofix,golangci-lint --build-tags=$(1) --new-from-rev=$(GOLANGCI_LINT_BASE_REV)
 endef
 
 lint-code:
+	@$(ONELINT_GO) $(if $(filter true,$(GOLANGCI_LINT_FIX)),fix,check) --only=format,gomodtidy
 	@printf $(COLOR) "Linting code..."
 	$(call lint-go,$(ALL_TEST_TAGS))
 	@printf $(COLOR) "Linting code with temporal_minimal..."
