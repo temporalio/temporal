@@ -21,8 +21,8 @@ type (
 	}
 
 	namespaceIDTableBuilder struct {
-		next    int32
-		indexes map[string]int32
+		next    uint32
+		indexes map[string]uint32
 		table   [][]byte
 	}
 )
@@ -147,6 +147,10 @@ func FromPersistenceScope(
 	scope *persistencespb.QueueSliceScope,
 	table *namespaceIDTable,
 ) (Scope, bool) {
+	if table == nil {
+		// An empty table makes any namespace index count as unresolved instead of being silently dropped.
+		table = newNamespaceIDTable(nil)
+	}
 	unresolvedBefore := table.unresolvedIndexCount()
 	predicate := FromPersistencePredicate(scope.Predicate, table)
 	if table.unresolvedIndexCount() != unresolvedBefore {
@@ -369,7 +373,7 @@ func ToPersistenceNamespaceIDPredicate(
 	// Map order would give equal predicates different bytes, which breaks grouping and table stability.
 	slices.Sort(namespaceIDs)
 	var plainIDs []string
-	var indexes []int32
+	var indexes []uint32
 	for _, id := range namespaceIDs {
 		if index, ok := builder.intern(id); ok {
 			indexes = append(indexes, index)
@@ -406,10 +410,10 @@ func newNamespaceIDTable(entries [][]byte) *namespaceIDTable {
 }
 
 func newNamespaceIDTableBuilder() *namespaceIDTableBuilder {
-	return &namespaceIDTableBuilder{indexes: make(map[string]int32)}
+	return &namespaceIDTableBuilder{indexes: make(map[string]uint32)}
 }
 
-func (b *namespaceIDTableBuilder) intern(id string) (int32, bool) {
+func (b *namespaceIDTableBuilder) intern(id string) (uint32, bool) {
 	if b == nil {
 		return 0, false
 	}
@@ -441,11 +445,11 @@ func (t *namespaceIDTable) unresolvedIndexCount() int {
 	return t.unresolvedIndexes
 }
 
-func (t *namespaceIDTable) resolve(index int32) (string, bool) {
+func (t *namespaceIDTable) resolve(index uint32) (string, bool) {
 	if t == nil {
 		return "", false
 	}
-	if index < 0 || int(index) >= len(t.entries) {
+	if uint64(index) >= uint64(len(t.entries)) {
 		t.unresolvedIndexes++
 		return "", false
 	}

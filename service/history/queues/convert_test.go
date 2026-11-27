@@ -2,6 +2,7 @@ package queues
 
 import (
 	"math/rand"
+	"math"
 	"testing"
 	"time"
 
@@ -215,7 +216,7 @@ func TestFromPersistenceScope_ResolvesIndexes(t *testing.T) {
 			PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 			Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 				NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-					NamespaceIdIndexes: []int32{0, 1},
+					NamespaceIdIndexes: []uint32{0, 1},
 				},
 			},
 		},
@@ -259,10 +260,10 @@ func TestFromPersistenceScope_UnresolvableIndexFallsBackToUniversal(t *testing.T
 	known := uuid.New()
 	table := newNamespaceIDTable([][]byte{known[:]})
 	resolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-		NamespaceIdIndexes: []int32{0},
+		NamespaceIdIndexes: []uint32{0},
 	})
 	unresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-		NamespaceIdIndexes: []int32{5},
+		NamespaceIdIndexes: []uint32{5},
 	})
 	universal := predicates.Universal[tasks.Task]()
 	r := NewRandomRange()
@@ -304,12 +305,11 @@ func TestFromPersistenceScope_UnresolvableIndexFallsBackToUniversal(t *testing.T
 		},
 		{
 			// FromPersistenceQueueState always builds a table, so this is not a production path.
-			// A nil table cannot count lookups, so its unresolved indexes are dropped, not given the universal predicate.
-			name:         "nil table is not detected",
+			name:         "nil table with an index falls back to universal",
 			predicate:    unresolvable,
 			table:        nil,
-			want:         tasks.NewNamespacePredicate(nil),
-			wantReadLoss: false,
+			want:         predicates.Universal[tasks.Task](),
+			wantReadLoss: true,
 		},
 	}
 	for _, tc := range tests {
@@ -348,13 +348,13 @@ func TestFromPersistenceQueueState_ResolvesNamespaceIDTable(t *testing.T) {
 						{
 							Range: ToPersistenceRange(r0),
 							Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-								NamespaceIdIndexes: []int32{0, 1},
+								NamespaceIdIndexes: []uint32{0, 1},
 							}),
 						},
 						{
 							Range: ToPersistenceRange(r1),
 							Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-								NamespaceIdIndexes: []int32{2},
+								NamespaceIdIndexes: []uint32{2},
 							}),
 						},
 					}},
@@ -363,7 +363,7 @@ func TestFromPersistenceQueueState_ResolvesNamespaceIDTable(t *testing.T) {
 							Range: ToPersistenceRange(r2),
 							Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
 								NamespaceIds:       []string{inline},
-								NamespaceIdIndexes: []int32{1},
+								NamespaceIdIndexes: []uint32{1},
 							}),
 						},
 					}},
@@ -414,13 +414,13 @@ func TestFromPersistenceQueueState_CountsScopesThatLostResolutionOnRead(t *testi
 	r0, r1, r2, r3 := NewRandomRange(), NewRandomRange(), NewRandomRange(), NewRandomRange()
 	watermark := tasks.NewKey(time.Unix(0, rand.Int63()).UTC(), 0)
 	resolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-		NamespaceIdIndexes: []int32{0},
+		NamespaceIdIndexes: []uint32{0},
 	})
 	oneUnresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-		NamespaceIdIndexes: []int32{7},
+		NamespaceIdIndexes: []uint32{7},
 	})
 	twoUnresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-		NamespaceIdIndexes: []int32{8, 9},
+		NamespaceIdIndexes: []uint32{8, 9},
 	})
 
 	state := &persistencespb.QueueState{
@@ -568,13 +568,13 @@ func TestFromPersistenceQueueState_GroupWithUnresolvableIndexCountsEachScope(t *
 			0: {PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
 				{
 					Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-						NamespaceIdIndexes: []int32{7},
+						NamespaceIdIndexes: []uint32{7},
 					}),
 					Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r0), ToPersistenceRange(r2)},
 				},
 				{
 					Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-						NamespaceIdIndexes: []int32{0},
+						NamespaceIdIndexes: []uint32{0},
 					}),
 					Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r1)},
 				},
@@ -590,6 +590,50 @@ func TestFromPersistenceQueueState_GroupWithUnresolvableIndexCountsEachScope(t *
 			NewScope(r0, universal),
 			NewScope(r1, tasks.NewNamespacePredicate([]string{known.String()})),
 			NewScope(r2, universal),
+		},
+	}, got.readerScopes)
+	require.Equal(t, 2, got.lostResolutionOnReadCount)
+}
+
+func TestFromPersistenceQueueState_NotWithUnresolvableIndexCountsEachScope(t *testing.T) {
+	known := uuid.New()
+	r0 := NewRange(tasks.NewImmediateKey(100), tasks.NewImmediateKey(200))
+	r1 := NewRange(tasks.NewImmediateKey(200), tasks.NewImmediateKey(300))
+	r2 := NewRange(tasks.NewImmediateKey(300), tasks.NewImmediateKey(400))
+	watermark := tasks.NewImmediateKey(1000)
+
+	state := &persistencespb.QueueState{
+		NamespaceIdTable:             [][]byte{known[:]},
+		ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			0: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					{
+						Range: ToPersistenceRange(r1),
+						Predicate: notPredicateProto(namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+							NamespaceIdIndexes: []uint32{0},
+						})),
+					},
+				},
+				PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+					{
+						Predicate: notPredicateProto(namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+							NamespaceIdIndexes: []uint32{7},
+						})),
+						Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r0), ToPersistenceRange(r2)},
+					},
+				},
+			},
+		},
+	}
+
+	got := FromPersistenceQueueState(state)
+
+	require.Equal(t, map[int64][]Scope{
+		0: {
+			NewScope(r0, predicates.Universal[tasks.Task]()),
+			NewScope(r1, predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{known.String()}))),
+			NewScope(r2, predicates.Universal[tasks.Task]()),
 		},
 	}, got.readerScopes)
 	require.Equal(t, 2, got.lostResolutionOnReadCount)
@@ -672,14 +716,14 @@ func TestFromPersistenceQueueState_ReadsEveryFormat(t *testing.T) {
 								Range: ToPersistenceRange(r2),
 								Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
 									NamespaceIds:       []string{inline},
-									NamespaceIdIndexes: []int32{2},
+									NamespaceIdIndexes: []uint32{2},
 								}),
 							},
 						},
 						PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
 							{
 								Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-									NamespaceIdIndexes: []int32{0, 1},
+									NamespaceIdIndexes: []uint32{0, 1},
 								}),
 								Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r4), ToPersistenceRange(r0)},
 							},
@@ -688,7 +732,7 @@ func TestFromPersistenceQueueState_ReadsEveryFormat(t *testing.T) {
 					1: {PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
 						{
 							Predicate: namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
-								NamespaceIdIndexes: []int32{1},
+								NamespaceIdIndexes: []uint32{1},
 							}),
 							Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r1)},
 						},
@@ -703,6 +747,52 @@ func TestFromPersistenceQueueState_ReadsEveryFormat(t *testing.T) {
 				},
 				1: {
 					NewScope(r1, tasks.NewNamespacePredicate([]string{b.String()})),
+				},
+			},
+		},
+		{
+			// A slice split leaves "everything except this key", so the writer persists a not predicate.
+			name: "not predicates resolve through the table in plain scopes and groups",
+			state: &persistencespb.QueueState{
+				NamespaceIdTable:             [][]byte{a[:], b[:], c[:]},
+				ExclusiveReaderHighWatermark: ToPersistenceTaskKey(watermark),
+				ReaderStates: map[int64]*persistencespb.QueueReaderState{
+					0: {
+						Scopes: []*persistencespb.QueueSliceScope{
+							{
+								Range: ToPersistenceRange(r2),
+								Predicate: notPredicateProto(namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+									NamespaceIdIndexes: []uint32{2},
+								})),
+							},
+						},
+						PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+							{
+								Predicate: notPredicateProto(namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+									NamespaceIdIndexes: []uint32{0},
+								})),
+								Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r4), ToPersistenceRange(r0)},
+							},
+						},
+					},
+					1: {PredicateGroups: []*persistencespb.QueueSlicePredicateGroup{
+						{
+							Predicate: notPredicateProto(namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{
+								NamespaceIdIndexes: []uint32{0, 1},
+							})),
+							Ranges: []*persistencespb.QueueSliceRange{ToPersistenceRange(r1)},
+						},
+					}},
+				},
+			},
+			want: map[int64][]Scope{
+				0: {
+					NewScope(r0, predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{a.String()}))),
+					NewScope(r2, predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{c.String()}))),
+					NewScope(r4, predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{a.String()}))),
+				},
+				1: {
+					NewScope(r1, predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{a.String(), b.String()}))),
 				},
 			},
 		},
@@ -760,7 +850,7 @@ func TestNamespaceIDTable_Resolve(t *testing.T) {
 	tests := []struct {
 		name   string
 		table  *namespaceIDTable
-		index  int32
+		index  uint32
 		want   string
 		wantOK bool
 	}{
@@ -769,7 +859,7 @@ func TestNamespaceIDTable_Resolve(t *testing.T) {
 		{name: "first entry", table: populated, index: 0, want: first.String(), wantOK: true},
 		{name: "second entry", table: populated, index: 1, want: second.String(), wantOK: true},
 		{name: "index past the end", table: populated, index: 2},
-		{name: "negative index", table: populated, index: -1},
+		{name: "index far past the end", table: populated, index: math.MaxUint32},
 		{name: "entry shorter than 16 bytes", table: malformed, index: 0},
 	}
 	for _, tc := range tests {
@@ -789,7 +879,7 @@ func TestNamespaceIDTable_CountsUnresolved(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 0, table.unresolvedIndexes)
 
-	for _, index := range []int32{1, 2, -1} {
+	for _, index := range []uint32{1, 2, math.MaxUint32} {
 		_, ok = table.resolve(index)
 		require.False(t, ok)
 	}
@@ -816,7 +906,7 @@ func TestFromPersistenceNamespaceIDPredicate_ResolvesIndexes(t *testing.T) {
 		},
 		{
 			name:       "indexes only",
-			attributes: &persistencespb.NamespaceIdPredicateAttributes{NamespaceIdIndexes: []int32{1, 0}},
+			attributes: &persistencespb.NamespaceIdPredicateAttributes{NamespaceIdIndexes: []uint32{1, 0}},
 			table:      table,
 			want:       []string{first.String(), second.String()},
 		},
@@ -824,7 +914,7 @@ func TestFromPersistenceNamespaceIDPredicate_ResolvesIndexes(t *testing.T) {
 			name: "strings and indexes",
 			attributes: &persistencespb.NamespaceIdPredicateAttributes{
 				NamespaceIds:       []string{inline},
-				NamespaceIdIndexes: []int32{1},
+				NamespaceIdIndexes: []uint32{1},
 			},
 			table: table,
 			want:  []string{inline, second.String()},
@@ -877,7 +967,7 @@ func TestNamespaceIDTableBuilder_InternsValidUUIDs(t *testing.T) {
 
 	// Interned reports whether the ID went into the table; the other outcome is it stays a plain string.
 	type result struct {
-		Index    int32
+		Index    uint32
 		Interned bool
 	}
 	steps := []struct {
@@ -943,7 +1033,7 @@ func TestToPersistenceNamespaceIDPredicate_WritesIndexesWhenGivenABuilder(t *tes
 
 	type written struct {
 		NamespaceIDs []string
-		Indexes      []int32
+		Indexes      []uint32
 	}
 	tests := []struct {
 		name        string
@@ -954,7 +1044,7 @@ func TestToPersistenceNamespaceIDPredicate_WritesIndexesWhenGivenABuilder(t *tes
 		{
 			name:        "with a builder the IDs become table indexes and none stay as strings",
 			builder:     newNamespaceIDTableBuilder(),
-			want:        written{Indexes: []int32{0, 1, 2}},
+			want:        written{Indexes: []uint32{0, 1, 2}},
 			wantEntries: [][]byte{a[:], b[:], c[:]},
 		},
 		{
@@ -989,7 +1079,7 @@ func TestToPersistenceNamespaceIDPredicate_KeepsNonUUIDIDsAsStrings(t *testing.T
 	).GetNamespaceIdPredicateAttributes()
 
 	require.Equal(t, []string{notUUID}, attributes.NamespaceIds, "the non-UUID ID stays a string")
-	require.Equal(t, []int32{0, 1}, attributes.NamespaceIdIndexes, "the UUIDs take slots 0 and 1; the refused ID takes none")
+	require.Equal(t, []uint32{0, 1}, attributes.NamespaceIdIndexes, "the UUIDs take slots 0 and 1; the refused ID takes none")
 	require.Equal(t, [][]byte{a[:], b[:]}, builder.entries(), "the table holds only the UUIDs")
 }
 
@@ -1031,7 +1121,7 @@ func TestToPersistencePredicate_WritesIndexesInCompositePredicates(t *testing.T)
 
 	type leaf struct {
 		NamespaceIDs []string
-		Indexes      []int32
+		Indexes      []uint32
 	}
 	tests := []struct {
 		name        string
@@ -1042,15 +1132,15 @@ func TestToPersistencePredicate_WritesIndexesInCompositePredicates(t *testing.T)
 		{
 			name:        "Not around a namespace leaf",
 			predicate:   predicates.Not(namespaces(a, b)),
-			wantLeaves:  []leaf{{Indexes: []int32{0, 1}}},
+			wantLeaves:  []leaf{{Indexes: []uint32{0, 1}}},
 			wantEntries: [][]byte{a[:], b[:]},
 		},
 		{
 			name:      "And of two leaves that share b: b has one slot, used by both",
 			predicate: predicates.And(namespaces(a, b), namespaces(b, c)),
 			wantLeaves: []leaf{
-				{Indexes: []int32{0, 1}},
-				{Indexes: []int32{1, 2}},
+				{Indexes: []uint32{0, 1}},
+				{Indexes: []uint32{1, 2}},
 			},
 			wantEntries: [][]byte{a[:], b[:], c[:]},
 		},
@@ -1058,8 +1148,8 @@ func TestToPersistencePredicate_WritesIndexesInCompositePredicates(t *testing.T)
 			name:      "Or with a nested Not: slots follow first appearance, c before a",
 			predicate: predicates.Or(predicates.Not(namespaces(c)), namespaces(a)),
 			wantLeaves: []leaf{
-				{Indexes: []int32{0}},
-				{Indexes: []int32{1}},
+				{Indexes: []uint32{0}},
+				{Indexes: []uint32{1}},
 			},
 			wantEntries: [][]byte{c[:], a[:]},
 		},
@@ -1131,7 +1221,7 @@ func TestToPersistenceQueueState_CompactWritesNamespaceIDTable(t *testing.T) {
 
 	type leaf struct {
 		NamespaceIDs []string
-		Indexes      []int32
+		Indexes      []uint32
 	}
 	leafOf := func(readerID int64) []leaf {
 		var leaves []leaf
@@ -1142,8 +1232,8 @@ func TestToPersistenceQueueState_CompactWritesNamespaceIDTable(t *testing.T) {
 		}
 		return leaves
 	}
-	require.Equal(t, []leaf{{Indexes: []int32{0, 1}}}, leafOf(1), "reader 1 holds indexes into the table, no strings")
-	require.Equal(t, []leaf{{Indexes: []int32{0, 1, 2}}}, leafOf(2), "reader 2 holds indexes into the table, no strings")
+	require.Equal(t, []leaf{{Indexes: []uint32{0, 1}}}, leafOf(1), "reader 1 holds indexes into the table, no strings")
+	require.Equal(t, []leaf{{Indexes: []uint32{0, 1, 2}}}, leafOf(2), "reader 2 holds indexes into the table, no strings")
 }
 
 func TestQueueStateRoundTrip_CompactForm(t *testing.T) {
@@ -1313,7 +1403,7 @@ func TestToPersistenceQueueState_NotCompactWritesTheOldForm(t *testing.T) {
 	require.Empty(t, persisted.NamespaceIdTable, "no table")
 	type leaf struct {
 		NamespaceIDs []string
-		Indexes      []int32
+		Indexes      []uint32
 	}
 	leafOf := func(readerID int64) []leaf {
 		var leaves []leaf
@@ -1352,10 +1442,10 @@ func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
 	// plainScope and predicateGroup describe the persisted form; Indexes are table slots.
 	type plainScope struct {
 		Range   rangeBounds
-		Indexes []int32
+		Indexes []uint32
 	}
 	type predicateGroup struct {
-		Indexes []int32
+		Indexes []uint32
 		Ranges  []rangeBounds
 	}
 	// Ranges ascend in every case; ordering is 2.5c's concern.
@@ -1372,7 +1462,7 @@ func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
 				{rangeBounds{30, 40}, namespaces(a, b)},
 				{rangeBounds{50, 60}, namespaces(a, b)},
 			},
-			wantGroups: []predicateGroup{{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}, {50, 60}}}},
+			wantGroups: []predicateGroup{{Indexes: []uint32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}, {50, 60}}}},
 		},
 		{
 			name: "a predicate held by one scope stays plain beside a group",
@@ -1381,8 +1471,8 @@ func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
 				{rangeBounds{30, 40}, namespaces(a, b)},
 				{rangeBounds{50, 60}, namespaces(c)},
 			},
-			wantPlain:  []plainScope{{Range: rangeBounds{50, 60}, Indexes: []int32{2}}},
-			wantGroups: []predicateGroup{{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}}}},
+			wantPlain:  []plainScope{{Range: rangeBounds{50, 60}, Indexes: []uint32{2}}},
+			wantGroups: []predicateGroup{{Indexes: []uint32{0, 1}, Ranges: []rangeBounds{{10, 20}, {30, 40}}}},
 		},
 		{
 			name: "a lone first predicate stays plain and a shared predicate appearing later is grouped",
@@ -1393,10 +1483,10 @@ func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
 				{rangeBounds{70, 80}, namespaces(a, b)},
 			},
 			wantPlain: []plainScope{
-				{Range: rangeBounds{10, 20}, Indexes: []int32{0}},
-				{Range: rangeBounds{50, 60}, Indexes: []int32{3}},
+				{Range: rangeBounds{10, 20}, Indexes: []uint32{0}},
+				{Range: rangeBounds{50, 60}, Indexes: []uint32{3}},
 			},
-			wantGroups: []predicateGroup{{Indexes: []int32{1, 2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}}},
+			wantGroups: []predicateGroup{{Indexes: []uint32{1, 2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}}},
 		},
 		{
 			name: "scopes that share no predicate stay plain and write no group",
@@ -1405,8 +1495,8 @@ func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
 				{rangeBounds{30, 40}, namespaces(d)},
 			},
 			wantPlain: []plainScope{
-				{Range: rangeBounds{10, 20}, Indexes: []int32{0}},
-				{Range: rangeBounds{30, 40}, Indexes: []int32{1}},
+				{Range: rangeBounds{10, 20}, Indexes: []uint32{0}},
+				{Range: rangeBounds{30, 40}, Indexes: []uint32{1}},
 			},
 		},
 		{
@@ -1418,8 +1508,8 @@ func TestToPersistenceQueueState_CompactGroupsScopes(t *testing.T) {
 				{rangeBounds{70, 80}, namespaces(c)},
 			},
 			wantGroups: []predicateGroup{
-				{Indexes: []int32{0, 1}, Ranges: []rangeBounds{{10, 20}, {50, 60}}},
-				{Indexes: []int32{2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}},
+				{Indexes: []uint32{0, 1}, Ranges: []rangeBounds{{10, 20}, {50, 60}}},
+				{Indexes: []uint32{2}, Ranges: []rangeBounds{{30, 40}, {70, 80}}},
 			},
 		},
 	}
@@ -1621,12 +1711,12 @@ func TestFromPersistencePredicate_ResolvesIndexesInCompositePredicates(t *testin
 	second := uuid.New()
 	table := newNamespaceIDTable([][]byte{first[:], second[:]})
 
-	indexed := func(index int32) *persistencespb.Predicate {
+	indexed := func(index uint32) *persistencespb.Predicate {
 		return &persistencespb.Predicate{
 			PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 			Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 				NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-					NamespaceIdIndexes: []int32{index},
+					NamespaceIdIndexes: []uint32{index},
 				},
 			},
 		}

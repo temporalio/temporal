@@ -487,7 +487,7 @@ func (s *queueBaseSuite) TestNewQueueBase_RecordsPredicateResolutionLossOnRead()
 			Predicate: predicate,
 		}
 	}
-	unresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{NamespaceIdIndexes: []int32{5}})
+	unresolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{NamespaceIdIndexes: []uint32{5}})
 	resolvable := namespaceIDPredicateProto(&persistencespb.NamespaceIdPredicateAttributes{NamespaceIds: []string{uuid.NewString()}})
 
 	testCases := []struct {
