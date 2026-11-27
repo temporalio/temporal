@@ -114,7 +114,6 @@ PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
-ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 MAIN_BRANCH    := main
 
@@ -179,15 +178,12 @@ mise-tool = $(or \
 		mise exec go $(2) -c 'command -v $(1)'), \
 	$(error Cannot resolve $(1); check mise.toml and run mise install))
 
-# onelint runs go fix, go vet, golangci-lint, workflowcheck and the Go
-# formatters with the rules in .onelint.yaml.
 ONELINT = $(call mise-tool,onelint,go:github.com/temporalio/onelint)
+ONELINT_GO = mise exec go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint -- $(ONELINT)
 GOTESTSUM = $(call mise-tool,gotestsum,go:gotest.tools/gotestsum)
 API_LINTER = $(call mise-tool,api-linter,go:github.com/googleapis/api-linter/cmd/api-linter)
 BUF = $(call mise-tool,buf,go:github.com/bufbuild/buf/cmd/buf)
 PROTOGEN = $(shell go tool -n protogen)
-ACTIONLINT = $(call mise-tool,actionlint,go:github.com/rhysd/actionlint/cmd/actionlint)
-YAMLFMT = $(call mise-tool,yamlfmt,go:github.com/google/yamlfmt/cmd/yamlfmt)
 GOIMPORTS = $(call mise-tool,goimports,go:golang.org/x/tools/cmd/goimports)
 GOMAJOR = $(call mise-tool,gomajor,go:github.com/icholy/gomajor)
 MOCKGEN = $(call mise-tool,mockgen,go:go.uber.org/mock/mockgen)
@@ -196,7 +192,6 @@ PROTOC_GEN_GO = $(call mise-tool,protoc-gen-go,go:google.golang.org/protobuf/cmd
 PROTOC_GEN_GO_CHASM = $(shell go tool -n protoc-gen-go-chasm)
 PROTOC_GEN_GO_GRPC = $(call mise-tool,protoc-gen-go-grpc,go:google.golang.org/grpc/cmd/protoc-gen-go-grpc)
 PROTOC_GEN_GO_HELPERS = $(shell go tool -n protoc-gen-go-helpers)
-SHELLCHECK = $(call mise-tool,shellcheck,shellcheck)
 
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
@@ -291,17 +286,16 @@ lint: lint-code lint-actions lint-api lint-protos lint-yaml
 
 lint-actions:
 	@printf $(COLOR) "Linting GitHub actions..."
-	@mise exec shellcheck -- $(ACTIONLINT)
+	@mise exec go:github.com/rhysd/actionlint/cmd/actionlint shellcheck -- $(ONELINT) check --only=actionlint
 
 .PHONY: lint-code lint-code-fast
-# onelint checks the packages changed since the merge base with
-# GOLANGCI_LINT_BASE_REV, and reports golangci-lint issues only in changed
-# code, so lint-code-fast is the same as lint-code.
+# onelint reports golangci-lint issues only on lines changed since
+# GOLANGCI_LINT_BASE_REV, so lint-code-fast is the same as lint-code.
 lint-code-fast: lint-code
 
-# Lints the changed Go packages with the build tags $(1).
+# Lints Go code with the build tags $(1).
 define lint-go
-	@$(ONELINT) $(if $(filter true,$(GOLANGCI_LINT_FIX)),fix,check) --tags=$(1) --since=$(GOLANGCI_LINT_BASE_REV)
+	@$(ONELINT_GO) $(if $(filter true,$(GOLANGCI_LINT_FIX)),fix,check) --only=format,gomodtidy,gofix,golangci-lint --build-tags=$(1) --new-from-rev=$(GOLANGCI_LINT_BASE_REV)
 endef
 
 lint-code:
@@ -312,7 +306,7 @@ lint-code:
 
 lint-yaml:
 	@printf $(COLOR) "Checking YAML formatting..."
-	@$(YAMLFMT) -conf .github/.yamlfmt -lint .
+	@mise exec go:github.com/google/yamlfmt/cmd/yamlfmt -- $(ONELINT) check --only=yamlfmt
 
 # Nil-safety analysis in full. Its scope is in .onelint.yaml (nilaway's
 # include-pkgs and the matching exclusion); widen it as more packages are made
@@ -320,7 +314,7 @@ lint-yaml:
 .PHONY: lint-nilaway
 lint-nilaway:
 	@printf $(COLOR) "Running nilaway..."
-	@$(ONELINT) check --only=nilaway ./chasm/lib/scheduler/...
+	@$(ONELINT_GO) check --only=nilaway --packages=./chasm/lib/scheduler/...
 
 lint-api: $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
@@ -337,11 +331,11 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 # analyzers .onelint.yaml turns off (embedlit) disabled.
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
-	@$(ONELINT) fix --only=gofix ./...
+	@$(ONELINT) fix --only=gofix
 
 fmt-imports:
 	@printf $(COLOR) "Formatting Go code and imports..."
-	@$(ONELINT) fix --only=format ./...
+	@$(ONELINT_GO) fix --only=format
 
 parallelize-tests:
 	@printf $(COLOR) "Add t.Parallel() to tests..."
@@ -354,7 +348,7 @@ fmt-protos:
 
 fmt-yaml:
 	@printf $(COLOR) "Formatting YAML files..."
-	@$(YAMLFMT) -conf .github/.yamlfmt .
+	@mise exec go:github.com/google/yamlfmt/cmd/yamlfmt -- $(ONELINT) fix --only=yamlfmt
 
 # Edit proto/internal/buf.yaml to exclude specific files from this check.
 # TODO: buf breaking check for CHASM protos.
@@ -365,13 +359,13 @@ buf-breaking: $(API_BINPB) $(INTERNAL_BINPB)
 
 shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
-	@$(SHELLCHECK) $(ALL_SCRIPTS)
+	@mise exec shellcheck -- $(ONELINT) check --only=shellcheck
 
 # Checks all system workflows, not only changed ones: a change elsewhere can
 # make a workflow non-deterministic.
 workflowcheck:
 	@printf $(COLOR) "Run workflowcheck for system workflows..."
-	@$(ONELINT) check --only=workflowcheck $(SYSTEM_WORKFLOWS_ROOT)/...
+	@$(ONELINT_GO) check --only=workflowcheck --packages=$(SYSTEM_WORKFLOWS_ROOT)/...
 
 comma := ,
 
