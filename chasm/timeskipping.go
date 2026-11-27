@@ -44,6 +44,8 @@ type TimeSkippingRuntimeGate interface {
 // PropagateTimeSkippingToOtherExecution snapshots time-skipping state for a new, independent
 // execution that shares the source execution's virtual clock, such as a child workflow or a
 // workflow started by a schedule.
+// Time skipping propagation usually doesn't include the fast-forward; set EnableFastForwardPropagation to
+// true to include it. It has no effect if propagation is disabled or time skipping has stopped.
 func PropagateTimeSkippingToOtherExecution(
 	tsi *persistencespb.TimeSkippingInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
@@ -62,8 +64,19 @@ func PropagateTimeSkippingToOtherExecution(
 	if config == nil || config.GetDisablePropagation() {
 		return nil, statePropagation
 	}
+	// propagation is enabled; only propagate fast-forward when time skipping is still running
+	// and fast-forward propagation is enabled
 	propagatedConfig := common.CloneProto(config)
-	propagatedConfig.FastForwardConfig = nil
+	if !config.GetEnabled() || !config.GetFastForwardConfig().GetEnableFastForwardPropagation() {
+		propagatedConfig.FastForwardConfig = nil
+		return propagatedConfig, statePropagation
+	}
+	if ffTargetTime := tsi.GetFastForwardInfo().GetTargetTime(); ffTargetTime != nil {
+		if statePropagation == nil {
+			statePropagation = &commonpb.TimeSkippingStatePropagation{}
+		}
+		statePropagation.FastForwardTargetTime = common.CloneProto(ffTargetTime)
+	}
 	return propagatedConfig, statePropagation
 }
 
