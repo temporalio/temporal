@@ -187,9 +187,7 @@ func TestScheduleInvokerExecuteTask_ConsistentLabels(t *testing.T) {
 	require.False(t, valid)
 
 	// fired: Execute over an empty work set records outcome=fired (no RPCs).
-	env.ExpectReadComponent(ctx, invoker)
-	env.ExpectUpdateComponent(ctx, invoker)
-	require.NoError(t, h.Execute(env.EngineContext(), chasm.ComponentRef{},
+	require.NoError(t, h.Execute(env.EngineContext(), env.ComponentRef(ctx, invoker),
 		chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{}))
 	require.NoError(t, env.CloseTransaction())
 
