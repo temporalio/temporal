@@ -683,7 +683,13 @@ func TestSegmentEntryIdentityUsesRootShard(t *testing.T) {
 			protorequire.ProtoEqual(t, req.Task, stored.Task)
 			stored.Task = nil
 			require.Equal(t, StoredMessage{Ref: result.MessageRef, SourceTaskIdentity: req.SourceTaskIdentity}, stored)
-
+			entry.Task = chasm.Field[*commonspb.HistoryTask]{}
+			page, err := segment.ListEntries(ctx, ListEntriesRequest{
+				Segment:               SegmentRef{Queue: req.Queue, BusinessID: result.MessageRef.BusinessID, RunID: result.MessageRef.RunID},
+				InclusiveMaxMessageID: math.MaxInt64, PageSize: 1,
+			})
+			require.NoError(t, err)
+			require.Equal(t, EntryPage{Refs: []MessageRef{result.MessageRef}}, page)
 		})
 	}
 }
