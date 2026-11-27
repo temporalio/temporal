@@ -149,6 +149,10 @@ type testEnv struct {
 	MockEngine    *chasm.MockEngine
 	Logger        log.Logger
 
+	// engine owns the execution backing Node; rootRef identifies it.
+	engine  *chasmtest.Engine
+	rootRef chasm.ComponentRef
+
 	// allowStuckReason, when non-empty, suppresses the stuckness invariant
 	// asserted by CloseTransaction. See AllowStuck.
 	allowStuckReason string
@@ -386,7 +390,6 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 
 	ctrl := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	nodePathEncoder := chasm.DefaultPathEncoder
 
 	// Configure spec processor: use custom if provided, otherwise use real.
 	var specProcessor scheduler.SpecProcessor
@@ -394,14 +397,6 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		specProcessor = config.specProcessor
 	} else {
 		specProcessor = newRealSpecProcessor(ctrl, logger)
-	}
-
-	registry := chasm.NewRegistry(logger)
-	if err := registry.Register(&chasm.CoreLibrary{}); err != nil {
-		t.Fatalf("failed to register core library: %v", err)
-	}
-	if err := registry.Register(newTestLibrary(logger, specProcessor)); err != nil {
-		t.Fatalf("failed to register scheduler library: %v", err)
 	}
 
 	timeSource := clock.NewEventTimeSource()
@@ -413,51 +408,36 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		schedule = defaultSchedule()
 	}
 
-	tv := testvars.New(t)
-	nodeBackend := &chasm.MockNodeBackend{
-		HandleNow:                 timeSource.Now,
-		HandleNextTransitionCount: func() int64 { return 2 },
-		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
-		HandleIsWorkflow:          func() bool { return false },
-		HandleGetNamespaceEntry:   tv.Namespace,
-		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
-			return &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: 1,
-				TransitionCount:          1,
-			}
-		},
-	}
-
-	node := chasm.NewEmptyTree(registry, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
-	ctx := chasm.NewMutableContext(context.Background(), node)
-	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
-	if err != nil {
-		t.Fatalf("failed to create scheduler: %v", err)
-	}
-	if err = node.SetRootComponent(sched); err != nil {
-		t.Fatalf("failed to set root component: %v", err)
-	}
-
-	// Advance Generator's high water mark to 'now'.
-	generator := sched.Generator.Get(ctx)
-	generator.LastProcessedTime = timestamppb.New(now)
-
-	_, err = node.CloseTransaction(context.Background(), true)
-	if err != nil {
-		t.Fatalf("failed to close initial transaction: %v", err)
-	}
-
 	env := &testEnv{
 		t:             t,
 		Ctrl:          ctrl,
-		Registry:      registry,
-		Node:          node,
-		NodeBackend:   nodeBackend,
 		TimeSource:    timeSource,
-		Scheduler:     sched,
 		SpecProcessor: specProcessor,
 		Logger:        logger,
+	}
+	env.Registry = newTestRegistry(t, logger, specProcessor)
+	env.engine = chasmtest.NewEngine(t, env.Registry,
+		chasmtest.WithTimeSource(timeSource),
+		chasmtest.WithNamespaceName(namespaceID, namespace),
+		chasmtest.WithInvariantCheck(env.checkInvariants),
+	)
+	env.rootRef = startTestExecution(t, env.engine, func(ctx chasm.MutableContext) (*scheduler.Scheduler, error) {
+		sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+		if err != nil {
+			return nil, err
+		}
+		// Advance Generator's high water mark to 'now'.
+		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(now)
+		env.Scheduler = sched
+		return sched, nil
+	})
+
+	var err error
+	if env.Node, err = env.engine.NodeForRef(env.rootRef); err != nil {
+		t.Fatalf("failed to get execution node: %v", err)
+	}
+	if env.NodeBackend, err = env.engine.BackendForRef(env.rootRef); err != nil {
+		t.Fatalf("failed to get execution backend: %v", err)
 	}
 
 	if config.withMockEngine {
@@ -490,16 +470,15 @@ func (e *testEnv) ReadContext() chasm.Context {
 // requires a clean tree.
 func (e *testEnv) CloseTransaction() error {
 	e.t.Helper()
+	return e.engine.CloseTransaction(context.Background(), e.rootRef)
+}
 
-	_, err := e.Node.CloseTransaction(context.Background(), true)
-	if err != nil {
-		return err
-	}
+// checkInvariants is the engine invariant check behind CloseTransaction.
+func (e *testEnv) checkInvariants(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
+	t.Helper()
 	if e.allowStuckReason == "" {
-		requireNotStuck(e.t, e.Node, e.Scheduler)
-		requireIdleCloseTimeBacked(e.t, e.Registry, e.Node, e.Scheduler)
+		requireValidSchedulerState(t, e.Registry, node, root)
 	}
-	return nil
 }
 
 // AllowStuck opts this test out of the stuckness invariant asserted by
@@ -622,6 +601,64 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	}
 }
 
+// newTestRegistry builds a CHASM registry with the core and scheduler
+// libraries registered.
+func newTestRegistry(t *testing.T, logger log.Logger, specProcessor scheduler.SpecProcessor) *chasm.Registry {
+	registry := chasm.NewRegistry(logger)
+	if err := registry.Register(&chasm.CoreLibrary{}); err != nil {
+		t.Fatalf("failed to register core library: %v", err)
+	}
+	if err := registry.Register(newTestLibrary(logger, specProcessor)); err != nil {
+		t.Fatalf("failed to register scheduler library: %v", err)
+	}
+	return registry
+}
+
+// startTestExecution starts a scheduler execution on engine, with a root
+// component built by startFn, and returns a ref to it.
+func startTestExecution(
+	t *testing.T,
+	engine *chasmtest.Engine,
+	startFn func(chasm.MutableContext) (*scheduler.Scheduler, error),
+) chasm.ComponentRef {
+	ref := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  scheduleID,
+	})
+	_, err := engine.StartExecution(context.Background(), ref, func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
+		return startFn(ctx)
+	})
+	if err != nil {
+		t.Fatalf("failed to start scheduler execution: %v", err)
+	}
+	return ref
+}
+
+// setupExecutionForTest starts an execution on a CHASM test engine whose
+// scheduler library uses a mock SpecProcessor, and returns a fresh mutable
+// context on the execution's node.
+func setupExecutionForTest(
+	t *testing.T,
+	specProcessor scheduler.SpecProcessor,
+	startFn func(chasm.MutableContext) (*scheduler.Scheduler, error),
+) (*scheduler.Scheduler, chasm.MutableContext, *chasm.Node) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	engine := chasmtest.NewEngine(t, newTestRegistry(t, logger, specProcessor),
+		chasmtest.WithNamespaceName(namespaceID, namespace))
+
+	var root *scheduler.Scheduler
+	ref := startTestExecution(t, engine, func(ctx chasm.MutableContext) (*scheduler.Scheduler, error) {
+		var err error
+		root, err = startFn(ctx)
+		return root, err
+	})
+	node, err := engine.NodeForRef(ref)
+	if err != nil {
+		t.Fatalf("failed to get execution node: %v", err)
+	}
+	return root, chasm.NewMutableContext(context.Background(), node), node
+}
+
 func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableContext, *chasm.Node) {
 	ctrl := gomock.NewController(t)
 	specProcessor := scheduler.NewMockSpecProcessor(ctrl)
@@ -636,41 +673,16 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 		Nominal: time.Now().Add(time.Hour),
 	}, nil).AnyTimes()
 
-	infra := setupTestInfra(t, specProcessor)
-	ctx := chasm.NewMutableContext(context.Background(), infra.node)
-	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
-	if err != nil {
-		t.Fatalf("failed to create scheduler: %v", err)
-	}
-	err = infra.node.SetRootComponent(sched)
-	if err != nil {
-		t.Fatalf("failed to set root component: %v", err)
-	}
-	_, err = infra.node.CloseTransaction(context.Background(), true)
-	if err != nil {
-		t.Fatalf("failed to close initial transaction: %v", err)
-	}
-
-	ctx = chasm.NewMutableContext(context.Background(), infra.node)
-	return sched, ctx, infra.node
+	return setupExecutionForTest(t, specProcessor, func(ctx chasm.MutableContext) (*scheduler.Scheduler, error) {
+		return scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	})
 }
 
 func setupSentinelForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableContext, *chasm.Node) {
 	ctrl := gomock.NewController(t)
 	specProcessor := scheduler.NewMockSpecProcessor(ctrl)
 
-	infra := setupTestInfra(t, specProcessor)
-	ctx := chasm.NewMutableContext(context.Background(), infra.node)
-	sentinel := scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID)
-	err := infra.node.SetRootComponent(sentinel)
-	if err != nil {
-		t.Fatalf("failed to set root component: %v", err)
-	}
-	_, err = infra.node.CloseTransaction(context.Background(), true)
-	if err != nil {
-		t.Fatalf("failed to close initial transaction: %v", err)
-	}
-
-	ctx = chasm.NewMutableContext(context.Background(), infra.node)
-	return sentinel, ctx, infra.node
+	return setupExecutionForTest(t, specProcessor, func(ctx chasm.MutableContext) (*scheduler.Scheduler, error) {
+		return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID), nil
+	})
 }
