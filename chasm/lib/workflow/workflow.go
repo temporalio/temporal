@@ -166,6 +166,54 @@ func (w *Workflow) LookupCallbackAttachmentEventReference(
 	}, true
 }
 
+// HasUpdateCallbackAttachment reports whether this Update owns the attachment, including
+// callbacks written before CHASM stored attachment event references.
+func (w *Workflow) HasUpdateCallbackAttachment(ctx chasm.Context, updateID, requestID string) bool {
+	if updateField, ok := w.Updates[updateID]; ok {
+		update := readWorkflowUpdate(ctx, updateField)
+		_, hasReference := update.CallbackAttachmentEventReferences[requestID]
+		return hasReference || callback.HasCallbacksForRequestInMap(update.Callbacks, requestID)
+	}
+	return false
+}
+
+// UpdateCallbackAttachment describes completion callbacks being attached to a Workflow Update.
+// EventReference identifies the current attachment event. LegacyEventReference, when present,
+// identifies an attachment already recorded in legacy mutable state and enables mixed-version
+// deduplication and opportunistic backfill into the WorkflowUpdate component.
+type UpdateCallbackAttachment struct {
+	UpdateID             string
+	RequestID            string
+	Callbacks            []*commonpb.Callback
+	EventReference       CallbackAttachmentEventReference
+	LegacyEventReference *CallbackAttachmentEventReference
+}
+
+// tryBackfillCallbackAttachmentEventReference converges a callback written by an older server by
+// copying its legacy attachment event reference into the WorkflowUpdate component. It returns true
+// when the callback was already represented in CHASM and therefore makes the current attachment a
+// no-op. This preserves the original attachment event across mixed-version retries.
+func (w *Workflow) tryBackfillCallbackAttachmentEventReference(
+	ctx chasm.MutableContext,
+	updateID string,
+	requestID string,
+	reference CallbackAttachmentEventReference,
+) bool {
+	updateField, ok := w.Updates[updateID]
+	if !ok {
+		return false
+	}
+	update := readWorkflowUpdate(ctx, updateField)
+	if _, ok := update.CallbackAttachmentEventReferences[requestID]; ok {
+		return true
+	}
+	if !callback.HasCallbacksForRequestInMap(update.Callbacks, requestID) {
+		return false
+	}
+	updateField.Get(ctx).setCallbackAttachmentEventReference(requestID, reference)
+	return true
+}
+
 func (u *WorkflowUpdate) setCallbackAttachmentEventReference(
 	requestID string,
 	reference CallbackAttachmentEventReference,
@@ -222,15 +270,15 @@ type CallbackAddition struct {
 	Callbacks []*commonpb.Callback
 }
 
-// callbackHolder returns the [callback.Holder] implementation for the given updateID. Or if
-// empty, the workflow's own callbacks. It is nil for an update with no callbacks attached yet.
-func (w *Workflow) callbackHolder(ctx chasm.Context, updateID string) callback.Holder {
+// existingCallbacks returns the callbacks attached to the given Update or to the Workflow
+// when updateID is empty.
+func (w *Workflow) existingCallbacks(ctx chasm.Context, updateID string) chasm.Map[string, *callback.Callback] {
 	if updateID == "" {
-		return w
+		return w.Callbacks
 	}
 	if updateField, ok := w.Updates[updateID]; ok {
-		if upd, ok := updateField.TryGet(ctx); ok {
-			return upd
+		if upd, ok := updateField.TryGet(readOnlyContext{ctx}); ok {
+			return upd.Callbacks
 		}
 	}
 	return nil
@@ -267,8 +315,7 @@ func (w *Workflow) ValidateCallbackAddition(
 	// A request that already attached its callbacks is a no-op at attach time, so counting it
 	// again here would reject retries that are actually within the limits. This has to precede
 	// the limit checks: target already holds the callbacks being re-offered.
-	target := w.callbackHolder(ctx, addition.UpdateID)
-	if callback.HasCallbacksForRequest(target, addition.RequestID) {
+	if callback.HasCallbacksForRequestInMap(w.existingCallbacks(ctx, addition.UpdateID), addition.RequestID) {
 		return nil
 	}
 
@@ -284,7 +331,7 @@ func (w *Workflow) ValidateCallbackAddition(
 		seen[key] = struct{}{}
 		// Already attached, and so already in the totals: a retry of a request persisted with an
 		// UpdateAdmitted event can be buffered again.
-		if callback.HasCallbacksForRequest(w.callbackHolder(ctx, held.UpdateID), held.RequestID) {
+		if callback.HasCallbacksForRequestInMap(w.existingCallbacks(ctx, held.UpdateID), held.RequestID) {
 			continue
 		}
 		usage.Reserve(held.Callbacks)
@@ -351,6 +398,48 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 		update:   w.Updates[updateID].Get(ctx),
 	}
 	return callback.Attach(ctx, wfUpdateHost, requestID, eventTime, completionCallbacks, callback.WithReusedRequestID())
+}
+
+// AddUpdateCompletionCallbacksWithAttachmentEventReference attaches completion callbacks to the
+// given update, creating its WorkflowUpdate component if needed, and records the history event that
+// attached them. Re-attaching a request that is already present is a no-op. Legacy request ID
+// information deduplicates mixed-version retries.
+//
+// NOTE: Aggregate limits are NOT checked here. See [Workflow.ValidateCallbackAddition].
+func (w *Workflow) AddUpdateCompletionCallbacksWithAttachmentEventReference(
+	ctx chasm.MutableContext,
+	eventTime *timestamppb.Timestamp,
+	attachment UpdateCallbackAttachment,
+) error {
+	updateID := attachment.UpdateID
+	requestID := attachment.RequestID
+	if requestID != "" {
+		if attachment.LegacyEventReference != nil && w.tryBackfillCallbackAttachmentEventReference(
+			ctx,
+			updateID,
+			requestID,
+			*attachment.LegacyEventReference,
+		) {
+			return nil
+		}
+		if updateField, ok := w.Updates[updateID]; ok {
+			update := readWorkflowUpdate(ctx, updateField)
+			if _, ok := update.CallbackAttachmentEventReferences[requestID]; ok ||
+				callback.HasCallbacksForRequestInMap(update.Callbacks, requestID) {
+				return nil
+			}
+		}
+	}
+	if len(attachment.Callbacks) == 0 {
+		return nil
+	}
+	if err := w.AddUpdateCompletionCallbacks(ctx, eventTime, updateID, requestID, attachment.Callbacks); err != nil {
+		return err
+	}
+	if requestID != "" {
+		w.Updates[updateID].Get(ctx).setCallbackAttachmentEventReference(requestID, attachment.EventReference)
+	}
+	return nil
 }
 
 // addAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,

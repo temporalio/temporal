@@ -62,11 +62,15 @@ func HasCallbacksForRequest(holder Holder, requestID string) bool {
 	if holder == nil {
 		return false
 	}
+	return HasCallbacksForRequestInMap(holder.CompletionCallbacks(), requestID)
+}
+
+// HasCallbacksForRequestInMap checks existing callbacks without initializing a backing map.
+func HasCallbacksForRequestInMap(attached chasm.Map[string, *Callback], requestID string) bool {
 	// This relies on attachment being atomic. Assuming that if the first/0th completion callback is
 	// present, then all the other callbacks for the same request would be present too.
 	firstID := completionCallbackID(requestID, 0)
-	cbs := holder.CompletionCallbacks()
-	_, ok := cbs[firstID]
+	_, ok := attached[firstID]
 	return ok
 }
 

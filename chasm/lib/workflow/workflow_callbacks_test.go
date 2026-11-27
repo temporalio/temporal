@@ -25,6 +25,315 @@ func newTestCHASMContext(t *testing.T) *chasm.MockMutableContext {
 	return ctx
 }
 
+func addTestUpdateCompletionCallbacks(
+	wf *Workflow,
+	ctx chasm.MutableContext,
+	updateID string,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) error {
+	return wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		ctx,
+		timestamppb.Now(),
+		UpdateCallbackAttachment{
+			UpdateID:  updateID,
+			RequestID: requestID,
+			Callbacks: completionCallbacks,
+			EventReference: CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+				EventID:   1,
+			},
+		},
+	)
+}
+
+func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) {
+	t.Parallel()
+
+	t.Run("AttachesAndStoresReference", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		expectedReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			EventID:   11,
+		}
+
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:       "update-id",
+				RequestID:      "request-id",
+				Callbacks:      nexusCallbacks("http://callback"),
+				EventReference: expectedReference,
+			},
+		))
+
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+		require.True(t, ok)
+		require.Equal(t, expectedReference, reference)
+		require.Len(t, wf.Updates["update-id"].Get(ctx).Callbacks, 1)
+	})
+
+	t.Run("ReattachingRequestPreservesOriginalReference", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		completionCallbacks := nexusCallbacks("http://callback")
+		originalReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			EventID:   11,
+		}
+
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:       "update-id",
+				RequestID:      "request-id",
+				Callbacks:      completionCallbacks,
+				EventReference: originalReference,
+			},
+		))
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:  "update-id",
+				RequestID: "request-id",
+				Callbacks: completionCallbacks,
+				EventReference: CallbackAttachmentEventReference{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					EventID:   12,
+				},
+			},
+		))
+
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+		require.True(t, ok)
+		require.Equal(t, originalReference, reference)
+		require.Len(t, wf.Updates["update-id"].Get(ctx).Callbacks, 1)
+	})
+
+	t.Run("DeduplicatesLegacyRequestAndBackfillsReference", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		completionCallbacks := nexusCallbacks("http://callback")
+		legacyReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			EventID:   11,
+		}
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:       "update-id",
+				RequestID:      "legacy-request-id",
+				Callbacks:      completionCallbacks,
+				EventReference: legacyReference,
+			},
+		))
+		wf.Updates["update-id"].Get(ctx).CallbackAttachmentEventReferences = nil
+
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:  "update-id",
+				RequestID: "legacy-request-id",
+				Callbacks: completionCallbacks,
+				EventReference: CallbackAttachmentEventReference{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					EventID:   12,
+				},
+				LegacyEventReference: &legacyReference,
+			},
+		))
+
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "legacy-request-id")
+		require.True(t, ok)
+		require.Equal(t, legacyReference, reference)
+		require.Len(t, wf.Updates["update-id"].Get(ctx).Callbacks, 1)
+	})
+
+	t.Run("AppliesAttachmentEventWhenTargetUpdateHasNoCallback", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		currentReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			EventID:   12,
+		}
+		legacyReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			EventID:   11,
+		}
+
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:             "update-id",
+				RequestID:            "request-id",
+				Callbacks:            nexusCallbacks("http://callback"),
+				EventReference:       currentReference,
+				LegacyEventReference: &legacyReference,
+			},
+		))
+
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+		require.True(t, ok)
+		require.Equal(t, currentReference, reference)
+		require.Len(t, wf.Updates["update-id"].Get(ctx).Callbacks, 1)
+	})
+
+	t.Run("BackfillsWhenLegacyReferenceMatchesCurrentEvent", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		completionCallbacks := nexusCallbacks("http://callback")
+		expectedReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			EventID:   11,
+		}
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+			ctx, timestamppb.Now(), "update-id", "request-id", completionCallbacks,
+		))
+
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:             "update-id",
+				RequestID:            "request-id",
+				Callbacks:            completionCallbacks,
+				EventReference:       expectedReference,
+				LegacyEventReference: &expectedReference,
+			},
+		))
+
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+		require.True(t, ok)
+		require.Equal(t, expectedReference, reference)
+		require.Len(t, wf.Updates["update-id"].Get(ctx).Callbacks, 1)
+	})
+
+	t.Run("DoesNotInventReferenceForPreviouslyAttachedCallbacks", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		completionCallbacks := nexusCallbacks("http://callback")
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+			ctx, timestamppb.Now(), "update-id", "request-id", completionCallbacks,
+		))
+
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:  "update-id",
+				RequestID: "request-id",
+				Callbacks: completionCallbacks,
+				EventReference: CallbackAttachmentEventReference{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					EventID:   12,
+				},
+			},
+		))
+
+		_, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+		require.False(t, ok)
+		require.Len(t, wf.Updates["update-id"].Get(ctx).Callbacks, 1)
+	})
+}
+
+func TestTryBackfillCallbackAttachmentEventReference(t *testing.T) {
+	t.Parallel()
+
+	newWorkflowWithCallback := func(t *testing.T) (*chasm.MockMutableContext, *Workflow) {
+		t.Helper()
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:  "update-id",
+				RequestID: "legacy-request-id",
+				Callbacks: nexusCallbacks("http://callback"),
+				EventReference: CallbackAttachmentEventReference{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+					EventID:   11,
+				},
+			},
+		))
+		return ctx, wf
+	}
+
+	t.Run("ReturnsFalseWhenCallbackDoesNotMatch", func(t *testing.T) {
+		ctx, wf := newWorkflowWithCallback(t)
+		wf.Updates["update-id"].Get(ctx).CallbackAttachmentEventReferences = nil
+
+		require.False(t, wf.tryBackfillCallbackAttachmentEventReference(
+			ctx, "update-id", "different-request-id",
+			CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventID:   12,
+			},
+		))
+		_, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "different-request-id")
+		require.False(t, ok)
+	})
+
+	t.Run("BackfillsMatchingCallback", func(t *testing.T) {
+		ctx, wf := newWorkflowWithCallback(t)
+		wf.Updates["update-id"].Get(ctx).CallbackAttachmentEventReferences = nil
+		expectedReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			EventID:   11,
+		}
+
+		require.True(t, wf.tryBackfillCallbackAttachmentEventReference(
+			ctx, "update-id", "legacy-request-id", expectedReference,
+		))
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "legacy-request-id")
+		require.True(t, ok)
+		require.Equal(t, expectedReference, reference)
+	})
+
+	t.Run("ReturnsTrueWhenReferenceAlreadyExists", func(t *testing.T) {
+		ctx, wf := newWorkflowWithCallback(t)
+
+		require.True(t, wf.tryBackfillCallbackAttachmentEventReference(
+			ctx, "update-id", "legacy-request-id",
+			CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventID:   12,
+			},
+		))
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "legacy-request-id")
+		require.True(t, ok)
+		require.Equal(t, CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			EventID:   11,
+		}, reference)
+	})
+}
+
+func TestCallbackExistenceChecksLeaveUninitializedMapNil(t *testing.T) {
+	t.Parallel()
+
+	ctx := newTestCHASMContext(t)
+	wf := newTestWorkflow()
+	update := NewWorkflowUpdate(ctx, "update-id", wf.MSPointer)
+	wf.Updates = chasm.Map[string, *WorkflowUpdate]{
+		"update-id": chasm.NewComponentField(ctx, update),
+	}
+
+	require.False(t, wf.tryBackfillCallbackAttachmentEventReference(ctx, "update-id", "request-id", CallbackAttachmentEventReference{}))
+	require.Nil(t, update.Callbacks)
+	require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(ctx, timestamppb.Now(), UpdateCallbackAttachment{
+		UpdateID: "update-id", RequestID: "request-id",
+	}))
+	require.Nil(t, update.Callbacks)
+}
+
 func TestSetCallbackAttachmentEventReferenceEventID(t *testing.T) {
 	t.Parallel()
 
@@ -178,8 +487,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		wf := newTestWorkflow()
 
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1")))
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u1", "req-2", nexusCallbacks("http://cb-2")))
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u2", "req-3", nexusCallbacks("http://cb-3", "http://cb-4")))
+		require.NoError(t, addTestUpdateCompletionCallbacks(wf, ctx, "u1", "req-2", nexusCallbacks("http://cb-2")))
+		require.NoError(t, addTestUpdateCompletionCallbacks(wf, ctx, "u2", "req-3", nexusCallbacks("http://cb-3", "http://cb-4")))
 
 		require.Len(t, wf.Callbacks, 1)
 		require.Len(t, wf.Updates["u1"].Get(ctx).Callbacks, 1)
@@ -230,8 +539,8 @@ func TestValidateCallbackAddition(t *testing.T) {
 	t.Run("CountsUpdateCallbacksAgainstTheExecutionLimit", func(t *testing.T) {
 		ctx := newTestCHASMContext(t)
 		wf := newTestWorkflow()
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(
-			ctx, timestamppb.Now(), "u1", "req-1", nexusCallbacks("http://cb-1", "http://cb-2"),
+		require.NoError(t, addTestUpdateCompletionCallbacks(
+			wf, ctx, "u1", "req-1", nexusCallbacks("http://cb-1", "http://cb-2"),
 		))
 
 		err := wf.ValidateCallbackAddition(
@@ -273,7 +582,7 @@ func TestValidateCallbackAddition(t *testing.T) {
 		wfCBs := nexusCallbacks("http://cb-1", "http://cb-2")
 		updateCBs := nexusCallbacks("http://cb-3", "http://cb-4")
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", wfCBs))
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u1", "req-2", updateCBs))
+		require.NoError(t, addTestUpdateCompletionCallbacks(wf, ctx, "u1", "req-2", updateCBs))
 
 		// A retried request whose callbacks are already attached is a no-op when attached, so it
 		// is not counted a second time, even though the execution and the update are at their limit.
@@ -385,7 +694,7 @@ func TestValidateCallbackAddition_InFlight(t *testing.T) {
 	t.Run("DoesNotRecountAnInFlightRequestAlreadyPersisted", func(t *testing.T) {
 		ctx := newTestCHASMContext(t)
 		wf := newTestWorkflow()
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u1", "req-1", inFlightU1.Callbacks))
+		require.NoError(t, addTestUpdateCompletionCallbacks(wf, ctx, "u1", "req-1", inFlightU1.Callbacks))
 
 		// The Update was admitted from an UpdateAdmitted event, which persisted its callbacks, and a
 		// retry of that request was then buffered.
