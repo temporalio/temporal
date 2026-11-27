@@ -64,6 +64,7 @@ func New(
 	nextEventID int64,
 	dbBufferBatch []*historypb.HistoryEvent,
 	metricsHandler metrics.Handler,
+	namespaceName namespace.Name,
 	maxEventBatchSizeInBytes dynamicconfig.IntPropertyFn,
 ) *HistoryBuilder {
 	return &HistoryBuilder{
@@ -88,6 +89,7 @@ func New(
 			maxEventBatchSizeInBytes: maxEventBatchSizeInBytes,
 
 			metricsHandler: metricsHandler,
+			namespaceTag:   metrics.NamespaceTag(namespaceName.String()),
 		},
 		EventFactory: EventFactory{timeSource: timeSource, version: version},
 	}

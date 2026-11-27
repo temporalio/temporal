@@ -434,6 +434,7 @@ func NewMutableState(
 		common.FirstEventID,
 		s.bufferEventsInDB,
 		s.metricsHandler,
+		namespaceEntry.Name(),
 		s.config.MaximumEventBatchSizeInBytes,
 	)
 	s.taskGenerator = GetTaskGeneratorProvider().NewTaskGenerator(shard, s)
@@ -556,6 +557,7 @@ func NewMutableStateFromDB(
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
+		mutableState.namespaceEntry.Name(),
 		mutableState.config.MaximumEventBatchSizeInBytes,
 	)
 	mutableState.currentVersion = common.EmptyVersion
@@ -1231,6 +1233,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.namespaceEntry.Name(),
 		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
@@ -5883,14 +5886,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
 	if err := ms.ApplyWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
 		return nil, err
 	}
-	// Add links from Nexus callbacks to the event.
-	callbacksLinks := make([]*commonpb.Link, 0)
-	for _, cb := range acceptedRequest.GetCompletionCallbacks() {
-		if cb.GetNexus() != nil {
-			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
-		}
-	}
-	event.Links = callbacksLinks
 	return event, nil
 }
 
@@ -8814,6 +8809,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.namespaceEntry.Name(),
 		ms.config.MaximumEventBatchSizeInBytes,
 	)
 

@@ -834,6 +834,19 @@ var (
 
 	VisibilityListWorkflowsQueryLength = NewDimensionlessHistogramDef("visibility_list_workflows_query_length")
 
+	HistoryEventLinksAttached = NewCounterDef(
+		"history_event_links_attached",
+		WithDescription("Number of top-level links on history events added to the active history builder, by namespace, event type, and link variant. Write retries can record the same attachment again."),
+	)
+	HistoryEventLinksPerEvent = NewDimensionlessHistogramDef(
+		"history_event_links_per_event",
+		WithDescription("Number of top-level links per linked event added to the active history builder, by namespace and event type. Write retries can record the same event again."),
+	)
+	HistoryEventCompletionCallbacksAttached = NewCounterDef(
+		"history_event_completion_callbacks_attached",
+		WithDescription("Number of completion callbacks on history events added to the active history builder, by namespace and event type. Write retries can record the same attachment again."),
+	)
+
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
 	CacheFailures                                = NewCounterDef("cache_errors")

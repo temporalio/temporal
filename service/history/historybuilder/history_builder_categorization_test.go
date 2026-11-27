@@ -1232,7 +1232,7 @@ type builderConfig struct {
 func newHistoryBuilderFromConfig(config builderConfig) *HistoryBuilder {
 	ts := clock.NewRealTimeSource()
 	tig := func(n int) ([]int64, error) { return []int64{1, 2, 3, 4, 5}, nil }
-	return New(ts, tig, int64(101), config.nextEventId, config.dbBufferBatch, StubHandler{}, tests.NewDynamicConfig().MaximumEventBatchSizeInBytes)
+	return New(ts, tig, int64(101), config.nextEventId, config.dbBufferBatch, StubHandler{}, "", tests.NewDynamicConfig().MaximumEventBatchSizeInBytes)
 }
 
 func newHistoryBuilder() *HistoryBuilder {
