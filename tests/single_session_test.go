@@ -1223,43 +1223,209 @@ func TestSingleSessionActivityRetryStaysOnWorker(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// updateWithAutoUpgradeOverride asks to give the execution an auto-upgrade versioning override through
-// UpdateWorkflowExecutionOptions. Unlike a pinned override, it needs no registered version, so only the session rule
-// can reject it.
-func updateWithAutoUpgradeOverride(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) error {
+// autoUpgradeOverride is an auto-upgrade versioning override. Unlike a pinned override, it needs no registered version.
+func autoUpgradeOverride() *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}}
+}
+
+// updateVersioningOverride sets the execution's versioning override through UpdateWorkflowExecutionOptions, or removes
+// it when override is nil.
+func updateVersioningOverride(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, override *workflowpb.VersioningOverride) error {
 	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(t.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: execution,
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
-		}},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: override},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	return err
 }
 
+// versioningOverrideUpdates are the two ways UpdateWorkflowExecutionOptions can touch a versioning override.
+func versioningOverrideUpdates() []struct {
+	name     string
+	override *workflowpb.VersioningOverride
+} {
+	return []struct {
+		name     string
+		override *workflowpb.VersioningOverride
+	}{
+		{name: "set", override: autoUpgradeOverride()},
+		{name: "remove"},
+	}
+}
+
+func resetStickyTaskQueue(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution) error {
+	_, err := env.FrontendClient().ResetStickyTaskQueue(t.Context(), &workflowservice.ResetStickyTaskQueueRequest{
+		Namespace: env.Namespace().String(), Execution: execution,
+	})
+	return err
+}
+
+// newCurrentVersionEnv is a single-partition versioning test environment whose task queue's current version is tv's
+// deployment version.
+func newCurrentVersionEnv(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
+	env := newVersioning3TestEnv(t, append([]testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	}, opts...)...)
+	tv := env.Tv()
+	_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(t.Context(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId: env.NamespaceID().String(), TaskQueue: tv.TaskQueue().GetName(),
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		DeploymentName: tv.DeploymentSeries(),
+		UpdateRoutingConfig: &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
+			CurrentVersionChangedTime: timestamppb.Now(), RevisionNumber: 1,
+		},
+		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+			tv.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+		},
+	})
+	require.NoError(t, err)
+	return env
+}
+
+// startWithVersioningOverride starts tv's workflow with the override built by override, or with none when it is nil.
+func startWithVersioningOverride(t *testing.T, env *testcore.TestEnv, tv *testvars.TestVars, override func(*testvars.TestVars) *workflowpb.VersioningOverride) {
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
+		WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
+		WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
+	}
+	if override != nil {
+		request.VersioningOverride = override(tv)
+	}
+	_, err := env.FrontendClient().StartWorkflowExecution(t.Context(), request)
+	require.NoError(t, err)
+}
+
+// newVersionedSingleSessionEnv starts a workflow with the override built by override (none when nil) on a task queue
+// whose current version is that of S, a versioned single-session worker that has not acquired it yet.
+func newVersionedSingleSessionEnv(t *testing.T, override func(*testvars.TestVars) *workflowpb.VersioningOverride) *singleSessionEnv {
+	env := newCurrentVersionEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true))
+	tv := env.Tv()
+	startWithVersioningOverride(t, env.TestEnv, tv, override)
+	return &singleSessionEnv{
+		t: t, env: env.TestEnv, tv: tv, poller: taskpoller.New(t, env.FrontendClient(), env.Namespace().String()),
+		session: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+			SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
+		}},
+		deploymentOptions: tv.WorkerDeploymentOptions(true),
+	}
+}
+
+// completeVersionedWorkflowTask completes the next workflow task on the normal queue as a versioned worker without
+// session options.
+func completeVersionedWorkflowTask(t *testing.T, poller *taskpoller.TaskPoller, tv *testvars.TestVars) {
+	_, err := poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: tv.TaskQueue(), DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	}).HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	require.NoError(t, err)
+}
+
+// requireWorkflowTaskFailedWith requires the last WorkflowTaskFailed event in the execution's history to have cause.
+func requireWorkflowTaskFailedWith(t *testing.T, env *testcore.TestEnv, execution *commonpb.WorkflowExecution, cause enumspb.WorkflowTaskFailedCause) {
+	var failedCause enumspb.WorkflowTaskFailedCause
+	for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+		if attributes := event.GetWorkflowTaskFailedEventAttributes(); attributes != nil {
+			failedCause = attributes.GetCause()
+		}
+	}
+	require.Equal(t, cause, failedCause)
+}
+
+// upgradeOnContinueAsNewCmd continues the workflow as new, asking its next run to upgrade to the current version.
+func upgradeOnContinueAsNewCmd(tv *testvars.TestVars) *commandpb.Command {
+	command := continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())
+	command.GetContinueAsNewWorkflowExecutionCommandAttributes().InitialVersioningBehavior =
+		enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	return command
+}
+
 /*
-TestSingleSessionRejectsVersioningOverride tests that a workflow bound to a single-session worker cannot be given a
-versioning override:
+TestSingleSessionRejectsVersioningOverride tests that a workflow bound to a single-session worker cannot have its
+versioning override set or removed:
  1. Single-session worker S acquires the workflow.
- 2. UpdateWorkflowExecutionOptions setting a versioning override is rejected.
+ 2. UpdateWorkflowExecutionOptions setting a versioning override, or removing it (the workflow has none, but the mask
+    still names it), is rejected.
  3. The binding is unchanged: the next workflow task is delivered on S's sticky queue, never on the normal queue.
 */
 func TestSingleSessionRejectsVersioningOverride(t *testing.T) {
 	t.Parallel()
+	for _, tc := range versioningOverrideUpdates() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newSingleSessionEnv(t, 10*time.Second, nil)
+
+			err := updateVersioningOverride(t, e.env, e.tv.WorkflowExecution(), tc.override)
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, "bound to a worker servicing sessions")
+
+			e.signal()
+			e.requireNoWorkflowTaskOnNormalQueue()
+			err = e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			})
+			require.NoError(t, err)
+		})
+	}
+}
+
+/*
+TestSingleSessionRejectsResetStickyTaskQueue tests that resetting the sticky queue does not release a single-session
+binding:
+ 1. Single-session worker S acquires the workflow.
+ 2. ResetStickyTaskQueue is rejected with FailedPrecondition.
+ 3. The binding is unchanged: the next workflow task is delivered on S's sticky queue, never on the normal queue.
+*/
+func TestSingleSessionRejectsResetStickyTaskQueue(t *testing.T) {
+	t.Parallel()
 	e := newSingleSessionEnv(t, 10*time.Second, nil)
 
-	err := updateWithAutoUpgradeOverride(t, e.env, e.tv.WorkflowExecution())
-	var invalidArgument *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArgument)
-	require.ErrorContains(t, err, "bound to a worker servicing sessions")
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, resetStickyTaskQueue(t, e.env, e.tv.WorkflowExecution()), &failedPrecondition)
 
 	e.signal()
 	e.requireNoWorkflowTaskOnNormalQueue()
-	err = e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	err := e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	})
 	require.NoError(t, err)
+}
+
+/*
+TestSingleSessionRejectsUpgradeOnContinueAsNew tests that a pinned workflow bound to a single-session worker cannot
+upgrade on continue-as-new:
+ 1. Versioned single-session worker S acquires the workflow and completes its workflow task as pinned.
+ 2. S continues the workflow as new with an auto-upgrade initial versioning behavior: the workflow task fails with
+    BAD_CONTINUE_AS_NEW_ATTRIBUTES.
+ 3. The retry is delivered on S, and a plain continue-as-new completes it.
+*/
+func TestSingleSessionRejectsUpgradeOnContinueAsNew(t *testing.T) {
+	t.Parallel()
+	e := newVersionedSingleSessionEnv(t, nil)
+	complete := func(commands ...*commandpb.Command) error {
+		return e.pollWorkflowTaskOnS(10*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: commands, VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, DeploymentOptions: e.deploymentOptions,
+			}, nil
+		})
+	}
+	require.NoError(t, complete())
+
+	e.signal()
+	err := complete(upgradeOnContinueAsNewCmd(e.tv))
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	requireWorkflowTaskFailedWith(t, e.env, e.tv.WorkflowExecution(), enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES)
+
+	require.NoError(t, complete(continueAsNewCmd(e.tv.WorkflowType(), e.tv.TaskQueue())))
 }
 
 /*
@@ -1269,10 +1435,10 @@ worker can run with:
  2. pinned: S completes the workflow task as pinned, and its next workflow task is also delivered on S.
  3. auto-upgrade: S completes as auto-upgrade, which fails the task with FEATURE_DISABLED. S is then redeployed as
     pinned, and the retry, still delivered on S, completes.
- 4. auto-upgrade override: the workflow starts with an auto-upgrade versioning override, so S's pinned completion
-    fails too. Removing the override lets the retry, still delivered on S, complete.
- 5. pinned override: the workflow starts pinned to S's version, so S's completion passes even when S declares
-    auto-upgrade, and the next workflow task is delivered on S.
+ 4. auto-upgrade override: the workflow starts with an auto-upgrade versioning override, so S never acquires it: S's
+    poll gets nothing, and a worker without session options completes its workflow task.
+ 5. pinned override: the workflow starts pinned to S's version, so S acquires it, S's completion passes even when S
+    declares auto-upgrade, and the next workflow task is delivered on S.
 */
 func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 	t.Parallel()
@@ -1287,54 +1453,19 @@ func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 		{name: "pinned", firstBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED},
 		{name: "pinned override", firstBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, pinnedOverride: true},
 		{name: "auto-upgrade", firstBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, rejected: true},
-		{name: "auto-upgrade override", firstBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED, autoUpgradeOverride: true, rejected: true},
+		{name: "auto-upgrade override", autoUpgradeOverride: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			env := newVersioning3TestEnv(t,
-				testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
-				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
-				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
-			)
-			tv := env.Tv()
-			client := env.FrontendClient()
-			_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(t.Context(), &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId: env.NamespaceID().String(), TaskQueue: tv.TaskQueue().GetName(),
-				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-				DeploymentName: tv.DeploymentSeries(),
-				UpdateRoutingConfig: &deploymentpb.RoutingConfig{
-					CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
-					CurrentVersionChangedTime: timestamppb.Now(), RevisionNumber: 1,
-				},
-				UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-					tv.BuildID(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-				},
-			})
-			require.NoError(t, err)
-
-			startRequest := &workflowservice.StartWorkflowExecutionRequest{
-				Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
-				WorkflowType: tv.WorkflowType(), TaskQueue: tv.TaskQueue(),
-				WorkflowRunTimeout: durationpb.New(time.Minute), WorkflowTaskTimeout: durationpb.New(30 * time.Second),
-			}
+			var override func(*testvars.TestVars) *workflowpb.VersioningOverride
 			if tc.autoUpgradeOverride {
-				startRequest.VersioningOverride = &workflowpb.VersioningOverride{
-					Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
-				}
+				override = func(*testvars.TestVars) *workflowpb.VersioningOverride { return autoUpgradeOverride() }
 			}
 			if tc.pinnedOverride {
-				startRequest.VersioningOverride = tv.VersioningOverridePinned()
+				override = (*testvars.TestVars).VersioningOverridePinned
 			}
-			_, err = client.StartWorkflowExecution(t.Context(), startRequest)
-			require.NoError(t, err)
-
-			e := &singleSessionEnv{
-				t: t, env: env.TestEnv, tv: tv, poller: taskpoller.New(t, client, env.Namespace().String()),
-				session: &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
-					SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: tv.StickyTaskQueue().GetName()},
-				}},
-				deploymentOptions: tv.WorkerDeploymentOptions(true),
-			}
+			e := newVersionedSingleSessionEnv(t, override)
+			tv := e.tv
 			complete := func(behavior enumspb.VersioningBehavior) error {
 				return e.pollWorkflowTaskOnS(10*time.Second, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 					require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
@@ -1344,7 +1475,17 @@ func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 				})
 			}
 
-			err = complete(tc.firstBehavior)
+			if tc.autoUpgradeOverride {
+				err := e.pollWorkflowTaskOnS(stickyPollTimeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					require.FailNow(t, "a workflow with an auto-upgrade override must not be acquired by a single-session worker")
+					return nil, nil
+				})
+				require.Error(t, err)
+				completeVersionedWorkflowTask(t, e.poller, tv)
+				return
+			}
+
+			err := complete(tc.firstBehavior)
 			if !tc.rejected {
 				require.NoError(t, err)
 				e.signal()
@@ -1354,22 +1495,7 @@ func TestSingleSessionVersionedWorkerBehaviors(t *testing.T) {
 
 			var invalidArgument *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgument)
-			var failedCause enumspb.WorkflowTaskFailedCause
-			for _, event := range env.GetHistory(env.Namespace().String(), tv.WorkflowExecution()) {
-				if attributes := event.GetWorkflowTaskFailedEventAttributes(); attributes != nil {
-					failedCause = attributes.GetCause()
-				}
-			}
-			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failedCause)
-
-			if tc.autoUpgradeOverride {
-				_, err = client.UpdateWorkflowExecutionOptions(t.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-					Namespace: env.Namespace().String(), WorkflowExecution: tv.WorkflowExecution(),
-					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
-					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-				})
-				require.NoError(t, err, "a bound workflow's override can be removed")
-			}
+			requireWorkflowTaskFailedWith(t, e.env, tv.WorkflowExecution(), enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED)
 			require.NoError(t, complete(enumspb.VERSIONING_BEHAVIOR_PINNED), "the retry is delivered on S and completes as pinned")
 		})
 	}

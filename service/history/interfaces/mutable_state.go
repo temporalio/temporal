@@ -61,19 +61,16 @@ const (
 	// UpdateNonExclusiveWorkerBinding for the starting worker.
 	StickyClearForStartedOffStickyQueue
 	// StickyClearForBoundWorkerLost means the workflow's bound multi-session worker no longer serves it: a worker
-	// without sessions started one of its tasks, or the bound worker is gone or was reset. The binding is released; the
-	// caller reschedules the pending work.
+	// without sessions started one of its tasks, or the bound worker is gone. The binding is released; the caller
+	// reschedules the pending work.
 	StickyClearForBoundWorkerLost
 	// StickyClearForVersioning means the workflow moves to another deployment version or build ID; the bound worker may
 	// be on the old one, so the binding is released.
 	// TODO (Shivam): Multi-session workers do not support worker versioning yet; revisit how a versioning change
 	// releases and reschedules a multi-session binding in public preview (MTC-934).
 	StickyClearForVersioning
-	// StickyClearForResetStickyTaskQueue means the ResetStickyTaskQueue API was called. The API first unbinds a
-	// workflow bound to a multi-session worker and reschedules its pending work, so this clear only touches ordinary
-	// stickiness.
-	// TODO (Shivam): For multi-session workers, replace this with the generic unbind-session API in public preview
-	// (MTC-1076).
+	// StickyClearForResetStickyTaskQueue means the ResetStickyTaskQueue API was called. The API refuses a workflow bound
+	// to a session worker, so this clear only touches ordinary stickiness.
 	StickyClearForResetStickyTaskQueue
 	// StickyClearForWorkflowClose means the workflow closed, so the binding is released.
 	StickyClearForWorkflowClose

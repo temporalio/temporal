@@ -16,6 +16,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -311,7 +312,7 @@ func (e *sessionMoveEnv) requireCompletionRejected() {
 	require.ErrorAs(e.t, err, &invalidArgument)
 	rejections := 0
 	for _, event := range e.env.GetHistory(e.env.Namespace().String(), e.tv.WorkflowExecution()) {
-		if event.GetWorkflowTaskFailedEventAttributes().GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES {
+		if event.GetWorkflowTaskFailedEventAttributes().GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_SESSION_WORKER_REQUIRED {
 			rejections++
 		}
 	}
@@ -603,7 +604,7 @@ unbound workflow with waiting session activities:
  1. A binds the session and dies with a session activity pending, so the workflow is unbound and a workflow task is
     scheduled on the normal queue.
  2. Worker Z without session options starts that workflow task, but its completion is rejected: the workflow task
-    fails with BAD_SCHEDULE_ACTIVITY_ATTRIBUTES. Z's completion of the retry is rejected too, and adds no failure to
+    fails with SESSION_WORKER_REQUIRED. Z's completion of the retry is rejected too, and adds no failure to
     history, since the retry is transient. Z never receives the session activity.
  3. Session worker Y starts the retried workflow task, binding the workflow to Y; its completion is accepted, and the
     activity is delivered on Y's sticky queue.
@@ -1190,23 +1191,126 @@ func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.Wo
 }
 
 /*
-TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
-versioning override:
+TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot have its
+versioning override set or removed:
  1. Worker A binds the session and is alive on its sticky queue.
- 2. UpdateWorkflowExecutionOptions setting a versioning override is rejected.
+ 2. UpdateWorkflowExecutionOptions setting a versioning override, or removing it (the workflow has none, but the mask
+    still names it), is rejected.
  3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
 */
 func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
+	t.Parallel()
+	for _, tc := range versioningOverrideUpdates() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newSessionMoveEnv(t, 10*time.Second)
+			e.bindToAWith(time.Second)
+			e.registerStickyPoller("A")
+
+			err := updateVersioningOverride(t, e.env, e.tv.WorkflowExecution(), tc.override)
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, "bound to a worker servicing sessions")
+
+			e.signal()
+			e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
+		})
+	}
+}
+
+/*
+TestWorkflowSessionRejectsResetStickyTaskQueue tests that resetting the sticky queue does not release a multi-session
+binding:
+ 1. Worker A binds the session and is alive on its sticky queue.
+ 2. ResetStickyTaskQueue is rejected with FailedPrecondition.
+ 3. The binding is unchanged: the workflow stays bound to A, and its next workflow task is delivered on A's sticky
+    queue.
+*/
+func TestWorkflowSessionRejectsResetStickyTaskQueue(t *testing.T) {
 	t.Parallel()
 	e := newSessionMoveEnv(t, 10*time.Second)
 	e.bindToAWith(time.Second)
 	e.registerStickyPoller("A")
 
-	err := updateWithAutoUpgradeOverride(t, e.env, e.tv.WorkflowExecution())
-	var invalidArgument *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArgument)
-	require.ErrorContains(t, err, "bound to a worker servicing sessions")
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, resetStickyTaskQueue(t, e.env, e.tv.WorkflowExecution()), &failedPrecondition)
+	protorequire.ProtoEqual(t, &sessionpb.SessionInfo{WorkerQueue: e.instanceKey("A")}, persistedBinding(t, e.env, e.tv.WorkflowExecution()))
 
 	e.signal()
 	e.completeOn("A", e.stickyQueue("A"), 5*time.Second)
+}
+
+/*
+TestWorkflowSessionRejectsUpgradeOnContinueAsNew tests that a workflow bound to a multi-session worker cannot upgrade on
+continue-as-new:
+ 1. Worker A binds the session and is alive on its sticky queue.
+ 2. A continues the workflow as new with an auto-upgrade initial versioning behavior: the workflow task fails with
+    BAD_CONTINUE_AS_NEW_ATTRIBUTES.
+ 3. The retry is delivered on A's sticky queue, and a plain continue-as-new completes it.
+*/
+func TestWorkflowSessionRejectsUpgradeOnContinueAsNew(t *testing.T) {
+	t.Parallel()
+	e := newSessionMoveEnv(t, 10*time.Second)
+	e.bindToAWith(time.Second)
+	e.registerStickyPoller("A")
+
+	e.signal()
+	err := e.pollWorkflowTask("A", e.stickyQueue("A"), 5*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{upgradeOnContinueAsNewCmd(e.tv)}, StickyAttributes: e.stickyAttributes("A", time.Second),
+		}, nil
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	requireWorkflowTaskFailedWith(t, e.env, e.tv.WorkflowExecution(), enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES)
+
+	err = e.pollWorkflowTask("A", e.stickyQueue("A"), 5*time.Second, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{continueAsNewCmd(e.tv.WorkflowType(), e.tv.TaskQueue())}, StickyAttributes: e.stickyAttributes("A", time.Second),
+		}, nil
+	})
+	require.NoError(t, err)
+}
+
+/*
+TestWorkflowSessionRefusesWorkflowWithVersioningOverride tests that a multi-session worker never binds a workflow with a
+versioning override:
+ 1. A workflow starts with an auto-upgrade versioning override, or with none.
+ 2. Multi-session worker Y polls the normal queue: with the override it gets nothing, and the workflow stays unbound;
+    without one, Y binds it.
+ 3. A worker without session options completes the workflow task Y did not take.
+
+A pinned override cannot be tested here: it routes the workflow's tasks to a deployment version, and multi-session
+workers cannot poll with worker versioning.
+*/
+func TestWorkflowSessionRefusesWorkflowWithVersioningOverride(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		override func(*testvars.TestVars) *workflowpb.VersioningOverride
+	}{
+		{name: "auto-upgrade override", override: func(*testvars.TestVars) *workflowpb.VersioningOverride { return autoUpgradeOverride() }},
+		{name: "no override"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true))
+			tv := env.Tv()
+			startWithVersioningOverride(t, env, tv, tc.override)
+			e := &sessionMoveEnv{t: t, env: env, tv: tv, poller: taskpoller.New(t, env.FrontendClient(), env.Namespace().String())}
+
+			if tc.override == nil {
+				e.completeOn("Y", e.tv.TaskQueue(), 10*time.Second)
+				protorequire.ProtoEqual(t, &sessionpb.SessionInfo{WorkerQueue: e.instanceKey("Y")}, persistedBinding(t, env, tv.WorkflowExecution()))
+				return
+			}
+			err := e.pollWorkflowTask("Y", e.tv.TaskQueue(), stickyPollTimeout, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				require.FailNow(t, "a workflow with a versioning override must not reach a multi-session worker")
+				return nil, nil
+			})
+			require.Error(t, err)
+			require.Nil(t, persistedBinding(t, env, tv.WorkflowExecution()))
+			e.completeOn("", e.tv.TaskQueue(), 10*time.Second)
+		})
+	}
 }

@@ -59,7 +59,7 @@ func Invoke(
 				// to prevent clearing and reloading mutable state while releasing the lock
 				return nil, consts.ErrWorkflowCompleted
 			}
-			if err := rejectVersioningOverrideForSessionBinding(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask()); err != nil {
+			if err := rejectVersioningOverrideForSessionBinding(mutableState, req.GetUpdateMask()); err != nil {
 				return nil, err
 			}
 
@@ -148,7 +148,7 @@ func MergeAndApply(
 	updateMask *fieldmaskpb.FieldMask,
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
-	if err := rejectVersioningOverrideForSessionBinding(ms, opts, updateMask); err != nil {
+	if err := rejectVersioningOverrideForSessionBinding(ms, updateMask); err != nil {
 		return nil, false, err
 	}
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
@@ -177,25 +177,18 @@ func MergeAndApply(
 	return mergedOpts, hasChanges, nil
 }
 
-// rejectVersioningOverrideForSessionBinding rejects setting a versioning override on a workflow bound to a session
-// worker. The binding keeps sending the workflow's tasks to that worker, so the workflow cannot move to the version the
-// override asks for. Removing the override is allowed: the behavior the worker declares then applies, and it is checked
-// when each workflow task completes. Overrides given when the workflow starts are not checked here either; they are
-// also checked when its workflow tasks complete.
-func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, opts *workflowpb.WorkflowExecutionOptions, updateMask *fieldmaskpb.FieldMask) error {
+// rejectVersioningOverrideForSessionBinding rejects setting or removing the versioning override of a workflow bound to
+// a session worker. The binding keeps sending the workflow's tasks to that worker, and either change can move the
+// workflow to another version, which sessions do not support yet.
+func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, updateMask *fieldmaskpb.FieldMask) error {
 	if ms.GetExecutionInfo().GetSessionState() == nil {
 		// Not bound to a worker servicing sessions.
-		return nil
-	}
-	if opts.GetVersioningOverride() == nil {
-		// Removing the override hands the workflow's behavior back to its worker, which each workflow task completion
-		// validates.
 		return nil
 	}
 	for path := range util.ParseFieldMask(updateMask) {
 		if path == "versioningOverride" || strings.HasPrefix(path, "versioningOverride.") {
 			// TODO (Shivam): Session bindings do not follow versioning overrides yet (MTC-934).
-			return serviceerror.NewInvalidArgument("versioning override is not supported for a workflow bound to a worker servicing sessions")
+			return serviceerror.NewInvalidArgument("versioning override cannot be set or removed for a workflow bound to a worker servicing sessions")
 		}
 	}
 	return nil

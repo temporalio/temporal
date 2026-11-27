@@ -50,21 +50,10 @@ func resetStickyTaskQueue(mutableState historyi.MutableState) (*api.UpdateWorkfl
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
-	// Forgetting a bound worker unbinds the workflow; its session activities wait for the next binding.
-	if workerQueue := mutableState.SessionWorkerQueue(); workerQueue != "" {
-		if mutableState.HasExclusiveBinding() {
-			// A single-session binding is never released, so there is no sticky queue to reset.
-			return nil, serviceerror.NewFailedPrecondition("workflow is bound to a single-session worker; its sticky task queue cannot be reset")
-		}
-		unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue)
-		if err != nil {
-			return nil, err
-		}
-		return &api.UpdateWorkflowAction{
-			Noop: !unbound,
-			// Session activities wait while the workflow is unbound; a workflow task lets a session worker bind it.
-			CreateWorkflowTask: unbound && mutableState.HasPendingSessionActivities(),
-		}, nil
+	if mutableState.SessionWorkerQueue() != "" {
+		// A session binding is not a cache: the workflow's tasks and session activities belong to the bound worker, so
+		// resetting stickiness must not release it.
+		return nil, serviceerror.NewFailedPrecondition("workflow is bound to a session worker; its sticky task queue cannot be reset")
 	}
 	mutableState.ClearStickyTaskQueue(historyi.StickyClearForResetStickyTaskQueue)
 	return &api.UpdateWorkflowAction{

@@ -88,6 +88,16 @@ func Invoke(
 			if workflowIsExclusivelyBound && (workerStableIdentity == "" || workerStableIdentity != mutableState.SessionWorkerQueue()) {
 				return nil, serviceerrors.NewObsoleteMatchingTask("workflow is bound to another single-session destination")
 			}
+			// Sessions only support a pinned override, and only on a single-session worker. Refuse any other override
+			// before binding, so Matching keeps the task for a worker that can run it.
+			if override := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); override != nil {
+				switch {
+				case workerIsSingleSession != nil && !worker_versioning.OverrideIsPinned(override):
+					return nil, serviceerror.NewFailedPrecondition("a workflow with a versioning override that is not pinned cannot run on a single-session worker")
+				case req.PollRequest.GetSessionOptions().GetMultiSession() != nil:
+					return nil, serviceerror.NewFailedPrecondition("a workflow with a versioning override cannot run on a multi-session worker")
+				}
+			}
 
 			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
 

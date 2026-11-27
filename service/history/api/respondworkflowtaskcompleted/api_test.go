@@ -1736,7 +1736,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestCompletionWaitsForSessionWorker(
 			s.Require().ErrorAs(err, &invalidArgument)
 			s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, historyEvents[0].GetEventType())
 			s.Require().Equal(
-				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_SESSION_WORKER_REQUIRED,
 				historyEvents[0].GetWorkflowTaskFailedEventAttributes().GetCause(),
 			)
 		})

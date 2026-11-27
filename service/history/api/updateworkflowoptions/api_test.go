@@ -609,7 +609,7 @@ func TestMergeAndApply(t *testing.T) {
 }
 
 // TestMergeAndApplyRejectsVersioningOverrideForSessionBinding tests that the versioning override of a workflow bound to
-// a worker servicing sessions cannot be set, while it can be removed and its other options can still be updated.
+// a worker servicing sessions can be neither set nor removed, while its other options can still be updated.
 func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 	pinned := &workflowpb.VersioningOverride{
 		Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -634,9 +634,9 @@ func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 		{name: "multi-session binding, set override", sessionState: &persistencespb.SessionState{},
 			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask, rejected: true},
 		{name: "multi-session binding, unset override", sessionState: &persistencespb.SessionState{},
-			override: autoUpgrade, options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask},
+			override: autoUpgrade, options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask, rejected: true},
 		{name: "single-session binding, unset override", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
-			override: autoUpgrade, options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask},
+			override: autoUpgrade, options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask, rejected: true},
 		{name: "binding, override mixed with priority", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
 			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned, Priority: priority},
 			mask:    &fieldmaskpb.FieldMask{Paths: []string{"versioning_override", "priority"}}, rejected: true},

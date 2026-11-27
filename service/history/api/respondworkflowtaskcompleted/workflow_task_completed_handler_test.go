@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -1331,4 +1332,34 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 	require.Nil(t, response)
 	require.True(t, handler.stopProcessing)
 	require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
+}
+
+// TestUpgradeOnContinueAsNewRejectedForSessionBinding tests that a workflow bound to a session worker cannot ask its
+// next run to upgrade to another version: sessions only support pinned workflows, so the workflow task fails with
+// BAD_CONTINUE_AS_NEW_ATTRIBUTES before the next run starts.
+func TestUpgradeOnContinueAsNewRejectedForSessionBinding(t *testing.T) {
+	t.Parallel()
+	for _, sessionState := range []*persistencespb.SessionState{{ExclusiveWorker: true}, {}} {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue", SessionState: sessionState,
+		}).AnyTimes()
+		config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
+		handler := &workflowTaskCompletedHandler{
+			mutableState:                   ms,
+			attrValidator:                  api.NewCommandAttrValidator(namespace.NewMockRegistry(ctrl), config, nil),
+			searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+		}
+		event, err := handler.handleCommandContinueAsNewWorkflow(t.Context(), &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+			WorkflowType:              &commonpb.WorkflowType{Name: "workflow"},
+			TaskQueue:                 &taskqueuepb.TaskQueue{Name: "normal-queue"},
+			InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		})
+		require.NoError(t, err)
+		require.Nil(t, event)
+		require.True(t, handler.stopProcessing)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
+	}
 }

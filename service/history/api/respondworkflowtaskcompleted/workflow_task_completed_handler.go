@@ -1204,6 +1204,14 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		return nil, err
 	}
 
+	// Sessions only support pinned workflows within a single run: a bound workflow cannot ask its next run to upgrade to
+	// another version.
+	if attr.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED &&
+		handler.mutableState.GetExecutionInfo().GetSessionState() != nil {
+		err := serviceerror.NewInvalidArgument("upgrade on continue-as-new is not supported for a workflow bound to a worker servicing sessions")
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+	}
+
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO(carlydf): this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {

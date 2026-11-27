@@ -447,7 +447,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// workflow task binds it. Until one does, a worker without sessions cannot complete the workflow's tasks; the
 		// task is retried until a session worker takes it, binds the workflow, and the waiting activities are sent to it.
 		wtFailedCause = newWorkflowTaskFailedCause(
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_SESSION_WORKER_REQUIRED,
 			serviceerror.NewInvalidArgument(
 				"session activities are waiting for a session worker: only a worker servicing sessions can complete this "+
 					"workflow's tasks until one binds it"),
