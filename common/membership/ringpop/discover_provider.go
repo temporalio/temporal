@@ -9,13 +9,13 @@ import (
 
 type refreshHook func() ([]string, error)
 
-// SnapshotHosts provides a replaceable snapshot of hosts to bootstrap and perform
-// healing from. Hosts refreshes the snapshot on every call. A successful refresh
-// replaces the snapshot, including when it returns an empty list.
+// refreshingHosts provides a replaceable view of hosts to bootstrap and perform
+// healing from. Hosts refreshes the view on every call. A successful refresh
+// replaces the view, including when it returns an empty list.
 //
-// Note: If a refresh fails, Hosts logs a warning and returns the previous snapshot.
+// Note: If a refresh fails, Hosts logs a warning and returns the previous view.
 // This preserves the last known seeds when the persistence store is unavailable.
-type SnapshotHosts struct {
+type refreshingHosts struct {
 	mu sync.Mutex
 
 	hosts   []string
@@ -24,9 +24,9 @@ type SnapshotHosts struct {
 	logger log.Logger
 }
 
-// Hosts refreshes the current host snapshot, and returns it. A refresh error does
-// not clear the snapshot or prevent the caller from using it.
-func (p *SnapshotHosts) Hosts() ([]string, error) {
+// Hosts refreshes the current host view, and returns it. A refresh error does
+// not clear the view or prevent the caller from using it.
+func (p *refreshingHosts) Hosts() ([]string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -40,10 +40,8 @@ func (p *SnapshotHosts) Hosts() ([]string, error) {
 	return p.hosts, nil
 }
 
-// New creates a provider with an initial host snapshot, a logger, and a refresh
-// hook.
-func NewSnapshotHosts(logger log.Logger, refresh refreshHook, hosts ...string) *SnapshotHosts {
-	return &SnapshotHosts{
+func newRefreshingHosts(logger log.Logger, refresh refreshHook, hosts ...string) *refreshingHosts {
+	return &refreshingHosts{
 		hosts:  hosts,
 		logger: logger,
 

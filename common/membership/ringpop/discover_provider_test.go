@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-func TestHostsReplacesSnapshot(t *testing.T) {
+func TestHostsReplacesView(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -16,11 +16,11 @@ func TestHostsReplacesSnapshot(t *testing.T) {
 		refreshedHost []string
 	}{
 		{
-			name:          "non-empty snapshot",
+			name:          "non-empty view",
 			refreshedHost: []string{"new-host"},
 		},
 		{
-			name:          "empty snapshot",
+			name:          "empty view",
 			refreshedHost: []string{},
 		},
 	}
@@ -29,7 +29,7 @@ func TestHostsReplacesSnapshot(t *testing.T) {
 			t.Parallel()
 
 			refreshCalls := 0
-			provider := NewSnapshotHosts(log.NewNoopLogger(), func() ([]string, error) {
+			provider := newRefreshingHosts(log.NewNoopLogger(), func() ([]string, error) {
 				refreshCalls++
 				return test.refreshedHost, nil
 			}, "initial")
@@ -49,14 +49,14 @@ func TestHostsReplacesSnapshot(t *testing.T) {
 	}
 }
 
-func TestHostsRetainsSnapshotAndRetriesAfterRefreshError(t *testing.T) {
+func TestHostsRetainsViewAndRetriesAfterRefreshError(t *testing.T) {
 	t.Parallel()
 
 	refreshCalls := 0
-	provider := NewSnapshotHosts(log.NewNoopLogger(), func() ([]string, error) {
+	provider := newRefreshingHosts(log.NewNoopLogger(), func() ([]string, error) {
 		refreshCalls++
 		if refreshCalls == 1 {
-			return nil, errors.New("database unavailable")
+			return nil, errors.New("persistence unavailable")
 		}
 		return []string{"refreshed"}, nil
 	}, "initial")

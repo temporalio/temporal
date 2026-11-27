@@ -231,7 +231,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 			ParallelismFactor: 10,
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
-			DiscoverProvider:  NewSnapshotHosts(rpo.logger, rpo.refreshCurrentHostports, hostPorts...),
+			DiscoverProvider:  newRefreshingHosts(rpo.logger, rpo.refreshCurrentHostports, hostPorts...),
 		}
 
 		_, err = rpo.rp.Bootstrap(bootParams)
