@@ -234,6 +234,31 @@ func HasUpdateCallbackAttachment(ctx context.Context, ms historyi.MutableState, 
 	return wf.HasUpdateCallbackAttachment(chasmCtx, updateID, requestID), nil
 }
 
+// ResolveCallbackAttachmentEventReference prefers the CHASM WorkflowUpdate reference and
+// falls back to legacy mutable state for attachments written by older servers.
+func ResolveCallbackAttachmentEventReference(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+	updateID string,
+	requestID string,
+) (chasmworkflow.CallbackAttachmentEventReference, bool, error) {
+	wf, chasmCtx, err := readCallbackWorkflow(ctx, mutableState)
+	if wf != nil {
+		if reference, found := wf.LookupCallbackAttachmentEventReference(chasmCtx, updateID, requestID); found {
+			return reference, true, nil
+		}
+	}
+
+	if requestIDInfo := mutableState.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil && requestIDInfo.GetAttachTime() == nil {
+		return chasmworkflow.CallbackAttachmentEventReference{
+			EventType: requestIDInfo.GetEventType(),
+			EventID:   requestIDInfo.GetEventId(),
+		}, true, nil
+	}
+
+	return chasmworkflow.CallbackAttachmentEventReference{}, false, err
+}
+
 func readCallbackWorkflow(
 	ctx context.Context,
 	mutableState historyi.MutableState,
