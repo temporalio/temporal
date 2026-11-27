@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -140,74 +141,34 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 }
 
 func newRunIDPrecondition(runID string) connector.Precondition {
-	return func(subject any) bool {
-
-		if runID == "" {
-			return true
-		}
-
-		fileName, ok := subject.(string)
-		if !ok {
-			return false
-		}
-
-		if strings.Contains(fileName, runID) {
-			fileNameParts := strings.SplitN(fileName, "_", 5)
-			if len(fileNameParts) != 5 {
-				return true
-			}
-			return strings.Contains(fileName, fileNameParts[4])
-		}
-
-		return false
-	}
+	return newVisibilityFilenamePrecondition(runID, 4)
 }
 
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
-	return func(subject any) bool {
-
-		if workflowID == "" {
-			return true
-		}
-
-		fileName, ok := subject.(string)
-		if !ok {
-			return false
-		}
-
-		if strings.Contains(fileName, workflowID) {
-			fileNameParts := strings.SplitN(fileName, "_", 5)
-			if len(fileNameParts) != 5 {
-				return true
-			}
-			return strings.Contains(fileName, fileNameParts[3])
-		}
-
-		return false
-	}
+	return newVisibilityFilenamePrecondition(workflowID, 3)
 }
 
 func newWorkflowTypeNamePrecondition(workflowTypeName string) connector.Precondition {
-	return func(subject any) bool {
+	return newVisibilityFilenamePrecondition(workflowTypeName, 2)
+}
 
-		if workflowTypeName == "" {
+func newVisibilityFilenamePrecondition(value string, fieldIndex int) connector.Precondition {
+	return func(subject any) bool {
+		if value == "" {
 			return true
 		}
-
 		fileName, ok := subject.(string)
 		if !ok {
 			return false
 		}
-
-		if strings.Contains(fileName, workflowTypeName) {
-			fileNameParts := strings.SplitN(fileName, "_", 5)
-			if len(fileNameParts) != 5 {
-				return true
-			}
-			return strings.Contains(fileName, fileNameParts[2])
+		name, ok := strings.CutSuffix(path.Base(fileName), ".visibility")
+		if !ok {
+			return false
 		}
-
-		return false
+		// Object path prefixes may contain underscores, so split only the filename.
+		// Fields are index, timestamp, workflow type hash, workflow ID hash, and run ID hash.
+		fields := strings.Split(name, "_")
+		return len(fields) == 5 && fields[fieldIndex] == value
 	}
 }
 
