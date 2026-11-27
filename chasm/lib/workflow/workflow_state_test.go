@@ -119,6 +119,19 @@ func TestCallbackAttachmentReferenceReadsDoNotDirtyUpdateNode(t *testing.T) {
 			require.True(t, found)
 			require.Equal(t, reference, got)
 		}},
+		{"DuplicateAttach", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
+			require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(ctx, timestamppb.Now(), UpdateCallbackAttachment{
+				UpdateID: "update-id", RequestID: "request-id", Callbacks: nexusCallbacks("http://callback"),
+			}))
+		}},
+		{"BackfillMiss", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
+			require.False(t, wf.tryBackfillCallbackAttachmentEventReference(ctx, "update-id", "missing-request-id", reference))
+		}},
+		{"AttachMissWithoutCallbacks", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
+			require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(ctx, timestamppb.Now(), UpdateCallbackAttachment{
+				UpdateID: "update-id", RequestID: "missing-request-id",
+			}))
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := newWorkflowTestTree(t, backend, cloneNodes(mutation.UpdatedNodes))
