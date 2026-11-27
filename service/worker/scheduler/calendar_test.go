@@ -246,6 +246,45 @@ func (s *calendarSuite) TestCalendarNextDST() {
 	)
 }
 
+func (s *calendarSuite) TestCalendarNextDSTEastOfUTC() {
+	// Europe/Berlin falls back at 2025-10-26T01:00Z, so 02:30 local happens twice.
+	s.checkSequence(
+		"CRON_TZ=Europe/Berlin 0 30 2 * * * *",
+		time.Date(2025, time.October, 25, 23, 0, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 0, 30, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 1, 30, 0, 0, time.UTC),
+		time.Date(2025, time.October, 27, 1, 30, 0, 0, time.UTC),
+	)
+
+	// Both copies of the repeated hour fire every matching minute.
+	s.checkSequence(
+		"CRON_TZ=Europe/Berlin 0 0,30 2 * * * *",
+		time.Date(2025, time.October, 25, 23, 30, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 0, 0, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 0, 30, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 1, 0, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 1, 30, 0, 0, time.UTC),
+		time.Date(2025, time.October, 27, 1, 0, 0, 0, time.UTC),
+	)
+
+	// Europe/London falls back at 2025-10-26T01:00Z, repeating hour 1, which doesn't match.
+	s.checkSequence(
+		"CRON_TZ=Europe/London 0 0 */2 * * * *",
+		time.Date(2025, time.October, 25, 22, 0, 0, 0, time.UTC),
+		time.Date(2025, time.October, 25, 23, 0, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 2, 0, 0, 0, time.UTC),
+		time.Date(2025, time.October, 26, 4, 0, 0, 0, time.UTC),
+	)
+
+	// Australia/Sydney falls back at 2026-04-04T16:00Z.
+	s.checkSequence(
+		"CRON_TZ=Australia/Sydney 0 30 2 * * * *",
+		time.Date(2026, time.April, 4, 15, 0, 0, 0, time.UTC),
+		time.Date(2026, time.April, 4, 15, 30, 0, 0, time.UTC),
+		time.Date(2026, time.April, 4, 16, 30, 0, 0, time.UTC),
+	)
+}
+
 func (s *calendarSuite) TestCalendarDSTStartInRepeatedHourButNotEnd() {
 	loc, err := time.LoadLocation("Europe/London")
 	s.NoError(err)
