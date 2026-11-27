@@ -7,7 +7,43 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
+
+func TestBuildDSNAttrBinaryParameters(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		cfg  config.SQL
+		want url.Values
+	}{
+		{
+			name: "pq default",
+			cfg:  config.SQL{PluginName: sqlplugin.PluginNamePostgreSQL},
+			want: url.Values{"sslmode": {"disable"}, "binary_parameters": {"yes"}},
+		},
+		{
+			name: "pq explicitly disabled",
+			cfg: config.SQL{
+				PluginName:        sqlplugin.PluginNamePostgreSQL,
+				ConnectAttributes: map[string]string{"binary_parameters": "no"},
+			},
+			want: url.Values{"sslmode": {"disable"}, "binary_parameters": {"no"}},
+		},
+		{
+			name: "pgx default",
+			cfg:  config.SQL{PluginName: sqlplugin.PluginNamePostgreSQLPGX},
+			want: url.Values{"sslmode": {"disable"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := buildDSNAttr(&tc.cfg)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func TestBuildDSNAttr_NoTLS_NoConnectAttributes(t *testing.T) {
 	cfg := &config.SQL{}

@@ -672,20 +672,33 @@ func (pdb *db) ReplaceIntoChasmNodeMaps(
 	ctx context.Context,
 	rows []sqlplugin.ChasmNodeMapsRow,
 ) (sql.Result, error) {
+	// The BYTEA column requires byte slices when pq uses binary parameters.
+	binaryRows := make([]struct {
+		sqlplugin.ChasmNodeMapsRow
+		ChasmPath []byte
+	}, len(rows))
+	for i, row := range rows {
+		binaryRows[i].ChasmNodeMapsRow = row
+		binaryRows[i].ChasmPath = []byte(row.ChasmPath)
+	}
 	return pdb.NamedExecContext(ctx,
 		setKeyInChasmNodeMapSQLQuery,
-		rows,
+		binaryRows,
 	)
 }
 
 func (pdb *db) DeleteFromChasmNodeMaps(ctx context.Context, filter sqlplugin.ChasmNodeMapsFilter) (sql.Result, error) {
+	paths := make([][]byte, len(filter.ChasmPaths))
+	for i, path := range filter.ChasmPaths {
+		paths[i] = []byte(path)
+	}
 	query, args, err := sqlx.In(
 		deleteKeyInChasmNodeMapSQLQuery,
 		filter.ShardID,
 		filter.NamespaceID,
 		filter.WorkflowID,
 		filter.RunID,
-		filter.ChasmPaths,
+		paths,
 	)
 	if err != nil {
 		return nil, err

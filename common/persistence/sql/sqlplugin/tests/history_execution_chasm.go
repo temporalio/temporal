@@ -132,6 +132,30 @@ func (s *historyExecutionChasmSuite) TestInsert() {
 	s.runTestCase(tc)
 }
 
+func (s *historyExecutionChasmSuite) TestSpecialCharacterPaths() {
+	filter := newChasmNodeMapsAllFilter()
+	paths := []string{"", `a\#b`, `a\$b`, `a\\b`, `a\\x4142`, "节点"}
+	rows := make([]sqlplugin.ChasmNodeMapsRow, len(paths))
+	for i, path := range paths {
+		rows[i] = newChasmRowFromFilter(filter)
+		rows[i].ChasmPath = path
+	}
+	ctx := newExecutionContext()
+	_, err := s.store.ReplaceIntoChasmNodeMaps(ctx, rows)
+	s.NoError(err)
+	actual, err := s.store.SelectAllFromChasmNodeMaps(ctx, filter)
+	s.NoError(err)
+	s.ElementsMatch(rows, actual)
+	_, err = s.store.DeleteFromChasmNodeMaps(ctx, sqlplugin.ChasmNodeMapsFilter{
+		ShardID: filter.ShardID, NamespaceID: filter.NamespaceID,
+		WorkflowID: filter.WorkflowID, RunID: filter.RunID, ChasmPaths: paths,
+	})
+	s.NoError(err)
+	actual, err = s.store.SelectAllFromChasmNodeMaps(ctx, filter)
+	s.NoError(err)
+	s.Empty(actual)
+}
+
 func (s *historyExecutionChasmSuite) TestUpdate() {
 	filter := newChasmNodeMapsAllFilter()
 

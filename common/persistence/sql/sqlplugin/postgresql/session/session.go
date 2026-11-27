@@ -9,6 +9,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/resolver"
 )
@@ -125,6 +126,11 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 			))
 		}
 		parameters.Set(key, value)
+	}
+
+	if cfg.PluginName == sqlplugin.PluginNamePostgreSQL && !parameters.Has("binary_parameters") {
+		// Binary parameters let pq execute parameterized queries in a single round trip.
+		parameters.Set("binary_parameters", "yes")
 	}
 
 	if cfg.TLS != nil && cfg.TLS.Enabled {
