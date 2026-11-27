@@ -1,8 +1,8 @@
 package queues
 
 import (
-	"math/rand"
 	"math"
+	"math/rand"
 	"testing"
 	"time"
 
