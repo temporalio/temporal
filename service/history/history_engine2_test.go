@@ -1106,7 +1106,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	})
 	s.Nil(err)
 	s.NotNil(response)
-	s.Equal(scheduledEvent, response.ScheduledEvent)
+	s.ProtoEqual(scheduledEvent, response.ScheduledEvent)
 	s.NotNil(response.Clock, "Clock must be set for shard staleness check")
 	s.ProtoElementsMatch(limiters, updatedWorkflowMutation.UpsertActivityInfos[scheduledEvent.GetEventId()].Limiters)
 }
