@@ -823,6 +823,11 @@ var (
 		"nexus_completion_request_preprocess_errors",
 		WithDescription("The number of Nexus completion requests for which pre-processing failed."),
 	)
+	AttachLimitExceeded = NewCounterDef(
+		"attach_limit_exceeded",
+		WithDescription("Number of callback or link attachment limit failures, by namespace and dynamic config setting. "+
+			"The HSM workflow callback limit also counts failures while applying existing history, including repeated failures on retry."),
+	)
 	WorkerCommandsSent = NewCounterDef(
 		"worker_commands_sent",
 		WithDescription("The number of worker command dispatches, tagged by outcome (e.g. success, no_poller, rpc_error)."),

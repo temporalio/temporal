@@ -14,6 +14,9 @@ const (
 	reservedTaskQueuePrefix = "/_sys/"
 )
 
+// ErrTaskQueueNameTooLong is returned when a task queue name exceeds the maximum length.
+var ErrTaskQueueNameTooLong = serviceerror.NewInvalidArgument("taskQueue length exceeds limit")
+
 // NormalizeAndValidatePartition validates a TaskQueue proto object as a task queue partition,
 // and normalizes its fields.
 // Note that a TaskQueue proto holds a task queue partition in the general case, not necessarily
@@ -138,7 +141,7 @@ func validate(taskQueueName string, maxLength int, expectRootPartition bool) err
 		return serviceerror.NewInvalidArgument("taskQueue is not set")
 	}
 	if len(taskQueueName) > maxLength {
-		return serviceerror.NewInvalidArgument("taskQueue length exceeds limit")
+		return ErrTaskQueueNameTooLong
 	}
 
 	if expectRootPartition && strings.HasPrefix(taskQueueName, reservedTaskQueuePrefix) {

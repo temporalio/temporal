@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 )
 
 // Usage describes the caller-attached links already on an execution. ValidateAdditions uses it to
@@ -74,6 +75,8 @@ type Validator interface {
 
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
+	MetricsHandler metrics.Handler
+
 	// Per-request limits, enforced by Validate.
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -85,6 +88,9 @@ type ValidatorConfig struct {
 
 func (vc *ValidatorConfig) Validate() error {
 	var missingFields []string
+	if vc.MetricsHandler == nil {
+		missingFields = append(missingFields, "MetricsHandler")
+	}
 	assertGetterIsSet := func(name string, getter dynamicconfig.IntPropertyFnWithNamespaceFilter) {
 		if getter == nil {
 			missingFields = append(missingFields, name)
@@ -115,8 +121,9 @@ func NewValidator(config ValidatorConfig) (Validator, error) {
 }
 
 // ValidatorProvider creates a link Validator using the production dynamic config keys.
-func ValidatorProvider(dc *dynamicconfig.Collection) (Validator, error) {
+func ValidatorProvider(dc *dynamicconfig.Collection, metricsHandler metrics.Handler) (Validator, error) {
 	return NewValidator(ValidatorConfig{
+		MetricsHandler:       metricsHandler,
 		MaxLinksPerRequest:   dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 		LinkMaxSize:          dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerExecution: dynamicconfig.MaxLinksPerComponent.Get(dc),
@@ -133,15 +140,16 @@ func (v *validator) Validate(namespaceName string, links []*commonpb.Link, cbs [
 	}
 	maxLinks := v.config.MaxLinksPerRequest(namespaceName)
 	if count > maxLinks {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitMaxLinksPerRequest)
 		return serviceerror.NewInvalidArgumentf("cannot attach more than %d links per request, got %d", maxLinks, count)
 	}
 
 	maxSize := v.config.LinkMaxSize(namespaceName)
-	if err := validateEach(links, maxSize); err != nil {
+	if err := v.validateEach(namespaceName, links, maxSize); err != nil {
 		return err
 	}
 	for _, cb := range cbs {
-		if err := validateEach(cb.GetLinks(), maxSize); err != nil {
+		if err := v.validateEach(namespaceName, cb.GetLinks(), maxSize); err != nil {
 			return err
 		}
 	}
@@ -161,6 +169,7 @@ func (v *validator) ValidateAdditions(
 	}
 	maxCount := v.config.MaxLinksPerExecution(namespaceName)
 	if existing.Count+len(newLinks) > maxCount {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitMaxLinksPerComponent)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d links to an execution (%d links already attached)",
 			maxCount,
@@ -171,6 +180,7 @@ func (v *validator) ValidateAdditions(
 	addedBytes := totalSize(newLinks)
 	maxSize := v.config.TotalLinksMaxSize(namespaceName)
 	if existing.TotalSize+addedBytes > maxSize {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitTotalLinksMaxSize)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d bytes of links to an execution "+
 				"(%d bytes already attached, %d more requested)",
@@ -205,7 +215,7 @@ func (v *validator) Sanitize(namespaceName string, links []*commonpb.Link) ([]*c
 			errs = append(errs, fmt.Errorf("dropped %d links beyond the limit of %d", len(links)-i, maxCount))
 			break
 		}
-		if err := validateLink(l, maxSize); err != nil {
+		if _, err := validateLink(l, maxSize); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -215,9 +225,12 @@ func (v *validator) Sanitize(namespaceName string, links []*commonpb.Link) ([]*c
 }
 
 // validateEach checks the size and required fields of each link.
-func validateEach(links []*commonpb.Link, maxSize int) error {
+func (v *validator) validateEach(namespaceName string, links []*commonpb.Link, maxSize int) error {
 	for _, l := range links {
-		if err := validateLink(l, maxSize); err != nil {
+		if oversized, err := validateLink(l, maxSize); err != nil {
+			if oversized {
+				metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitLinkMaxSize)
+			}
 			return err
 		}
 	}
@@ -225,11 +238,11 @@ func validateEach(links []*commonpb.Link, maxSize int) error {
 }
 
 // validateLink checks the size and required fields of a single link.
-func validateLink(l *commonpb.Link, maxSize int) error {
-	if l.Size() > maxSize {
-		return serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, l.Size())
+func validateLink(l *commonpb.Link, maxSize int) (oversized bool, err error) {
+	if size := l.Size(); size > maxSize {
+		return true, serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, size)
 	}
-	return validateFields(l)
+	return false, validateFields(l)
 }
 
 // validateFields confirms that Link has all the required fields.

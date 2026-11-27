@@ -190,8 +190,13 @@ func NexusOperationDestinationThrottledProvider(
 
 // CallbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func CallbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (commoncallbacks.Validator, error) {
+func CallbackValidatorProvider(
+	dc *dynamicconfig.Collection,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) (commoncallbacks.Validator, error) {
 	cfg := commoncallbacks.ValidatorConfig{
+		MetricsHandler:                   metricsHandler,
 		MaxCallbacksPerExecution:         callback.MaxPerExecution.Get(dc),
 		TotalCallbacksMaxSize:            callback.TotalMaxSizePerExecution.Get(dc),
 		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/links"
+	"go.temporal.io/server/common/metrics"
 )
 
 // NewLinksValidatorConfig returns a valid links.ValidatorConfig that can be used to create a new
@@ -12,6 +13,7 @@ import (
 // to be tested.
 func NewLinksValidatorConfig() links.ValidatorConfig {
 	return links.ValidatorConfig{
+		MetricsHandler:       metrics.NoopMetricsHandler,
 		MaxLinksPerRequest:   func(string) int { return 10 },
 		LinkMaxSize:          func(string) int { return 4000 },
 		MaxLinksPerExecution: func(string) int { return 2000 },

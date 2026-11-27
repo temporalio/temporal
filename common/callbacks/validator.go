@@ -2,6 +2,7 @@ package callbacks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/tqid"
@@ -48,6 +50,8 @@ type Validator interface {
 
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
+	MetricsHandler metrics.Handler
+
 	TotalCallbacksMaxSize    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit         dynamicconfig.IntPropertyFn // All ID types use the same global setting.
@@ -65,6 +69,9 @@ type ValidatorConfig struct {
 
 func (vc *ValidatorConfig) Validate() error {
 	var missingFields []string
+	if vc.MetricsHandler == nil {
+		missingFields = append(missingFields, "MetricsHandler")
+	}
 	assertGetterIsSet := func(name string, getter dynamicconfig.IntPropertyFnWithNamespaceFilter) {
 		if getter == nil {
 			missingFields = append(missingFields, name)
@@ -114,9 +121,11 @@ func (v *validator) Validate(
 	cbs []*commonpb.Callback,
 	opts ValidatorOptions,
 ) error {
-	if len(cbs) > v.config.MaxCallbacksPerExecution(namespaceName) {
+	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
+	if len(cbs) > maxCount {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitMaxCallbacksPerExecution)
 		return serviceerror.NewInvalidArgumentf(
-			"cannot attach more than %d callbacks to an execution", v.config.MaxCallbacksPerExecution(namespaceName),
+			"cannot attach more than %d callbacks to an execution", maxCount,
 		)
 	}
 
@@ -139,6 +148,7 @@ func (v *validator) ValidateAdditions(
 	// Check aggregate callback count.
 	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
 	if existing.Count+len(newCBs) > maxCount {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitMaxCallbacksPerExecution)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
 			maxCount,
@@ -153,6 +163,7 @@ func (v *validator) ValidateAdditions(
 	}
 	maxSize := v.config.TotalCallbacksMaxSize(namespaceName)
 	if existing.TotalSize+addedBytes > maxSize {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitTotalCallbacksMaxSize)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d bytes of callbacks to an execution "+
 				"(%d bytes already attached, %d more requested)",
@@ -187,11 +198,9 @@ func (v *validator) validateCallback(cb *commonpb.Callback, namespaceName string
 
 func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Nexus) error {
 	rawURL := cb.GetUrl()
-	if len(rawURL) > v.config.URLMaxLength(namespaceName) {
-		return serviceerror.NewInvalidArgumentf(
-			"invalid url: url length longer than max length allowed of %d",
-			v.config.URLMaxLength(namespaceName),
-		)
+	if maxLength := v.config.URLMaxLength(namespaceName); len(rawURL) > maxLength {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitCallbackURLMaxLength)
+		return serviceerror.NewInvalidArgumentf("invalid url: url length longer than max length allowed of %d", maxLength)
 	}
 	if err := v.config.EndpointRules(namespaceName).Validate(rawURL); err != nil {
 		msg := err.Error()
@@ -208,10 +217,11 @@ func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Ne
 		headerSize += len(k) + len(val)
 		lowerCaseHeaders[strings.ToLower(k)] = val
 	}
-	if headerSize > v.config.HeaderMaxSize(namespaceName) {
+	if maxSize := v.config.HeaderMaxSize(namespaceName); headerSize > maxSize {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitCallbackHeaderMaxSize)
 		return serviceerror.NewInvalidArgumentf(
 			"invalid header: header size longer than max allowed size of %d",
-			v.config.HeaderMaxSize(namespaceName),
+			maxSize,
 		)
 	}
 	cb.Header = lowerCaseHeaders
@@ -224,6 +234,9 @@ func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Ne
 func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Callback_NexusHandler) error {
 	// Task Queue
 	if err := tqid.Validate(cb.GetTaskQueueName(), v.config.MaxIDLengthLimit()); err != nil {
+		if errors.Is(err, tqid.ErrTaskQueueNameTooLong) {
+			metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitMaxIDLength)
+		}
 		return err
 	}
 
@@ -232,14 +245,16 @@ func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Call
 		name      string
 		value     string
 		maxLength int
+		limit     metrics.AttachLimit
 	}{
-		{"service", cb.GetService(), v.config.MaxServiceNameLength(namespaceName)},
-		{"operation", cb.GetOperation(), v.config.MaxOperationNameLength(namespaceName)},
+		{"service", cb.GetService(), v.config.MaxServiceNameLength(namespaceName), metrics.AttachLimitNexusServiceNameLength},
+		{"operation", cb.GetOperation(), v.config.MaxOperationNameLength(namespaceName), metrics.AttachLimitNexusOperationNameLength},
 	} {
 		if field.value == "" {
 			return serviceerror.NewInvalidArgumentf("%s is required", field.name)
 		}
 		if len(field.value) > field.maxLength {
+			metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, field.limit)
 			return serviceerror.NewInvalidArgumentf(
 				"%s exceeds length limit. Length=%d Limit=%d",
 				field.name, len(field.value), field.maxLength)
@@ -249,9 +264,10 @@ func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Call
 	// Source Context blob
 	maxSize := v.config.NexusHandlerSourceContextMaxSize(namespaceName)
 	if size := cb.GetSourceContext().Size(); size > maxSize {
+		metrics.RecordAttachLimitExceeded(v.config.MetricsHandler, namespaceName, metrics.AttachLimitCallbackSourceContextSize)
 		return serviceerror.NewInvalidArgumentf(
 			"source_context exceeds size limit. Length=%d Limit=%d",
-			size, v.config.NexusHandlerSourceContextMaxSize(namespaceName))
+			size, maxSize)
 	}
 
 	return nil
