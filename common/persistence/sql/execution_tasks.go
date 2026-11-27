@@ -291,12 +291,16 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
-		ShardID:                         request.ShardID,
-		CategoryID:                      int32(categoryID),
-		InclusiveMinVisibilityTimestamp: start,
-		ExclusiveMaxVisibilityTimestamp: end,
-	}); err != nil {
+	err := rangeDeleteInBatches(ctx, request.BatchSize, func(limit int) (sql.Result, error) {
+		return m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
+			ShardID:                         request.ShardID,
+			CategoryID:                      int32(categoryID),
+			InclusiveMinVisibilityTimestamp: start,
+			ExclusiveMaxVisibilityTimestamp: end,
+			PageSize:                        limit,
+		})
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteHistoryTask operation failed. CategoryID: %v. Error: %v", categoryID, err)
 	}
 	return nil
@@ -438,11 +442,15 @@ func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 ) error {
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := m.DB.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
-		ShardID:                         request.ShardID,
-		InclusiveMinVisibilityTimestamp: start,
-		ExclusiveMaxVisibilityTimestamp: end,
-	}); err != nil {
+	err := rangeDeleteInBatches(ctx, request.BatchSize, func(limit int) (sql.Result, error) {
+		return m.DB.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+			ShardID:                         request.ShardID,
+			InclusiveMinVisibilityTimestamp: start,
+			ExclusiveMaxVisibilityTimestamp: end,
+			PageSize:                        limit,
+		})
+	})
+	if err != nil {
 		return serviceerror.NewUnavailablef("RangeCompleteTimerTask operation failed. Error: %v", err)
 	}
 	return nil
@@ -770,4 +778,27 @@ func (t *scheduledTaskPageToken) serialize() ([]byte, error) {
 
 func (t *scheduledTaskPageToken) deserialize(payload []byte) error {
 	return json.Unmarshal(payload, t)
+}
+
+func rangeDeleteInBatches(ctx context.Context, batchSize int, exec func(limit int) (sql.Result, error)) error {
+	if batchSize <= 0 {
+		_, err := exec(0)
+		return err
+	}
+	for {
+		res, err := exec(batchSize)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if int(n) < batchSize {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
 }
