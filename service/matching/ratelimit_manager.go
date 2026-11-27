@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"math"
 	"sync"
 	"time"
@@ -28,7 +29,9 @@ type (
 		fairnessKeyRateLimitDefault *float64 // per-partition fairnessKeyRateLimitDefault set via API, if available
 		adminNsRate                 float64
 		adminTqRate                 float64
-		numReadPartitions           int
+		configNumReadPartitions     int // read partition count from dynamic config
+		scaledNumReadPartitions     int // read partition count from dynamic partition scaling, 0 if not set
+		numReadPartitions           int // scaledNumReadPartitions if set, otherwise configNumReadPartitions
 
 		// Derived from the above sources.
 		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the per-partition wise task queue RPS.
@@ -87,8 +90,9 @@ func (r *rateLimitManager) Start() {
 	r.cancels = append(r.cancels, cancel)
 	r.adminTqRate, cancel = r.config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.cancels = append(r.cancels, cancel)
-	r.numReadPartitions, cancel = r.config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.configNumReadPartitions, cancel = r.config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
+	r.numReadPartitions = r.configNumReadPartitions
 	r.computeEffectiveRPSAndSourceLocked()
 	r.updateSimpleRateLimitWithBurstLocked(defaultBurstDuration)
 }
@@ -111,7 +115,27 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Defaulting to 1 partition if misconfigured
-	r.numReadPartitions = max(val, 1)
+	r.configNumReadPartitions = max(val, 1)
+	r.updateNumReadPartitionsLocked()
+}
+
+// SetScaledNumReadPartitions sets the read partition count chosen by dynamic partition scaling,
+// which takes precedence over dynamic config. Pass 0 when there is no valid scale info.
+func (r *rateLimitManager) SetScaledNumReadPartitions(val int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.scaledNumReadPartitions = max(val, 0)
+	r.updateNumReadPartitionsLocked()
+}
+
+func (r *rateLimitManager) updateNumReadPartitionsLocked() {
+	numReadPartitions := cmp.Or(r.scaledNumReadPartitions, r.configNumReadPartitions)
+	if numReadPartitions == r.numReadPartitions {
+		return
+	}
+	r.numReadPartitions = numReadPartitions
+	// The per-key default is stored pre-divided by numReadPartitions, so it must be re-derived.
+	r.trySetRPSFromUserDataLocked()
 	r.computeAndApplyRateLimitLocked()
 }
 

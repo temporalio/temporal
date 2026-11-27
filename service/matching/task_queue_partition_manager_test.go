@@ -1090,6 +1090,50 @@ func latestLogicalBacklogAge(snap map[string][]*metricstest.CapturedRecording, w
 	return latest, found
 }
 
+func (s *PartitionManagerTestSuite) TestEphemeralDataChanged_UpdatesRateLimitPartitionCount() {
+	rlm := s.partitionMgr.rateLimitManager
+	configured := rlm.GetNumReadPartitionsForTesting()
+
+	s.partitionMgr.ephemeralDataChanged(&taskqueuespb.EphemeralData{
+		Scale: &taskqueuespb.PartitionScaleInfo{Read: 8, Write: 6},
+	})
+	s.Equal(8, rlm.GetNumReadPartitionsForTesting())
+
+	// invalid scale info falls back to dynamic config
+	s.partitionMgr.ephemeralDataChanged(&taskqueuespb.EphemeralData{
+		Scale: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 6},
+	})
+	s.Equal(configured, rlm.GetNumReadPartitionsForTesting())
+
+	s.partitionMgr.ephemeralDataChanged(&taskqueuespb.EphemeralData{
+		Scale: &taskqueuespb.PartitionScaleInfo{Read: 8, Write: 8},
+	})
+	s.Equal(8, rlm.GetNumReadPartitionsForTesting())
+
+	// missing scale info falls back to dynamic config
+	s.partitionMgr.ephemeralDataChanged(&taskqueuespb.EphemeralData{})
+	s.Equal(configured, rlm.GetNumReadPartitionsForTesting())
+}
+
+func (s *PartitionManagerTestSuite) TestEphemeralDataChanged_StickyIgnoresScale() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	sticky := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("sticky-name")
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	tqConfig := newTaskQueueConfig(sticky.TaskQueue(), s.partitionMgr.engine.config, s.ns.Name())
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.ns, sticky, tqConfig, logger, logger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	s.Require().NoError(err)
+	pm.rateLimitManager.Start()
+	defer pm.rateLimitManager.Stop()
+	configured := pm.rateLimitManager.GetNumReadPartitionsForTesting()
+
+	// sticky queues receive the normal workflow queue's ephemeral data, including its scale
+	pm.ephemeralDataChanged(&taskqueuespb.EphemeralData{
+		Scale: &taskqueuespb.PartitionScaleInfo{Read: 8, Write: 8},
+	})
+	s.Equal(configured, pm.rateLimitManager.GetNumReadPartitionsForTesting())
+}
+
 // addRoutingConfigUserData sets up deployment user data with a current version and an optional
 // ramping version. Pass "" for rampingBuildID to omit ramping. Note, this only adds the routing config
 // for the Workflow Task Queue Type.
