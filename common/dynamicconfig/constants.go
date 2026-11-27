@@ -2176,11 +2176,11 @@ before calling remote for missing events`,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
 	)
-	StandbyTaskRemoteVerificationInterval = NewTaskTypeDurationSetting(
-		"history.standbyTaskRemoteVerificationInterval",
-		time.Minute,
-		`StandbyTaskRemoteVerificationInterval is the minimum interval between remote mutable-state checks for
-overdue standby signal and external-cancel tasks. Failed checks back off up to eight times this interval, plus jitter.`,
+	StandbyTaskRemoteVerificationAttemptInterval = NewTaskTypeIntSetting(
+		"history.standbyTaskRemoteVerificationAttemptInterval",
+		1,
+		`StandbyTaskRemoteVerificationAttemptInterval checks the active cluster every N queue attempts for
+standby signal and external-cancel tasks between the resend and discard delays. Non-positive values disable remote checks.`,
 	)
 	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
 		"history.ChasmStandbyTaskDiscardDelay",

@@ -2,143 +2,173 @@ package history
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/queues"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func (t *transferQueueStandbyTaskExecutor) verifyPendingExternalTaskOnSource(
-	executable queues.Executable,
-) standbyPostActionFn {
-	return func(ctx context.Context, task tasks.Task, postActionInfo any, logger log.Logger) error {
-		if postActionInfo == nil {
-			return nil
-		}
+type externalTaskSyncPosition struct {
+	transition *persistencespb.VersionedTransition
+	histories  *historyspb.VersionHistories
+}
 
-		registry := t.shardContext.GetNamespaceRegistry()
-		entry, err := registry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-		if err != nil {
-			return consts.ErrTaskRetry
-		}
-		source := entry.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()})
-		if source == t.clusterName {
-			return consts.ErrTaskRetry
-		}
+func (t *transferQueueStandbyTaskExecutor) processExternalTransferTask(
+	ctx context.Context,
+	task tasks.Task,
+	attempt int,
+	verify standbyVerificationFn,
+) error {
+	taskType := task.GetType()
+	age := t.getCurrentTime().Sub(task.GetVisibilityTime())
+	if age >= t.config.StandbyTaskMissingEventsDiscardDelay(taskType) {
+		return t.processTransfer(ctx, false, task, verify,
+			func(ctx context.Context, task tasks.Task, info any, logger log.Logger) error {
+				if info != nil {
+					entry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+					if err != nil || entry.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == t.clusterName {
+						return consts.ErrTaskRetry
+					}
+				}
+				return standbyTransferTaskPostActionTaskDiscarded(ctx, task, info, logger, nil)
+			})
+	}
 
-		state := executable.RemoteVerificationState()
-		timeSource := t.shardContext.GetTimeSource()
-		if timeSource.Now().Before(state.NextAttemptTime) {
-			return consts.ErrTaskRetry
-		}
+	interval := t.config.StandbyTaskRemoteVerificationAttemptInterval(taskType)
+	if age < t.config.StandbyTaskMissingEventsResendDelay(taskType) || interval <= 0 || attempt%interval != 0 {
+		return t.processTransfer(ctx, false, task, verify, standbyTaskPostActionNoOp)
+	}
 
-		failed := true
-		retry := true
-		defer func() {
-			if !retry {
-				executable.SetRemoteVerificationState(queues.RemoteVerificationState{})
-				return
+	return t.processTransfer(ctx, false, task,
+		func(ctx context.Context, task tasks.Task, state historyi.MutableState) (any, error) {
+			pending, err := verify(ctx, task, state)
+			if err != nil || pending == nil {
+				return pending, err
 			}
-			t.deferRemoteVerification(executable, state, failed)
-		}()
-
-		remote, err := t.clientBean.GetRemoteAdminClient(source)
-		if err != nil {
-			return consts.ErrTaskRetry
-		}
-		response, err := remote.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: entry.Name().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: task.GetWorkflowID(),
-				RunId:      task.GetRunID(),
-			},
-			Archetype:       chasm.WorkflowArchetype,
-			SkipForceReload: true,
+			// The sync runs after releasing the workflow lock.
+			return &externalTaskSyncPosition{
+				transition: common.CloneProto(state.CurrentVersionedTransition()),
+				histories:  common.CloneProto(state.GetExecutionInfo().GetVersionHistories()),
+			}, nil
+		},
+		func(ctx context.Context, task tasks.Task, info any, logger log.Logger) error {
+			if info == nil {
+				return nil
+			}
+			return t.verifyAndSyncExternalTransferTask(ctx, task, info.(*externalTaskSyncPosition), verify, logger)
 		})
-
-		// A response from the previous active must not authorize discarding a task after another failover.
-		current, lookupErr := registry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-		if lookupErr != nil || current.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) != source ||
-			current.FailoverVersion(task.GetWorkflowID()) != entry.FailoverVersion(task.GetWorkflowID()) {
-			return consts.ErrTaskRetry
-		}
-		if common.IsNotFoundError(err) {
-			retry = false
-			return standbyTransferTaskPostActionTaskDiscarded(ctx, task, postActionInfo, logger, nil)
-		}
-		if err != nil {
-			logger.Warn("Unable to verify overdue standby transfer task on source.", tag.Task(task), tag.Error(err))
-			return consts.ErrTaskRetry
-		}
-
-		pending, err := externalTransferTaskPending(task, response.GetDatabaseMutableState())
-		if err != nil {
-			return consts.ErrTaskRetry
-		}
-		failed = false
-		if pending {
-			return consts.ErrTaskRetry
-		}
-		retry = false
-		return standbyTransferTaskPostActionTaskDiscarded(ctx, task, postActionInfo, logger, nil)
-	}
 }
 
-func (t *transferQueueStandbyTaskExecutor) deferRemoteVerification(
-	executable queues.Executable,
-	state queues.RemoteVerificationState,
-	failed bool,
-) {
-	interval := max(time.Second, t.config.StandbyTaskRemoteVerificationInterval(executable.GetType()))
-	if failed {
-		state.Failures = min(state.Failures+1, 4)
-		interval *= 1 << (state.Failures - 1)
-	} else {
-		state.Failures = 0
+func (t *transferQueueStandbyTaskExecutor) verifyAndSyncExternalTransferTask(
+	ctx context.Context,
+	task tasks.Task,
+	position *externalTaskSyncPosition,
+	verify standbyVerificationFn,
+	logger log.Logger,
+) error {
+	registry := t.shardContext.GetNamespaceRegistry()
+	namespaceID := namespace.ID(task.GetNamespaceID())
+	entry, err := registry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return consts.ErrTaskRetry
 	}
-	// Keep the original task timestamp for task age and queue ordering. Only remote checks are deferred.
-	state.NextAttemptTime = t.shardContext.GetTimeSource().Now().Add(interval + backoff.FullJitter(interval/5))
-	executable.SetRemoteVerificationState(state)
+	routingKey := namespace.RoutingKey{ID: task.GetWorkflowID()}
+	source := entry.ActiveClusterName(routingKey)
+	if source == t.clusterName {
+		return consts.ErrTaskRetry
+	}
+	sourceUnchanged := func() bool {
+		current, err := registry.GetNamespaceByID(namespaceID)
+		return err == nil && current.IsOnCluster(t.clusterName) && current.ActiveClusterName(routingKey) == source &&
+			current.FailoverVersion(routingKey.ID) == entry.FailoverVersion(routingKey.ID)
+	}
+
+	remote, err := t.clientBean.GetRemoteAdminClient(source)
+	if err != nil {
+		return consts.ErrTaskRetry
+	}
+	execution := &commonpb.WorkflowExecution{WorkflowId: task.GetWorkflowID(), RunId: task.GetRunID()}
+	response, err := remote.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace:       entry.Name().String(),
+		Execution:       execution,
+		Archetype:       chasm.WorkflowArchetype,
+		SkipForceReload: true,
+	})
+	if err != nil {
+		return consts.ErrTaskRetry
+	}
+	if !externalTransferTaskResolved(task, response.GetDatabaseMutableState()) || !sourceUnchanged() {
+		return consts.ErrTaskRetry
+	}
+
+	result, err := workflowresend.SyncWorkflowStateFromSource(
+		ctx, t.shardContext, namespaceID, execution, position.transition, position.histories, nil,
+	)
+	if !sourceUnchanged() {
+		return consts.ErrTaskRetry
+	}
+	if err != nil || result != workflowresend.SyncWorkflowStateResultApplied {
+		logger.Error("Discarding standby transfer task after workflow state sync failed",
+			tag.Task(task), tag.Error(err), tag.NewInt("sync-result", int(result)))
+		return consts.ErrTaskDiscarded
+	}
+
+	err = t.processTransfer(ctx, false, task, verify, standbyTaskPostActionNoOp)
+	if !sourceUnchanged() {
+		return consts.ErrTaskRetry
+	}
+	if err != nil {
+		logger.Error("Discarding standby transfer task after local verification failed following workflow state sync",
+			tag.Task(task), tag.Error(err))
+		return consts.ErrTaskDiscarded
+	}
+	return nil
 }
 
-func externalTransferTaskPending(task tasks.Task, state *persistencespb.WorkflowMutableState) (bool, error) {
-	if state.GetExecutionState() == nil {
-		return false, serviceerror.NewInternal("remote mutable state has no execution state")
+// externalTransferTaskResolved requires the active branch to contain the exact
+// initiation event. Missing or divergent state cannot authorize an early discard.
+func externalTransferTaskResolved(task tasks.Task, state *persistencespb.WorkflowMutableState) bool {
+	var initiatedEventID, version int64
+	var pending bool
+	switch task := task.(type) {
+	case *tasks.SignalExecutionTask:
+		initiatedEventID, version = task.InitiatedEventID, task.Version
+		_, pending = state.GetSignalInfos()[initiatedEventID]
+	case *tasks.CancelExecutionTask:
+		initiatedEventID, version = task.InitiatedEventID, task.Version
+		_, pending = state.GetRequestCancelInfos()[initiatedEventID]
+	default:
+		return false
+	}
+	if state.GetNextEventId() <= initiatedEventID {
+		return false
+	}
+	histories := state.GetExecutionInfo().GetVersionHistories()
+	if histories == nil {
+		return false
+	}
+	history, err := versionhistory.GetCurrentVersionHistory(histories)
+	if err != nil || history == nil || !versionhistory.ContainsVersionHistoryItem(history, versionhistory.NewVersionHistoryItem(initiatedEventID, version)) {
+		return false
 	}
 	switch state.GetExecutionState().GetState() {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		return false, nil
+		return true
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		return !pending
 	default:
-		return false, consts.ErrTaskRetry
-	}
-
-	switch task := task.(type) {
-	case *tasks.SignalExecutionTask:
-		if state.GetNextEventId() <= task.InitiatedEventID {
-			return false, consts.ErrTaskRetry
-		}
-		info, ok := state.GetSignalInfos()[task.InitiatedEventID]
-		return ok && info.GetVersion() == task.Version, nil
-	case *tasks.CancelExecutionTask:
-		if state.GetNextEventId() <= task.InitiatedEventID {
-			return false, consts.ErrTaskRetry
-		}
-		info, ok := state.GetRequestCancelInfos()[task.InitiatedEventID]
-		return ok && info.GetVersion() == task.Version, nil
-	default:
-		return false, serviceerror.NewInternal("unsupported task for remote pending-work verification")
+		return false
 	}
 }

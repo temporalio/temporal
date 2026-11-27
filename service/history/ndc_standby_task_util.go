@@ -295,12 +295,10 @@ func getStandbyPostActionFn(
 	taskTime := taskInfo.GetVisibilityTime()
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 
-	// now < task start time + StandbyTaskMissingEventsResendDelay
 	if now.Before(discardTime) {
 		return standbyTaskPostActionNoOp
 	}
 
-	// task start time + StandbyTaskMissingEventsResendDelay <= now
 	return discardTaskStandbyPostActionFn
 }
 

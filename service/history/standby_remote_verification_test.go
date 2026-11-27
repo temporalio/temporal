@@ -3,249 +3,141 @@ package history
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
 
-func TestExternalTransferTaskPending(t *testing.T) {
+func TestExternalTransferTaskResolved(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"signal", "cancel"} {
-		t.Run(kind, func(t *testing.T) {
+	workflowKey := definition.NewWorkflowKey(tests.NamespaceID.String(), "workflow-id", "run-id")
+	signal := &tasks.SignalExecutionTask{WorkflowKey: workflowKey, InitiatedEventID: 10, Version: 123}
+	cancel := &tasks.CancelExecutionTask{WorkflowKey: workflowKey, InitiatedEventID: 10, Version: 123}
+	for _, tc := range []struct {
+		name     string
+		mutate   func(*persistencespb.WorkflowMutableState)
+		resolved bool
+	}{
+		{name: "resolved", resolved: true},
+		{name: "pending", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.SignalInfos = map[int64]*persistencespb.SignalInfo{10: {Version: 123}}
+			s.RequestCancelInfos = map[int64]*persistencespb.RequestCancelInfo{10: {Version: 123}}
+		}},
+		{name: "closed", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		}, resolved: true},
+		{name: "divergent branch", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.ExecutionInfo.VersionHistories.Histories[0].Items[0].Version++
+		}},
+		{name: "remote behind initiation", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.NextEventId = 10
+		}},
+		{name: "zombie", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+		}},
+		{name: "missing version history", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.ExecutionInfo.VersionHistories = nil
+		}},
+		{name: "missing execution state", mutate: func(s *persistencespb.WorkflowMutableState) {
+			s.ExecutionState = nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			for _, tc := range []struct {
-				name    string
-				mutate  func(*persistencespb.WorkflowMutableState)
-				pending bool
-				retry   bool
-			}{
-				{name: "pending", pending: true},
-				{name: "resolved", mutate: func(s *persistencespb.WorkflowMutableState) {
-					s.SignalInfos = nil
-					s.RequestCancelInfos = nil
-				}},
-				{name: "different version", mutate: func(s *persistencespb.WorkflowMutableState) {
-					s.SignalInfos[10].Version++
-					s.RequestCancelInfos[10].Version++
-				}},
-				{name: "closed with pending info", mutate: func(s *persistencespb.WorkflowMutableState) {
-					s.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-				}},
-				{name: "remote behind initiation", mutate: func(s *persistencespb.WorkflowMutableState) {
-					s.NextEventId = 10
-					s.SignalInfos = nil
-					s.RequestCancelInfos = nil
-				}, retry: true},
-				{name: "zombie", mutate: func(s *persistencespb.WorkflowMutableState) {
-					s.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-				}, retry: true},
-				{name: "missing execution state", mutate: func(s *persistencespb.WorkflowMutableState) {
-					s.ExecutionState = nil
-				}, retry: true},
-			} {
-				t.Run(tc.name, func(t *testing.T) {
-					t.Parallel()
-					state := remotePendingExternalState()
-					if tc.mutate != nil {
-						tc.mutate(state)
-					}
-					pending, err := externalTransferTaskPending(remoteExternalTask(kind), state)
-					require.Equal(t, tc.pending, pending)
-					if tc.retry {
-						require.Error(t, err)
-					} else {
-						require.NoError(t, err)
-					}
-				})
+			state := resolvedExternalTaskState()
+			if tc.mutate != nil {
+				tc.mutate(state)
 			}
+			require.Equal(t, tc.resolved, externalTransferTaskResolved(signal, state))
+			require.Equal(t, tc.resolved, externalTransferTaskResolved(cancel, state))
 		})
 	}
 }
 
-func TestVerifyPendingExternalTaskOnSource(t *testing.T) {
+func TestVerifyAndSyncExternalTransferTask(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"signal", "cancel"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		describeErr error
+		syncErr     error
+		failover    bool
+		wantErr     error
+	}{
+		{name: "source unavailable", describeErr: serviceerror.NewUnavailable("source unavailable"), wantErr: consts.ErrTaskRetry},
+		{name: "execution missing on source", describeErr: serviceerror.NewNotFound("execution missing"), wantErr: consts.ErrTaskRetry},
+		{name: "ownership changed after remote verification", failover: true, wantErr: consts.ErrTaskRetry},
+		{name: "sync failed", syncErr: serviceerror.NewUnavailable("sync unavailable"), wantErr: consts.ErrTaskDiscarded},
+		{name: "sync skipped", syncErr: serviceerror.NewFailedPrecondition("sync unsupported"), wantErr: consts.ErrTaskDiscarded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			for _, tc := range []struct {
-				name     string
-				state    *persistencespb.WorkflowMutableState
-				err      error
-				retry    bool
-				failures int
-			}{
-				{name: "pending", state: remotePendingExternalState(), retry: true},
-				{name: "resolved", state: &persistencespb.WorkflowMutableState{
-					ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING},
-					NextEventId:    20,
-				}},
-				{name: "closed", state: &persistencespb.WorkflowMutableState{
-					ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED},
-				}},
-				{name: "not found", err: serviceerror.NewNotFound("execution missing")},
-				{name: "unavailable", err: serviceerror.NewUnavailable("source unavailable"), retry: true, failures: 1},
-				{name: "handover", err: consts.ErrNamespaceHandover, retry: true, failures: 1},
-				{name: "missing response state", retry: true, failures: 1},
-			} {
-				t.Run(tc.name, func(t *testing.T) {
-					t.Parallel()
-					f := newRemoteVerificationTest(t, kind)
-					f.remote.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(f.request())).
-						Return(&adminservice.DescribeMutableStateResponse{DatabaseMutableState: tc.state}, tc.err)
-					verify := f.executor.verifyPendingExternalTaskOnSource(f.executable)
-					err := verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger())
-					if !tc.retry {
-						require.ErrorIs(t, err, consts.ErrTaskDiscarded)
-						require.Equal(t, queues.RemoteVerificationState{}, f.executable.RemoteVerificationState())
-						return
+			ctrl := gomock.NewController(t)
+			shardContext := historyi.NewMockShardContext(ctrl)
+			registry := namespace.NewMockRegistry(ctrl)
+			metadata := cluster.NewMockMetadata(ctrl)
+			remote := adminservicemock.NewMockAdminServiceClient(ctrl)
+			bean := client.NewMockBean(ctrl)
+			entry := tests.GlobalNamespaceEntry
+			source := cluster.TestCurrentClusterName
+			local := cluster.TestAlternativeClusterName
+			workflowKey := definition.NewWorkflowKey(tests.NamespaceID.String(), "workflow-id", "run-id")
+			task := &tasks.SignalExecutionTask{WorkflowKey: workflowKey, InitiatedEventID: 10, Version: 123}
+			shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
+			registry.EXPECT().GetNamespaceByID(tests.NamespaceID).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
+				return entry, nil
+			}).AnyTimes()
+			bean.EXPECT().GetRemoteAdminClient(source).Return(remote, nil)
+			remote.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, *adminservice.DescribeMutableStateRequest, ...grpc.CallOption) (*adminservice.DescribeMutableStateResponse, error) {
+					if tc.failover {
+						entry = entry.Clone(namespace.WithActiveCluster(local))
 					}
-					require.ErrorIs(t, err, consts.ErrTaskRetry)
-					state := f.executable.RemoteVerificationState()
-					require.Equal(t, tc.failures, state.Failures)
-					require.GreaterOrEqual(t, state.NextAttemptTime.Sub(f.clock.Now()), time.Minute)
-					require.Less(t, state.NextAttemptTime.Sub(f.clock.Now()), time.Minute+12*time.Second)
-					for range 5 {
-						require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskRetry)
-					}
-					// Local replication can finish verification during the cooldown without another remote call.
-					require.NoError(t, verify(t.Context(), f.task, nil, log.NewNoopLogger()))
-					require.Equal(t, time.Unix(0, 0).UTC(), f.task.GetVisibilityTime())
-				})
+					return &adminservice.DescribeMutableStateResponse{DatabaseMutableState: resolvedExternalTaskState()}, tc.describeErr
+				},
+			)
+			if tc.syncErr != nil {
+				shardContext.EXPECT().GetClusterMetadata().Return(metadata)
+				metadata.EXPECT().GetCurrentClusterName().Return(local)
+				metadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+				shardContext.EXPECT().GetRemoteAdminClient(source).Return(remote, nil)
+				remote.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).Return(nil, tc.syncErr)
 			}
+			executor := &transferQueueStandbyTaskExecutor{
+				transferQueueTaskExecutorBase: &transferQueueTaskExecutorBase{shardContext: shardContext},
+				clusterName:                   local,
+				clientBean:                    bean,
+			}
+			err := executor.verifyAndSyncExternalTransferTask(t.Context(), task, &externalTaskSyncPosition{}, nil, log.NewNoopLogger())
+			require.ErrorIs(t, err, tc.wantErr)
 		})
 	}
 }
 
-func TestRemoteVerificationFailureBackoffAndRecovery(t *testing.T) {
-	t.Parallel()
-	f := newRemoteVerificationTest(t, "signal")
-	verify := f.executor.verifyPendingExternalTaskOnSource(f.executable)
-	for attempt := range 6 {
-		f.remote.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).
-			Return(nil, serviceerror.NewUnavailable("source unavailable"))
-		require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskRetry)
-		state := f.executable.RemoteVerificationState()
-		interval := time.Minute * time.Duration(1<<min(attempt, 3))
-		require.GreaterOrEqual(t, state.NextAttemptTime.Sub(f.clock.Now()), interval)
-		require.Less(t, state.NextAttemptTime.Sub(f.clock.Now()), interval+interval/5)
-		f.clock.Update(state.NextAttemptTime)
-	}
-	f.remote.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
-		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: remotePendingExternalState()}, nil,
-	)
-	require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskRetry)
-	state := f.executable.RemoteVerificationState()
-	require.Zero(t, state.Failures)
-	require.Less(t, state.NextAttemptTime.Sub(f.clock.Now()), time.Minute+12*time.Second)
-	f.clock.Update(state.NextAttemptTime)
-	f.remote.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("execution deleted"))
-	require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskDiscarded)
-}
-
-func TestRemoteVerificationOwnershipChange(t *testing.T) {
-	t.Parallel()
-	f := newRemoteVerificationTest(t, "signal")
-	f.remote.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(context.Context, *adminservice.DescribeMutableStateRequest, ...grpc.CallOption) (*adminservice.DescribeMutableStateResponse, error) {
-			f.entry = f.entry.Clone(namespace.WithActiveCluster(cluster.TestAlternativeClusterName))
-			return nil, serviceerror.NewNotFound("missing on old active")
-		},
-	)
-	verify := f.executor.verifyPendingExternalTaskOnSource(f.executable)
-	require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskRetry)
-	// Local promotion bypasses the remote cooldown so the queue can execute the task as active.
-	require.ErrorIs(t, verify(t.Context(), f.task, &struct{}{}, log.NewNoopLogger()), consts.ErrTaskRetry)
-}
-
-type remoteVerificationTest struct {
-	executor   *transferQueueStandbyTaskExecutor
-	remote     *adminservicemock.MockAdminServiceClient
-	executable queues.Executable
-	task       tasks.Task
-	clock      *clock.EventTimeSource
-	entry      *namespace.Namespace
-}
-
-func newRemoteVerificationTest(t *testing.T, kind string) *remoteVerificationTest {
-	t.Helper()
-	ctrl := gomock.NewController(t)
-	f := &remoteVerificationTest{
-		clock: clock.NewEventTimeSource().Update(time.Unix(0, 0).UTC()),
-		task:  remoteExternalTask(kind),
-		entry: tests.GlobalNamespaceEntry,
-	}
-	config := tests.NewDynamicConfig()
-	shardContext := shard.NewTestContextWithTimeSource(ctrl, &persistencespb.ShardInfo{RangeId: 1}, config, f.clock)
-	t.Cleanup(shardContext.StopForTest)
-	registry := shardContext.Resource.NamespaceCache
-	registry.EXPECT().GetNamespaceByID(gomock.Any()).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
-		return f.entry, nil
-	}).AnyTimes()
-	shardContext.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
-	f.remote = adminservicemock.NewMockAdminServiceClient(ctrl)
-	bean := client.NewMockBean(ctrl)
-	bean.EXPECT().GetRemoteAdminClient(cluster.TestCurrentClusterName).Return(f.remote, nil).AnyTimes()
-	f.executor = &transferQueueStandbyTaskExecutor{
-		transferQueueTaskExecutorBase: &transferQueueTaskExecutorBase{shardContext: shardContext, config: config},
-		clusterName:                   cluster.TestAlternativeClusterName,
-		clientBean:                    bean,
-	}
-	f.executable = queues.NewExecutable(
-		queues.DefaultReaderId, f.task, f.executor, nil, nil, queues.NewNoopPriorityAssigner(), f.clock,
-		registry, shardContext.Resource.ClusterMetadata, shardContext.ChasmRegistry(), queues.GetTaskTypeTagValue,
-		log.NewNoopLogger(), metrics.NoopMetricsHandler, telemetry.NoopTracer,
-	)
-	return f
-}
-
-func (f *remoteVerificationTest) request() *adminservice.DescribeMutableStateRequest {
-	return &adminservice.DescribeMutableStateRequest{
-		Namespace: tests.Namespace.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: f.task.GetWorkflowID(),
-			RunId:      f.task.GetRunID(),
-		},
-		Archetype:       chasm.WorkflowArchetype,
-		SkipForceReload: true,
-	}
-}
-
-func remoteExternalTask(kind string) tasks.Task {
-	key := definition.NewWorkflowKey(tests.NamespaceID.String(), "workflow-id", "run-id")
-	if kind == "signal" {
-		return &tasks.SignalExecutionTask{WorkflowKey: key, InitiatedEventID: 10, Version: 123, VisibilityTimestamp: time.Unix(0, 0).UTC()}
-	}
-	return &tasks.CancelExecutionTask{WorkflowKey: key, InitiatedEventID: 10, Version: 123, VisibilityTimestamp: time.Unix(0, 0).UTC()}
-}
-
-func remotePendingExternalState() *persistencespb.WorkflowMutableState {
+func resolvedExternalTaskState() *persistencespb.WorkflowMutableState {
 	return &persistencespb.WorkflowMutableState{
-		ExecutionState:     &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING},
-		NextEventId:        20,
-		SignalInfos:        map[int64]*persistencespb.SignalInfo{10: {Version: 123}},
-		RequestCancelInfos: map[int64]*persistencespb.RequestCancelInfo{10: {Version: 123}},
+		ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(versionhistory.NewVersionHistory(
+				nil, []*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(19, 123)},
+			)),
+		},
+		NextEventId: 20,
 	}
 }

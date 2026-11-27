@@ -50,8 +50,6 @@ type (
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
 		SetScheduledTime(time.Time)
-		RemoteVerificationState() RemoteVerificationState
-		SetRemoteVerificationState(RemoteVerificationState)
 
 		// SetThrottleAdmitted records that the gate issued this dispatch. It is set before the
 		// scheduler handoff, which is what carries it to the worker that reads it.
@@ -70,13 +68,6 @@ type (
 		ExecutedAsActive    bool
 
 		ExecutionErr error
-	}
-
-	// RemoteVerificationState throttles remote checks for overdue standby tasks.
-	// It is not persisted; reloading a task allows a fresh verification.
-	RemoteVerificationState struct {
-		Failures        int
-		NextAttemptTime time.Time
 	}
 
 	ExecutorWrapper interface {
@@ -163,7 +154,6 @@ type (
 		attemptNoUserLatency       time.Duration
 		inMemoryNoUserLatency      time.Duration
 		lastActiveness             bool
-		remoteVerificationState    RemoteVerificationState
 		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		throttleState              *ThrottleState
@@ -861,18 +851,6 @@ func (e *executableImpl) GetScheduledTime() time.Time {
 
 func (e *executableImpl) SetScheduledTime(t time.Time) {
 	e.scheduledTime = t
-}
-
-func (e *executableImpl) RemoteVerificationState() RemoteVerificationState {
-	e.Lock()
-	defer e.Unlock()
-	return e.remoteVerificationState
-}
-
-func (e *executableImpl) SetRemoteVerificationState(state RemoteVerificationState) {
-	e.Lock()
-	defer e.Unlock()
-	e.remoteVerificationState = state
 }
 
 // GetDestination returns the embedded task's destination if it exists. Defaults to an empty string.

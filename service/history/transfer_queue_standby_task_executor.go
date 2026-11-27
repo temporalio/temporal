@@ -90,9 +90,9 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.WorkflowTask:
 		err = t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		err = t.processCancelExecution(ctx, task, executable)
+		err = t.processExternalTransferTask(ctx, task, executable.Attempt(), standbyTaskVerifier(t.verifyCancelExecution))
 	case *tasks.SignalExecutionTask:
-		err = t.processSignalExecution(ctx, task, executable)
+		err = t.processExternalTransferTask(ctx, task, executable.Attempt(), standbyTaskVerifier(t.verifySignalExecution))
 	case *tasks.StartChildExecutionTask:
 		eventDetails = make(map[string]any)
 		err = t.processStartChildExecution(ctx, task, eventDetails)
@@ -237,48 +237,6 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			}
 			return postAction(ctx, task, result, logger)
 		},
-	)
-}
-
-func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
-	ctx context.Context,
-	transferTask *tasks.CancelExecutionTask,
-	executable queues.Executable,
-) error {
-	processTaskIfClosed := false
-
-	return t.processTransfer(
-		ctx,
-		processTaskIfClosed,
-		transferTask,
-		standbyTaskVerifier(t.verifyCancelExecution),
-		getStandbyPostActionFn(
-			transferTask,
-			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.verifyPendingExternalTaskOnSource(executable),
-		),
-	)
-}
-
-func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
-	ctx context.Context,
-	transferTask *tasks.SignalExecutionTask,
-	executable queues.Executable,
-) error {
-	processTaskIfClosed := false
-
-	return t.processTransfer(
-		ctx,
-		processTaskIfClosed,
-		transferTask,
-		standbyTaskVerifier(t.verifySignalExecution),
-		getStandbyPostActionFn(
-			transferTask,
-			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.verifyPendingExternalTaskOnSource(executable),
-		),
 	)
 }
 
