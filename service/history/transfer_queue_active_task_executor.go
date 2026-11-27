@@ -985,6 +985,17 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
+	// The initiated event does not carry the identity of the worker that reported the
+	// StartChildWorkflowExecution command, so look it up from the WorkflowTaskCompleted event
+	// it was reported with. This is best-effort: if the event can't be located, proceed with an
+	// empty identity rather than failing to start the child workflow.
+	var identity string
+	if wtCompletedEvent, err := mutableState.GetWorkflowTaskCompletedEvent(ctx, attributes.GetWorkflowTaskCompletedEventId()); err != nil {
+		t.logger.Warn("Unable to load workflow task completed event for child workflow identity", tag.Error(err))
+	} else {
+		identity = wtCompletedEvent.GetWorkflowTaskCompletedEventAttributes().GetIdentity()
+	}
+
 	var parentNamespaceName namespace.Name
 	if namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.NamespaceID)); err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
@@ -1169,6 +1180,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		priority:                    childPriority,
 		inheritedAutoUpgradeInfo:    inheritedAutoUpgradeInfo,
 		terminateExisting:           shouldTerminateAndStartChild,
+		identity:                    identity,
 	}
 	if !shouldTerminateAndStartChild {
 		startParams.orphanedChildReplacementInfo = t.getOrphanedChildReplacementInfo(
@@ -1927,6 +1939,7 @@ type startChildWorkflowParams struct {
 	inheritedAutoUpgradeInfo     *deploymentpb.InheritedAutoUpgradeInfo
 	terminateExisting            bool
 	orphanedChildReplacementInfo *historyservice.OrphanedChildReplacementInfo
+	identity                     string
 }
 
 func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
@@ -1948,6 +1961,7 @@ func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
 		WorkflowExecutionTimeout: params.attributes.WorkflowExecutionTimeout,
 		WorkflowRunTimeout:       params.attributes.WorkflowRunTimeout,
 		WorkflowTaskTimeout:      params.attributes.WorkflowTaskTimeout,
+		Identity:                 params.identity,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
 		RequestId:                params.requestID,
