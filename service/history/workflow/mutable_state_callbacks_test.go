@@ -21,6 +21,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -356,4 +358,35 @@ func (s *mutableStateSuite) TestChasmUpdateCallbacks_InFlightReservedUntilAccept
 	// Were the Registry still to report it, the persisted copy is recognized and not recounted.
 	err = ms.ValidateCallbackAddition([]chasmworkflow.CallbackAddition{inFlight}, another)
 	s.ErrorContains(err, "(3 callbacks already attached)")
+}
+
+func (s *mutableStateSuite) TestApplyWorkflowExecutionSignaledCountsWriteAndDuplicate() {
+	s.mockConfig.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	ms := s.enableChasmCallbacks(10)
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	ms.metricsHandler = handler
+
+	const requestID = "signal-request"
+	for _, eventID := range []int64{10, 11} {
+		s.NoError(ms.ApplyWorkflowExecutionSignaled(&historypb.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+			EventId:   eventID,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+				WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+					RequestId: requestID,
+				},
+			},
+		}))
+	}
+
+	for _, name := range []string{metrics.ChasmIncomingSignalWritten.Name(), metrics.ChasmIncomingSignalDuplicate.Name()} {
+		recordings := capture.SnapshotMetric(name)
+		s.Require().Len(recordings, 1, name)
+		s.Equal(int64(1), recordings[0].Value, name)
+		s.Equal(s.namespaceEntry.Name().String(), recordings[0].Tags["namespace"], name)
+	}
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	s.Require().NoError(err)
+	s.Equal(int64(10), wf.IncomingSignals[requestID].Get(ctx).GetEventId())
 }

@@ -1017,7 +1017,7 @@ var (
 	)
 	ChasmIncomingSignalDuplicate = NewCounterDef(
 		"chasm_incoming_signal_duplicate",
-		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
+		WithDescription("The number of signal applications that found the request ID already present in the CHASM IncomingSignals map. Includes duplicates encountered while applying existing history."),
 	)
 	CHASMRequestIDEvicted = NewCounterDef(
 		"chasm_request_id_evicted",
