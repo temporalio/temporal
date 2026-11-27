@@ -1,4 +1,4 @@
-package snapshothosts
+package ringpop
 
 import (
 	"sync"
@@ -42,7 +42,7 @@ func (p *SnapshotHosts) Hosts() ([]string, error) {
 
 // New creates a provider with an initial host snapshot, a logger, and a refresh
 // hook.
-func New(logger log.Logger, refresh refreshHook, hosts ...string) *SnapshotHosts {
+func NewSnapshotHosts(logger log.Logger, refresh refreshHook, hosts ...string) *SnapshotHosts {
 	return &SnapshotHosts{
 		hosts:  hosts,
 		logger: logger,

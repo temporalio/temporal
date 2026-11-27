@@ -1,4 +1,4 @@
-package snapshothosts
+package ringpop
 
 import (
 	"errors"
@@ -29,7 +29,7 @@ func TestHostsReplacesSnapshot(t *testing.T) {
 			t.Parallel()
 
 			refreshCalls := 0
-			provider := New(log.NewNoopLogger(), func() ([]string, error) {
+			provider := NewSnapshotHosts(log.NewNoopLogger(), func() ([]string, error) {
 				refreshCalls++
 				return test.refreshedHost, nil
 			}, "initial")
@@ -53,7 +53,7 @@ func TestHostsRetainsSnapshotAndRetriesAfterRefreshError(t *testing.T) {
 	t.Parallel()
 
 	refreshCalls := 0
-	provider := New(log.NewNoopLogger(), func() ([]string, error) {
+	provider := NewSnapshotHosts(log.NewNoopLogger(), func() ([]string, error) {
 		refreshCalls++
 		if refreshCalls == 1 {
 			return nil, errors.New("database unavailable")

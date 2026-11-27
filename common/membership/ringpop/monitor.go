@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/membership/ringpop/snapshothosts"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
@@ -232,7 +231,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 			ParallelismFactor: 10,
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
-			DiscoverProvider:  snapshothosts.New(rpo.logger, rpo.refreshCurrentHostports, hostPorts...),
+			DiscoverProvider:  NewSnapshotHosts(rpo.logger, rpo.refreshCurrentHostports, hostPorts...),
 		}
 
 		_, err = rpo.rp.Bootstrap(bootParams)
