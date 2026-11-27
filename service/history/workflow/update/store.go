@@ -74,9 +74,8 @@ type (
 		// clean up the update's mutable-state entry.
 		RejectWorkflowExecutionUpdate(updateID string, rejectionFailure *failurepb.Failure) error
 
-		// HasRequestID checks whether the given requestID has already been
-		// recorded for this workflow execution. Used by AttachCallbacks to deduplicate
-		// callback attachment when the same request is retried.
-		HasRequestID(requestID string) bool
+		// HasCallbackAttachment checks for an existing attachment before writing another event.
+		// Legacy-only executions deduplicate by request ID across the Workflow.
+		HasCallbackAttachment(updateID, requestID string) (bool, error)
 	}
 )

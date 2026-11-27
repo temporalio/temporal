@@ -22,12 +22,14 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -376,6 +378,108 @@ func (s *mutableStateSuite) TestFlushBufferedAdmittedCallbackReferenceReplacesFr
 	s.Nil(legacy.GetAttachTime())
 	s.Equal(event.GetEventType(), legacy.GetEventType())
 	s.Equal(event.GetEventId(), legacy.GetEventId())
+}
+
+func (s *mutableStateSuite) TestAcceptedUpdateCallbackRetryUsesLegacyDedupWithoutCHASM() {
+	ms := s.mutableState
+	s.Require().False(ms.ChasmEnabled())
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.assertAcceptedUpdateCallbackRetryUsesLegacyDedup(ms)
+}
+
+func (s *mutableStateSuite) TestAcceptedUpdateCallbackRetryUsesLegacyDedupWhenRegistrationDisabled() {
+	ms := s.enableChasmCallbacks(10)
+	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{RequestId: "start-request-id"},
+		},
+	)
+	s.Require().NoError(err)
+	s.Require().NotNil(s.chasmWorkflowComponent(ms))
+	s.Require().False(ms.StoresUpdateCallbacksInChasm())
+	s.assertAcceptedUpdateCallbackRetryUsesLegacyDedup(ms)
+}
+
+func (s *mutableStateSuite) assertAcceptedUpdateCallbackRetryUsesLegacyDedup(ms *MutableStateImpl) {
+	const updateID, requestID = "accepted-update", "attachment-request"
+	_, err := ms.AddWorkflowExecutionUpdateAcceptedEvent(updateID, "message-id", 1, &updatepb.Request{
+		Meta: &updatepb.Meta{UpdateId: updateID},
+	})
+	s.Require().NoError(err)
+
+	ctx := s.T().Context()
+	upd := update.NewRegistry(ms).Find(ctx, updateID)
+	s.Require().NotNil(upd)
+	store := WithEffects(effect.Immediate(ctx), ms)
+	request := &updatepb.Request{
+		Meta:                &updatepb.Meta{UpdateId: updateID},
+		RequestId:           requestID,
+		CompletionCallbacks: testCompletionCallbacks(1),
+	}
+
+	before := ms.NumBufferedEvents()
+	written, err := upd.AttachCallbacks(request, store)
+	s.Require().NoError(err)
+	s.True(written)
+	s.True(ms.HasRequestID(requestID))
+	s.Equal(before+1, ms.NumBufferedEvents())
+
+	written, err = upd.AttachCallbacks(request, store)
+	s.Require().NoError(err)
+	s.False(written)
+	s.Equal(before+1, ms.NumBufferedEvents())
+}
+
+func (s *mutableStateSuite) TestHasCallbackAttachmentUsesCHASMWithoutLegacyRequestID() {
+	ms := s.enableChasmCallbacks(10)
+	_, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           "start-request-id",
+				CompletionCallbacks: testCompletionCallbacks(1),
+			},
+		},
+	)
+	s.Require().NoError(err)
+
+	const (
+		updateID  = "update-id"
+		requestID = "request-id"
+	)
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+	s.Require().NoError(wf.AddUpdateCompletionCallbacks(
+		chasmCtx,
+		timestamppb.Now(),
+		chasmworkflow.UpdateCallbackAttachment{
+			UpdateID:  updateID,
+			RequestID: requestID,
+			Callbacks: testCompletionCallbacks(1),
+			EventReference: chasmworkflow.CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventID:   12,
+			},
+		},
+	))
+	s.NotContains(ms.executionState.RequestIds, requestID)
+
+	attached, err := (MutableStateWithEffects{MutableState: ms}).HasCallbackAttachment(updateID, requestID)
+	s.Require().NoError(err)
+	s.True(attached)
+
+	// Older servers attached these callbacks in CHASM but recorded only a workflow-wide reference.
+	ms.AttachRequestID(requestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 12)
+	wf.Updates[updateID].Get(chasmCtx).CallbackAttachmentEventReferences = nil
+	store := MutableStateWithEffects{MutableState: ms}
+	attached, err = store.HasCallbackAttachment(updateID, requestID)
+	s.Require().NoError(err)
+	s.True(attached)
+	attached, err = store.HasCallbackAttachment("other-update", requestID)
+	s.Require().NoError(err)
+	s.False(attached)
 }
 
 func (s *mutableStateSuite) TestChasmCompletionCallbacks_ValidateCallbackAddition() {

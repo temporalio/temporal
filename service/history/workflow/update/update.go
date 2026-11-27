@@ -462,9 +462,8 @@ func (u *Update) AttachCallbacks(
 		return false, nil
 
 	case stateAccepted:
-		// Write the callbacks as their own event, unless their request ID is already recorded
-		// on the workflow. This is the only case that writes an event, and so the only one that
-		// returns true.
+		// Write the callbacks as their own event after checking for a duplicate attachment.
+		// This is the only case that can write an event and return true.
 		return u.persistCallback(eventStore, req.GetRequestId(), req.GetCompletionCallbacks())
 
 	case stateCompleted:
@@ -493,15 +492,15 @@ func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 }
 
 // persistPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
-// buffered AttachCallbacks callback, skipping any whose requestID is already persisted.
+// buffered AttachCallbacks callback, skipping any whose requestID is already attached.
 // Called from onAcceptanceMsg after the acceptance event has been written.
 //
 // NOTE: Each pending callback requires its own event because the API proto's
 // WorkflowUpdateOptionsUpdate carries a singular AttachedRequestId, and the
 // WorkflowUpdateOptions map is keyed by update ID (all entries here share u.id,
 // so only one map entry is possible per event). Each requestID must be durably
-// recorded in the event so that ApplyWorkflowExecutionOptionsUpdatedEvent can
-// call AttachRequestID during replay for correct deduplication.
+// recorded in the event so that replay reconstructs the callback component used
+// for deduplication.
 //
 // In practice, the number of buffered callbacks is very small (1-2): it requires
 // multiple concurrent callers to call AttachCallbacks while the update is in
@@ -517,8 +516,9 @@ func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 	return nil
 }
 
-// persistCallback writes a single WorkflowExecutionOptionsUpdatedEvent to attach the
-// given requestID and completion callbacks, and deduplicate on requestID if already attached.
+// persistCallback writes a single WorkflowExecutionOptionsUpdatedEvent to attach the given
+// requestID and completion callbacks. It first checks mutable state so a retry does not write a
+// second history event for callbacks already attached to this Update.
 // Returns true if an event was written.
 func (u *Update) persistCallback(
 	eventStore EventStore,
@@ -526,8 +526,14 @@ func (u *Update) persistCallback(
 	completionCallbacks []*commonpb.Callback,
 ) (eventWritten bool, err error) {
 	// Callback is already attached, no need to update.
-	if requestID != "" && eventStore.HasRequestID(requestID) {
-		return false, nil
+	if requestID != "" {
+		attached, lookupErr := eventStore.HasCallbackAttachment(u.id, requestID)
+		if lookupErr != nil {
+			return false, lookupErr
+		}
+		if attached {
+			return false, nil
+		}
 	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
 		nil, false, "", nil, nil, "", nil, nil, false,
@@ -919,7 +925,7 @@ func (u *Update) inFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
 	}
 	var inFlight []chasmworkflow.CallbackAddition
 	// The request is nil for an Update admitted from an UpdateAdmitted event, whose callbacks
-	// were persisted along with that event.
+	// were attached along with that event.
 	if u.request != nil {
 		req := &updatepb.Request{}
 		if err := u.request.UnmarshalTo(req); err != nil {

@@ -13,6 +13,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/metrics"
@@ -199,6 +201,55 @@ type MutableStateWithEffects struct {
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
 	return mse.IsWorkflowExecutionRunning()
+}
+
+// HasCallbackAttachment reports whether callbacks were already attached for requestID.
+func (mse MutableStateWithEffects) HasCallbackAttachment(
+	updateID string,
+	requestID string,
+) (bool, error) {
+	// TODO: Propagate the caller's context through update.EventStore. This lookup is in-memory today,
+	// but CHASM component reads may use persistence once partial loading is supported.
+	return HasUpdateCallbackAttachment(
+		context.Background(),
+		mse.MutableState,
+		updateID,
+		requestID,
+	)
+}
+
+// HasUpdateCallbackAttachment checks ownership when new callbacks are stored in CHASM
+// and a Workflow root exists. Otherwise it preserves legacy workflow-wide retry suppression.
+func HasUpdateCallbackAttachment(ctx context.Context, ms historyi.MutableState, updateID, requestID string) (bool, error) {
+	if !ms.StoresUpdateCallbacksInChasm() {
+		return ms.HasRequestID(requestID), nil
+	}
+	wf, chasmCtx, err := readCallbackWorkflow(ctx, ms)
+	if err != nil {
+		return false, err
+	}
+	if wf == nil {
+		return ms.HasRequestID(requestID), nil
+	}
+	return wf.HasUpdateCallbackAttachment(chasmCtx, updateID, requestID), nil
+}
+
+func readCallbackWorkflow(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+) (*chasmworkflow.Workflow, chasm.Context, error) {
+	if !mutableState.ChasmEnabled() {
+		return nil, nil, nil
+	}
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		// Older executions may not have a CHASM Workflow root.
+		if common.IsNotFoundError(err) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	return wf, chasmCtx, nil
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:

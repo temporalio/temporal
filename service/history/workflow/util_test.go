@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
@@ -14,6 +15,41 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
 )
+
+func TestHasCallbackAttachmentWithoutCHASMRoot(t *testing.T) {
+	t.Parallel()
+
+	readErr := serviceerror.NewUnavailable("CHASM unavailable")
+	for _, tc := range []struct {
+		name         string
+		chasmEnabled bool
+		rootErr      error
+		legacyHit    bool
+		wantErr      error
+	}{
+		{name: "CHASMDisabledUsesLegacy", legacyHit: true},
+		{name: "MissingRootUsesLegacy", chasmEnabled: true, rootErr: serviceerror.NewNotFound("component not found"), legacyHit: true},
+		{name: "MissingRootWithoutLegacyIsAMiss", chasmEnabled: true, rootErr: serviceerror.NewNotFound("component not found")},
+		{name: "ReadFailureIsAnError", chasmEnabled: true, rootErr: readErr, wantErr: readErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ms := historyi.NewMockMutableState(gomock.NewController(t))
+			ms.EXPECT().StoresUpdateCallbacksInChasm().Return(tc.chasmEnabled)
+			if tc.chasmEnabled {
+				ms.EXPECT().ChasmEnabled().Return(true)
+				ms.EXPECT().ChasmWorkflowComponentReadOnly(gomock.Any()).Return(nil, nil, tc.rootErr)
+			}
+			if tc.wantErr == nil {
+				ms.EXPECT().HasRequestID("request-id").Return(tc.legacyHit)
+			}
+			attached, err := (MutableStateWithEffects{MutableState: ms}).HasCallbackAttachment("update-id", "request-id")
+			require.ErrorIs(t, err, tc.wantErr)
+			require.Equal(t, tc.legacyHit, attached)
+		})
+	}
+}
 
 func TestForceTerminateWorkflowRecordsMetric(t *testing.T) {
 	ctrl := gomock.NewController(t)
