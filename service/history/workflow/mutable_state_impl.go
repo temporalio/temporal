@@ -6407,10 +6407,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 		// - For buffered events (normal processing path), event.GetEventId() returns the common.BufferedEventID and will be resolved later.
 		// - For already-persisted events (rebuild/replay path), event.GetEventId() returns the real history event ID.
 		nsTag := metrics.NamespaceTag(ms.GetNamespaceEntry().Name().String())
-		if err := wf.AddIncomingSignalEvent(chasmCtx, requestID, event.GetEventId()); err != nil {
-			return err
+		if wf.AddIncomingSignalEvent(chasmCtx, requestID, event.GetEventId()) {
+			metrics.ChasmIncomingSignalWritten.With(ms.metricsHandler).Record(1, nsTag)
+		} else {
+			metrics.ChasmIncomingSignalDuplicate.With(ms.metricsHandler).Record(1, nsTag)
 		}
-		metrics.ChasmIncomingSignalWritten.With(ms.metricsHandler.WithTags(nsTag)).Record(1)
 	}
 	return nil
 }

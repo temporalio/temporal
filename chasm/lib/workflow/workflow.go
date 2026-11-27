@@ -293,29 +293,22 @@ func addAndApplyHistoryEvent[D EventDefinition](
 	return event, def.Apply(ctx, w, event)
 }
 
-// AddIncomingSignalEvent adds an entry for the signal requestID -> eventID mapping to
-// track all signals that have been received by the workflow.
-// Note that since signals are buffered, the eventID may the common.BufferedEventID, which
-// will be updated to a concrete eventID once this signal is flushed to the DB.
-// If caller tries to add an already-existing eventID, this function will ignore and silently return
-// instead of overwriting -- use UpdateIncomingSignalEvent to update existing entries.
+// AddIncomingSignalEvent records the event ID for a signal request ID and returns
+// whether it inserted a new entry. Buffered event IDs are resolved when the
+// signal is flushed to history.
 func (w *Workflow) AddIncomingSignalEvent(
 	ctx chasm.MutableContext,
 	requestID string,
 	eventID int64,
-) error {
+) bool {
+	if w.HasIncomingSignalEvent(ctx, requestID) {
+		return false
+	}
 	if w.IncomingSignals == nil {
 		w.IncomingSignals = make(chasm.Map[string, *chasmworkflowpb.IncomingSignalData])
 	}
-	if w.HasIncomingSignalEvent(ctx, requestID) {
-		return nil
-	}
-	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{
-		// This might be common.BufferedEventID, which will be updated via UpdateIncomingSignalEvent
-		// once this signal is flushed to DB.
-		EventId: eventID,
-	})
-	return nil
+	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{EventId: eventID})
+	return true
 }
 
 // UpdateIncomingSignalEvent updates the eventID for an existing signal requestID in the map.
