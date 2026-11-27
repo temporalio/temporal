@@ -80,8 +80,11 @@ type QueueState struct {
 	state                        protoimpl.MessageState      `protogen:"open.v1"`
 	ReaderStates                 map[int64]*QueueReaderState `protobuf:"bytes,1,rep,name=reader_states,json=readerStates,proto3" json:"reader_states,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ExclusiveReaderHighWatermark *TaskKey                    `protobuf:"bytes,2,opt,name=exclusive_reader_high_watermark,json=exclusiveReaderHighWatermark,proto3" json:"exclusive_reader_high_watermark,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	// Distinct 16-byte namespace IDs referenced by index from
+	// NamespaceIdPredicateAttributes.namespace_id_indexes.
+	NamespaceIdTable [][]byte `protobuf:"bytes,3,rep,name=namespace_id_table,json=namespaceIdTable,proto3" json:"namespace_id_table,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *QueueState) Reset() {
@@ -128,11 +131,21 @@ func (x *QueueState) GetExclusiveReaderHighWatermark() *TaskKey {
 	return nil
 }
 
+func (x *QueueState) GetNamespaceIdTable() [][]byte {
+	if x != nil {
+		return x.NamespaceIdTable
+	}
+	return nil
+}
+
 type QueueReaderState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scopes        []*QueueSliceScope     `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Scopes []*QueueSliceScope     `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// Each group holds one predicate and every range that carries it. Readers expand the groups
+	// into ordinary scopes and treat them as a union with `scopes`.
+	PredicateGroups []*QueueSlicePredicateGroup `protobuf:"bytes,2,rep,name=predicate_groups,json=predicateGroups,proto3" json:"predicate_groups,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *QueueReaderState) Reset() {
@@ -172,6 +185,65 @@ func (x *QueueReaderState) GetScopes() []*QueueSliceScope {
 	return nil
 }
 
+func (x *QueueReaderState) GetPredicateGroups() []*QueueSlicePredicateGroup {
+	if x != nil {
+		return x.PredicateGroups
+	}
+	return nil
+}
+
+type QueueSlicePredicateGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Predicate     *Predicate             `protobuf:"bytes,1,opt,name=predicate,proto3" json:"predicate,omitempty"`
+	Ranges        []*QueueSliceRange     `protobuf:"bytes,2,rep,name=ranges,proto3" json:"ranges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueueSlicePredicateGroup) Reset() {
+	*x = QueueSlicePredicateGroup{}
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueueSlicePredicateGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueueSlicePredicateGroup) ProtoMessage() {}
+
+func (x *QueueSlicePredicateGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueueSlicePredicateGroup.ProtoReflect.Descriptor instead.
+func (*QueueSlicePredicateGroup) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *QueueSlicePredicateGroup) GetPredicate() *Predicate {
+	if x != nil {
+		return x.Predicate
+	}
+	return nil
+}
+
+func (x *QueueSlicePredicateGroup) GetRanges() []*QueueSliceRange {
+	if x != nil {
+		return x.Ranges
+	}
+	return nil
+}
+
 type QueueSliceScope struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Range         *QueueSliceRange       `protobuf:"bytes,1,opt,name=range,proto3" json:"range,omitempty"`
@@ -182,7 +254,7 @@ type QueueSliceScope struct {
 
 func (x *QueueSliceScope) Reset() {
 	*x = QueueSliceScope{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[3]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -194,7 +266,7 @@ func (x *QueueSliceScope) String() string {
 func (*QueueSliceScope) ProtoMessage() {}
 
 func (x *QueueSliceScope) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[3]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,7 +279,7 @@ func (x *QueueSliceScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueSliceScope.ProtoReflect.Descriptor instead.
 func (*QueueSliceScope) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *QueueSliceScope) GetRange() *QueueSliceRange {
@@ -234,7 +306,7 @@ type QueueSliceRange struct {
 
 func (x *QueueSliceRange) Reset() {
 	*x = QueueSliceRange{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[4]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -246,7 +318,7 @@ func (x *QueueSliceRange) String() string {
 func (*QueueSliceRange) ProtoMessage() {}
 
 func (x *QueueSliceRange) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[4]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -259,7 +331,7 @@ func (x *QueueSliceRange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueSliceRange.ProtoReflect.Descriptor instead.
 func (*QueueSliceRange) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *QueueSliceRange) GetInclusiveMin() *TaskKey {
@@ -285,7 +357,7 @@ type ReadQueueMessagesNextPageToken struct {
 
 func (x *ReadQueueMessagesNextPageToken) Reset() {
 	*x = ReadQueueMessagesNextPageToken{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[5]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -297,7 +369,7 @@ func (x *ReadQueueMessagesNextPageToken) String() string {
 func (*ReadQueueMessagesNextPageToken) ProtoMessage() {}
 
 func (x *ReadQueueMessagesNextPageToken) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[5]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -310,7 +382,7 @@ func (x *ReadQueueMessagesNextPageToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadQueueMessagesNextPageToken.ProtoReflect.Descriptor instead.
 func (*ReadQueueMessagesNextPageToken) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ReadQueueMessagesNextPageToken) GetLastReadMessageId() int64 {
@@ -329,7 +401,7 @@ type ListQueuesNextPageToken struct {
 
 func (x *ListQueuesNextPageToken) Reset() {
 	*x = ListQueuesNextPageToken{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[6]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -341,7 +413,7 @@ func (x *ListQueuesNextPageToken) String() string {
 func (*ListQueuesNextPageToken) ProtoMessage() {}
 
 func (x *ListQueuesNextPageToken) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[6]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -354,7 +426,7 @@ func (x *ListQueuesNextPageToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesNextPageToken.ProtoReflect.Descriptor instead.
 func (*ListQueuesNextPageToken) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListQueuesNextPageToken) GetLastReadQueueNumber() int64 {
@@ -383,7 +455,7 @@ type HistoryTask struct {
 
 func (x *HistoryTask) Reset() {
 	*x = HistoryTask{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[7]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -395,7 +467,7 @@ func (x *HistoryTask) String() string {
 func (*HistoryTask) ProtoMessage() {}
 
 func (x *HistoryTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[7]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -408,7 +480,7 @@ func (x *HistoryTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryTask.ProtoReflect.Descriptor instead.
 func (*HistoryTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *HistoryTask) GetShardId() int32 {
@@ -443,7 +515,7 @@ type QueuePartition struct {
 
 func (x *QueuePartition) Reset() {
 	*x = QueuePartition{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[8]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -455,7 +527,7 @@ func (x *QueuePartition) String() string {
 func (*QueuePartition) ProtoMessage() {}
 
 func (x *QueuePartition) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[8]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -468,7 +540,7 @@ func (x *QueuePartition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueuePartition.ProtoReflect.Descriptor instead.
 func (*QueuePartition) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{8}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *QueuePartition) GetMinMessageId() int64 {
@@ -488,7 +560,7 @@ type Queue struct {
 
 func (x *Queue) Reset() {
 	*x = Queue{}
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[9]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +572,7 @@ func (x *Queue) String() string {
 func (*Queue) ProtoMessage() {}
 
 func (x *Queue) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[9]
+	mi := &file_temporal_server_api_persistence_v1_queues_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +585,7 @@ func (x *Queue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Queue.ProtoReflect.Descriptor instead.
 func (*Queue) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{9}
+	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Queue) GetPartitions() map[int32]*QueuePartition {
@@ -530,16 +602,21 @@ const file_temporal_server_api_persistence_v1_queues_proto_rawDesc = "" +
 	"/temporal/server/api/persistence/v1/queues.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a3temporal/server/api/persistence/v1/predicates.proto\"[\n" +
 	"\aTaskKey\x127\n" +
 	"\tfire_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bfireTime\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xde\x02\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\x8c\x03\n" +
 	"\n" +
 	"QueueState\x12e\n" +
 	"\rreader_states\x18\x01 \x03(\v2@.temporal.server.api.persistence.v1.QueueState.ReaderStatesEntryR\freaderStates\x12r\n" +
-	"\x1fexclusive_reader_high_watermark\x18\x02 \x01(\v2+.temporal.server.api.persistence.v1.TaskKeyR\x1cexclusiveReaderHighWatermark\x1au\n" +
+	"\x1fexclusive_reader_high_watermark\x18\x02 \x01(\v2+.temporal.server.api.persistence.v1.TaskKeyR\x1cexclusiveReaderHighWatermark\x12,\n" +
+	"\x12namespace_id_table\x18\x03 \x03(\fR\x10namespaceIdTable\x1au\n" +
 	"\x11ReaderStatesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x03R\x03key\x12J\n" +
-	"\x05value\x18\x02 \x01(\v24.temporal.server.api.persistence.v1.QueueReaderStateR\x05value:\x028\x01\"_\n" +
+	"\x05value\x18\x02 \x01(\v24.temporal.server.api.persistence.v1.QueueReaderStateR\x05value:\x028\x01\"\xc8\x01\n" +
 	"\x10QueueReaderState\x12K\n" +
-	"\x06scopes\x18\x01 \x03(\v23.temporal.server.api.persistence.v1.QueueSliceScopeR\x06scopes\"\xa9\x01\n" +
+	"\x06scopes\x18\x01 \x03(\v23.temporal.server.api.persistence.v1.QueueSliceScopeR\x06scopes\x12g\n" +
+	"\x10predicate_groups\x18\x02 \x03(\v2<.temporal.server.api.persistence.v1.QueueSlicePredicateGroupR\x0fpredicateGroups\"\xb4\x01\n" +
+	"\x18QueueSlicePredicateGroup\x12K\n" +
+	"\tpredicate\x18\x01 \x01(\v2-.temporal.server.api.persistence.v1.PredicateR\tpredicate\x12K\n" +
+	"\x06ranges\x18\x02 \x03(\v23.temporal.server.api.persistence.v1.QueueSliceRangeR\x06ranges\"\xa9\x01\n" +
 	"\x0fQueueSliceScope\x12I\n" +
 	"\x05range\x18\x01 \x01(\v23.temporal.server.api.persistence.v1.QueueSliceRangeR\x05range\x12K\n" +
 	"\tpredicate\x18\x02 \x01(\v2-.temporal.server.api.persistence.v1.PredicateR\tpredicate\"\xb5\x01\n" +
@@ -575,42 +652,46 @@ func file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_persistence_v1_queues_proto_rawDescData
 }
 
-var file_temporal_server_api_persistence_v1_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_temporal_server_api_persistence_v1_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_temporal_server_api_persistence_v1_queues_proto_goTypes = []any{
 	(*TaskKey)(nil),                        // 0: temporal.server.api.persistence.v1.TaskKey
 	(*QueueState)(nil),                     // 1: temporal.server.api.persistence.v1.QueueState
 	(*QueueReaderState)(nil),               // 2: temporal.server.api.persistence.v1.QueueReaderState
-	(*QueueSliceScope)(nil),                // 3: temporal.server.api.persistence.v1.QueueSliceScope
-	(*QueueSliceRange)(nil),                // 4: temporal.server.api.persistence.v1.QueueSliceRange
-	(*ReadQueueMessagesNextPageToken)(nil), // 5: temporal.server.api.persistence.v1.ReadQueueMessagesNextPageToken
-	(*ListQueuesNextPageToken)(nil),        // 6: temporal.server.api.persistence.v1.ListQueuesNextPageToken
-	(*HistoryTask)(nil),                    // 7: temporal.server.api.persistence.v1.HistoryTask
-	(*QueuePartition)(nil),                 // 8: temporal.server.api.persistence.v1.QueuePartition
-	(*Queue)(nil),                          // 9: temporal.server.api.persistence.v1.Queue
-	nil,                                    // 10: temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry
-	nil,                                    // 11: temporal.server.api.persistence.v1.Queue.PartitionsEntry
-	(*timestamppb.Timestamp)(nil),          // 12: google.protobuf.Timestamp
-	(*Predicate)(nil),                      // 13: temporal.server.api.persistence.v1.Predicate
-	(*v1.DataBlob)(nil),                    // 14: temporal.api.common.v1.DataBlob
+	(*QueueSlicePredicateGroup)(nil),       // 3: temporal.server.api.persistence.v1.QueueSlicePredicateGroup
+	(*QueueSliceScope)(nil),                // 4: temporal.server.api.persistence.v1.QueueSliceScope
+	(*QueueSliceRange)(nil),                // 5: temporal.server.api.persistence.v1.QueueSliceRange
+	(*ReadQueueMessagesNextPageToken)(nil), // 6: temporal.server.api.persistence.v1.ReadQueueMessagesNextPageToken
+	(*ListQueuesNextPageToken)(nil),        // 7: temporal.server.api.persistence.v1.ListQueuesNextPageToken
+	(*HistoryTask)(nil),                    // 8: temporal.server.api.persistence.v1.HistoryTask
+	(*QueuePartition)(nil),                 // 9: temporal.server.api.persistence.v1.QueuePartition
+	(*Queue)(nil),                          // 10: temporal.server.api.persistence.v1.Queue
+	nil,                                    // 11: temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry
+	nil,                                    // 12: temporal.server.api.persistence.v1.Queue.PartitionsEntry
+	(*timestamppb.Timestamp)(nil),          // 13: google.protobuf.Timestamp
+	(*Predicate)(nil),                      // 14: temporal.server.api.persistence.v1.Predicate
+	(*v1.DataBlob)(nil),                    // 15: temporal.api.common.v1.DataBlob
 }
 var file_temporal_server_api_persistence_v1_queues_proto_depIdxs = []int32{
-	12, // 0: temporal.server.api.persistence.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
-	10, // 1: temporal.server.api.persistence.v1.QueueState.reader_states:type_name -> temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry
+	13, // 0: temporal.server.api.persistence.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
+	11, // 1: temporal.server.api.persistence.v1.QueueState.reader_states:type_name -> temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry
 	0,  // 2: temporal.server.api.persistence.v1.QueueState.exclusive_reader_high_watermark:type_name -> temporal.server.api.persistence.v1.TaskKey
-	3,  // 3: temporal.server.api.persistence.v1.QueueReaderState.scopes:type_name -> temporal.server.api.persistence.v1.QueueSliceScope
-	4,  // 4: temporal.server.api.persistence.v1.QueueSliceScope.range:type_name -> temporal.server.api.persistence.v1.QueueSliceRange
-	13, // 5: temporal.server.api.persistence.v1.QueueSliceScope.predicate:type_name -> temporal.server.api.persistence.v1.Predicate
-	0,  // 6: temporal.server.api.persistence.v1.QueueSliceRange.inclusive_min:type_name -> temporal.server.api.persistence.v1.TaskKey
-	0,  // 7: temporal.server.api.persistence.v1.QueueSliceRange.exclusive_max:type_name -> temporal.server.api.persistence.v1.TaskKey
-	14, // 8: temporal.server.api.persistence.v1.HistoryTask.blob:type_name -> temporal.api.common.v1.DataBlob
-	11, // 9: temporal.server.api.persistence.v1.Queue.partitions:type_name -> temporal.server.api.persistence.v1.Queue.PartitionsEntry
-	2,  // 10: temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry.value:type_name -> temporal.server.api.persistence.v1.QueueReaderState
-	8,  // 11: temporal.server.api.persistence.v1.Queue.PartitionsEntry.value:type_name -> temporal.server.api.persistence.v1.QueuePartition
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	4,  // 3: temporal.server.api.persistence.v1.QueueReaderState.scopes:type_name -> temporal.server.api.persistence.v1.QueueSliceScope
+	3,  // 4: temporal.server.api.persistence.v1.QueueReaderState.predicate_groups:type_name -> temporal.server.api.persistence.v1.QueueSlicePredicateGroup
+	14, // 5: temporal.server.api.persistence.v1.QueueSlicePredicateGroup.predicate:type_name -> temporal.server.api.persistence.v1.Predicate
+	5,  // 6: temporal.server.api.persistence.v1.QueueSlicePredicateGroup.ranges:type_name -> temporal.server.api.persistence.v1.QueueSliceRange
+	5,  // 7: temporal.server.api.persistence.v1.QueueSliceScope.range:type_name -> temporal.server.api.persistence.v1.QueueSliceRange
+	14, // 8: temporal.server.api.persistence.v1.QueueSliceScope.predicate:type_name -> temporal.server.api.persistence.v1.Predicate
+	0,  // 9: temporal.server.api.persistence.v1.QueueSliceRange.inclusive_min:type_name -> temporal.server.api.persistence.v1.TaskKey
+	0,  // 10: temporal.server.api.persistence.v1.QueueSliceRange.exclusive_max:type_name -> temporal.server.api.persistence.v1.TaskKey
+	15, // 11: temporal.server.api.persistence.v1.HistoryTask.blob:type_name -> temporal.api.common.v1.DataBlob
+	12, // 12: temporal.server.api.persistence.v1.Queue.partitions:type_name -> temporal.server.api.persistence.v1.Queue.PartitionsEntry
+	2,  // 13: temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry.value:type_name -> temporal.server.api.persistence.v1.QueueReaderState
+	9,  // 14: temporal.server.api.persistence.v1.Queue.PartitionsEntry.value:type_name -> temporal.server.api.persistence.v1.QueuePartition
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_queues_proto_init() }
@@ -625,7 +706,7 @@ func file_temporal_server_api_persistence_v1_queues_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_queues_proto_rawDesc), len(file_temporal_server_api_persistence_v1_queues_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
