@@ -353,3 +353,22 @@ func convertHistoryReplicationRateLimiterSettings(v any) (HistoryReplicationRate
 		return HistoryReplicationRateLimiterSettings{}, fmt.Errorf("unknown history replication rate limiter scope: %q", settings.Scope)
 	}
 }
+
+// PeerHealthCheckSettings configures the frontend peer health checker.
+// Probe timeouts and routing errors count as failures. Any reply means the host is reachable.
+type PeerHealthCheckSettings struct {
+	Interval         time.Duration // time between rounds
+	ProbeTimeout     time.Duration // timeout for an individual probe after it acquires a slot
+	SamplePercentage float64       // fraction of each role's hosts probed per round, in (0, 1]
+	FailureThreshold float64       // share of a role's probes that must time out or encounter routing errors for the role to fail, in (0, 1]
+	MinFailedHosts   int           // minimum failed probes for a role to fail. Sample at least one more host when available
+}
+
+// DefaultPeerHealthCheckSettings is the default for frontend.peerHealthCheckSettings. The checker also falls back to it for out-of-range values.
+var DefaultPeerHealthCheckSettings = PeerHealthCheckSettings{
+	Interval:         30 * time.Second,
+	ProbeTimeout:     5 * time.Second,
+	SamplePercentage: 0.5,
+	FailureThreshold: 0.5,
+	MinFailedHosts:   2,
+}
