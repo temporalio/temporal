@@ -334,6 +334,70 @@ func TestCallbackExistenceChecksLeaveUninitializedMapNil(t *testing.T) {
 	require.Nil(t, update.Callbacks)
 }
 
+func TestVisitCallbackAttachmentEventReferences(t *testing.T) {
+	t.Parallel()
+
+	t.Run("VisitsReferencesWithOwningUpdate", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		expected := map[string]CallbackAttachmentEventReference{
+			"update-1/request-1": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+				EventID:   11,
+			},
+			"update-2/request-2": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+				EventID:   12,
+			},
+		}
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:       "update-1",
+				RequestID:      "request-1",
+				Callbacks:      nexusCallbacks("http://callback"),
+				EventReference: expected["update-1/request-1"],
+			},
+		))
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+			ctx,
+			timestamppb.Now(),
+			UpdateCallbackAttachment{
+				UpdateID:       "update-2",
+				RequestID:      "request-2",
+				Callbacks:      nexusCallbacks("http://callback"),
+				EventReference: expected["update-2/request-2"],
+			},
+		))
+
+		actual := make(map[string]CallbackAttachmentEventReference, len(expected))
+		wf.VisitCallbackAttachmentEventReferences(ctx, func(
+			updateID string,
+			requestID string,
+			reference CallbackAttachmentEventReference,
+		) {
+			actual[updateID+"/"+requestID] = reference
+		})
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("VisitsNoReferences", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		visited := false
+
+		wf.VisitCallbackAttachmentEventReferences(ctx, func(
+			string,
+			string,
+			CallbackAttachmentEventReference,
+		) {
+			visited = true
+		})
+		require.False(t, visited)
+	})
+}
+
 func TestSetCallbackAttachmentEventReferenceEventID(t *testing.T) {
 	t.Parallel()
 
