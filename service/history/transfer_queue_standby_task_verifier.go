@@ -3,15 +3,11 @@ package history
 import (
 	"context"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -155,83 +151,4 @@ func (t *transferQueueStandbyTaskExecutor) verifySignalExecution(
 	}
 
 	return &struct{}{}, nil
-}
-
-type closeExecutionVerificationInfo struct {
-	request            *historyservice.VerifyChildExecutionCompletionRecordedRequest
-	childWorkflowState string
-}
-
-type startChildExecutionVerificationInfo struct {
-	request       *historyservice.VerifyFirstWorkflowTaskScheduledRequest
-	namespaceName namespace.Name
-}
-
-func (t *transferQueueStandbyTaskExecutor) verifyCloseExecution(
-	ctx context.Context,
-	task *tasks.CloseExecutionTask,
-	mutableState historyi.MutableState,
-) (any, error) {
-	if mutableState.IsWorkflowExecutionRunning() {
-		return nil, nil
-	}
-	closeVersion, err := mutableState.GetCloseVersion()
-	if err != nil {
-		return nil, err
-	}
-	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task); err != nil {
-		return nil, err
-	}
-	info := mutableState.GetExecutionInfo()
-	if task.SkipParentVerification || !mutableState.HasParentExecution() || info.NewExecutionRunId != "" {
-		return nil, nil
-	}
-	completionEvent, err := mutableState.GetCompletionEvent(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if ndc.IsTerminatedByResetter(completionEvent) {
-		return nil, nil
-	}
-	return &closeExecutionVerificationInfo{
-		request: &historyservice.VerifyChildExecutionCompletionRecordedRequest{
-			NamespaceId:            info.ParentNamespaceId,
-			ParentExecution:        &commonpb.WorkflowExecution{WorkflowId: info.ParentWorkflowId, RunId: info.ParentRunId},
-			ChildExecution:         &commonpb.WorkflowExecution{WorkflowId: task.WorkflowID, RunId: task.RunID},
-			ParentInitiatedId:      info.ParentInitiatedId,
-			ParentInitiatedVersion: info.ParentInitiatedVersion,
-			Clock:                  common.CloneProto(info.ParentClock),
-		},
-		childWorkflowState: mutableState.GetExecutionState().GetState().String(),
-	}, nil
-}
-
-func (t *transferQueueStandbyTaskExecutor) verifyStartChildExecution(
-	ctx context.Context,
-	task *tasks.StartChildExecutionTask,
-	mutableState historyi.MutableState,
-) (any, error) {
-	info, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
-	if !ok {
-		return nil, nil
-	}
-	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), info.Version, task.Version, task); err != nil {
-		return nil, err
-	}
-	started := info.StartedEventId != common.EmptyEventID
-	if !mutableState.IsWorkflowExecutionRunning() && (!started || info.ParentClosePolicy != enumspb.PARENT_CLOSE_POLICY_ABANDON) {
-		// Closed parents only verify children that were started with the abandon policy.
-		return nil, nil
-	}
-	if !started {
-		return &startChildExecutionPostActionInfo{}, nil
-	}
-	return &startChildExecutionVerificationInfo{
-		request: &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-			NamespaceId:       info.NamespaceId,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: info.StartedWorkflowId, RunId: info.StartedRunId},
-			Clock:             common.CloneProto(info.Clock),
-		},
-		namespaceName: namespace.Name(info.Namespace),
-	}, nil
 }

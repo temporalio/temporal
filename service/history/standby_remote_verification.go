@@ -34,7 +34,7 @@ func (t *transferQueueStandbyTaskExecutor) processExternalTransferTask(
 	taskType := task.GetType()
 	age := t.getCurrentTime().Sub(task.GetVisibilityTime())
 	if age >= t.config.StandbyTaskMissingEventsDiscardDelay(taskType) {
-		return t.processTransfer(ctx, false, task, verify,
+		return t.processTransferWithVerification(ctx, false, task, verify,
 			func(ctx context.Context, task tasks.Task, info any, logger log.Logger) error {
 				if info != nil {
 					entry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
@@ -48,10 +48,10 @@ func (t *transferQueueStandbyTaskExecutor) processExternalTransferTask(
 
 	interval := t.config.StandbyTaskRemoteVerificationAttemptInterval(taskType)
 	if age < t.config.StandbyTaskMissingEventsResendDelay(taskType) || interval <= 0 || attempt%interval != 0 {
-		return t.processTransfer(ctx, false, task, verify, standbyTaskPostActionNoOp)
+		return t.processTransferWithVerification(ctx, false, task, verify, standbyTaskPostActionNoOp)
 	}
 
-	return t.processTransfer(ctx, false, task,
+	return t.processTransferWithVerification(ctx, false, task,
 		func(ctx context.Context, task tasks.Task, state historyi.MutableState) (any, error) {
 			pending, err := verify(ctx, task, state)
 			if err != nil || pending == nil {
@@ -125,7 +125,7 @@ func (t *transferQueueStandbyTaskExecutor) verifyAndSyncExternalTransferTask(
 		return consts.ErrTaskDiscarded
 	}
 
-	err = t.processTransfer(ctx, false, task, verify, standbyTaskPostActionNoOp)
+	err = t.processTransferWithVerification(ctx, false, task, verify, standbyTaskPostActionNoOp)
 	if !sourceUnchanged() {
 		return consts.ErrTaskRetry
 	}

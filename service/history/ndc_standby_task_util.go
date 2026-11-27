@@ -25,6 +25,7 @@ import (
 )
 
 type (
+	standbyActionFn       func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (any, error)
 	standbyVerificationFn func(context.Context, tasks.Task, historyi.MutableState) (any, error)
 	standbyPostActionFn   func(context.Context, tasks.Task, any, log.Logger) error
 

@@ -832,12 +832,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	verification, err := s.transferQueueStandbyTaskExecutor.verifyCloseExecution(s.T().Context(), transferTask, mutableState)
-	s.Require().NoError(err)
-	requestInfo, ok := verification.(*closeExecutionVerificationInfo)
-	s.Require().True(ok)
-	s.Require().NotSame(parentClock, requestInfo.request.Clock)
-
 	mutableStateLoaded := false
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
