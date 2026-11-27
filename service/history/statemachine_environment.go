@@ -231,6 +231,13 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return err
 	}
 
+	return e.validateStateMachineRefState(ms, ref, potentialStaleState)
+}
+
+func (e *stateMachineEnvironment) validateStateMachineRefState(
+	ms historyi.MutableState, ref hsm.Ref, potentialStaleState bool,
+) error {
+
 	if ref.StateMachineRef.MutableStateVersionedTransition == nil ||
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount == 0 ||
 		(ref.StateMachineRef.MachineLastUpdateVersionedTransition != nil &&

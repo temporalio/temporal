@@ -9,7 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
@@ -97,9 +96,9 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.WorkflowTask:
 		err = t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		err = t.processCancelExecution(ctx, task)
+		err = t.processExternalTransferTask(ctx, task, executable.Attempt(), standbyTaskVerifier(t.verifyCancelExecution))
 	case *tasks.SignalExecutionTask:
-		err = t.processSignalExecution(ctx, task)
+		err = t.processExternalTransferTask(ctx, task, executable.Attempt(), standbyTaskVerifier(t.verifySignalExecution))
 	case *tasks.StartChildExecutionTask:
 		eventDetails = make(map[string]any)
 		err = t.processStartChildExecution(ctx, task, eventDetails)
@@ -134,33 +133,13 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
-	actionFn := func(
-		ctx context.Context,
-		wfContext historyi.WorkflowContext,
-		ms historyi.MutableState,
-		_ historyi.ReleaseWorkflowContextFunc,
-	) (any, error) {
-		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
-		if err != nil {
-			return nil, err
-		}
-		if !isTaskInTree || !isValid {
-			// Replication has removed the logical task, or the component reports it
-			// invalid — drop the physical task.
-			return nil, nil
-		}
-
-		// Task still exists in the tree; retry until the active cluster executes
-		// and replicates the resulting state change.
-		return ms.ChasmTree(), nil
-	}
 
 	chasmTaskType, _ := t.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
-	return t.processTransfer(
+	return t.processTransferWithVerification(
 		ctx,
 		true,
 		task,
-		actionFn,
+		standbyTaskVerifier(t.verifyChasmSideEffectTransferTask),
 		getStandbyPostActionFn(
 			task,
 			t.getCurrentTime,
@@ -206,37 +185,12 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	transferTask *tasks.ActivityTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduledEventID)
-		if !ok {
-			return nil, nil
-		}
 
-		if activityInfo.Paused {
-			return nil, nil
-		}
-
-		if activityInfo.Stamp != transferTask.Stamp {
-			return nil, consts.ErrStaleReference
-		}
-
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
-		if err != nil {
-			return nil, err
-		}
-
-		if activityInfo.StartedEventId == common.EmptyEventID {
-			return newActivityTaskPostActionInfo(mutableState, activityInfo)
-		}
-
-		return nil, nil
-	}
-
-	return t.processTransfer(
+	return t.processTransferWithVerification(
 		ctx,
 		processTaskIfClosed,
 		transferTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyActivityTask),
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
@@ -250,47 +204,12 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 ) error {
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		wtInfo := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
-		if wtInfo == nil {
-			return nil, nil
-		}
-		if transferTask.Stamp != wtInfo.Stamp {
-			return nil, consts.ErrStaleReference
-		}
 
-		_, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
-		// Task queue is ignored here because at standby, always use original normal task queue,
-		// disregards the transferTask.TaskQueue which could be sticky.
-		// NOTE: scheduleToStart timeout is respected. If workflow was sticky before namespace become standby,
-		// transferTask.TaskQueue is sticky, and there is timer already created for this timeout.
-		// Use this sticky timeout as TTL.
-		taskQueue := &taskqueuepb.TaskQueue{
-			Name: mutableState.GetExecutionInfo().TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
-
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
-		if err != nil {
-			return nil, err
-		}
-
-		if wtInfo.StartedEventID == common.EmptyEventID {
-			return newWorkflowTaskPostActionInfo(
-				mutableState,
-				scheduleToStartTimeout.AsDuration(),
-				taskQueue,
-			)
-		}
-
-		return nil, nil
-	}
-
-	return t.processTransfer(
+	return t.processTransferWithVerification(
 		ctx,
 		false,
 		transferTask,
-		actionFn,
+		standbyTaskVerifier(t.verifyWorkflowTask),
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
@@ -451,72 +370,6 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
-	ctx context.Context,
-	transferTask *tasks.CancelExecutionTask,
-) error {
-	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedEventID)
-		if !ok {
-			return nil, nil
-		}
-
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, transferTask.Version, transferTask)
-		if err != nil {
-			return nil, err
-		}
-
-		return &struct{}{}, nil
-	}
-
-	return t.processTransfer(
-		ctx,
-		processTaskIfClosed,
-		transferTask,
-		actionFn,
-		getStandbyPostActionFn(
-			transferTask,
-			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
-		),
-	)
-}
-
-func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
-	ctx context.Context,
-	transferTask *tasks.SignalExecutionTask,
-) error {
-	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
-		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedEventID)
-		if !ok {
-			return nil, nil
-		}
-
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, transferTask.Version, transferTask)
-		if err != nil {
-			return nil, err
-		}
-
-		return &struct{}{}, nil
-	}
-
-	return t.processTransfer(
-		ctx,
-		processTaskIfClosed,
-		transferTask,
-		actionFn,
-		getStandbyPostActionFn(
-			transferTask,
-			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
-		),
-	)
-}
-
 func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	ctx context.Context,
 	transferTask *tasks.StartChildExecutionTask,
@@ -636,6 +489,21 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 				return t.checkStartChildExecutionStillExistsOnSourceBeforeDiscard(ctx, task, postActionInfo, logger, eventDetails)
 			},
 		),
+	)
+}
+
+func (t *transferQueueStandbyTaskExecutor) processTransferWithVerification(
+	ctx context.Context,
+	processTaskIfClosed bool,
+	task tasks.Task,
+	verify standbyVerificationFn,
+	postAction standbyPostActionFn,
+) error {
+	return t.processTransfer(ctx, processTaskIfClosed, task,
+		func(ctx context.Context, _ historyi.WorkflowContext, state historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
+			return verify(ctx, task, state)
+		},
+		postAction,
 	)
 }
 

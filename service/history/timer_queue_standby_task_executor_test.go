@@ -22,6 +22,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -715,6 +716,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	completeEvent1 := addActivityTaskCompletedEvent(mutableState, scheduledEvent1.GetEventId(), startedEvent1.GetEventId(), nil, identity)
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
+
+	snapshot := common.CloneProto(mutableState.CloneToProto())
+	verification, err := s.timerQueueStandbyTaskExecutor.verifyActivityTimeoutTask(s.T().Context(), timerTask, mutableState)
+	s.Require().NoError(err)
+	s.Require().IsType(activityTimerMaintenance{}, verification)
+	s.ProtoEqual(snapshot, mutableState.CloneToProto())
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent1.GetEventId(), completeEvent1.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -2128,6 +2135,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		s.config,
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
+
+	beforeVerification := common.CloneProto(info)
+	verification, err := timerQueueStandbyTaskExecutor.verifyStateMachineTimerTask(s.T().Context(), task, ms)
+	s.Require().NoError(err)
+	s.Require().IsType(stateMachineTimerMaintenance{}, verification)
+	s.ProtoEqual(beforeVerification, info)
 
 	err = timerQueueStandbyTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
 	s.NoError(err)

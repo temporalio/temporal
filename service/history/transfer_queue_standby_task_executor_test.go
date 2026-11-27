@@ -17,15 +17,18 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
@@ -36,6 +39,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -1028,19 +1032,45 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, now)
-	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	// Exercise the repair window on a passive cell.
+	s.transferQueueStandbyTaskExecutor.clusterName = cluster.TestCurrentClusterName
+	config := s.mockShard.GetConfig()
+	config.StandbyTaskMissingEventsResendDelay = func(enumsspb.TaskType) time.Duration { return s.fetchHistoryDuration }
+	config.StandbyTaskMissingEventsDiscardDelay = func(enumsspb.TaskType) time.Duration { return s.discardDuration }
+	config.StandbyTaskRemoteVerificationAttemptInterval = func(enumsspb.TaskType) int { return 2 }
 
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	executable := queues.NewMockExecutable(s.controller)
+	executable.EXPECT().GetTask().Return(transferTask).AnyTimes()
+	executable.EXPECT().Attempt().Return(2)
+	s.timeSource.Update(now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
 
-	// The suite runs the executor as the namespace's active cluster, so once the task is past the discard delay
-	// the source lookup finds the namespace active here and retries the task instead of discarding it.
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	// The first attempt in the window is off cadence. The next eligible attempt checks the source.
+	s.timeSource.Update(now.Add(s.fetchHistoryDuration))
+	executable.EXPECT().Attempt().Return(3)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
+
+	executable.EXPECT().Attempt().Return(4)
+	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(s.mockRemoteAdminClient, nil)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: persistenceMutableState}, nil,
+	)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
+
+	// The cutoff discards locally pending work, even on an eligible attempt.
+	s.timeSource.Update(now.Add(s.discardDuration))
+	executable.EXPECT().Attempt().Return(6)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+
+	// Local verification can still acknowledge a task at the cutoff.
+	delete(persistenceMutableState.RequestCancelInfos, event.GetEventId())
+	executable.EXPECT().Attempt().Return(8)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Success() {
@@ -1160,19 +1190,83 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, now)
-	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	// Exercise the repair window on a passive cell.
+	s.transferQueueStandbyTaskExecutor.clusterName = cluster.TestCurrentClusterName
+	config := s.mockShard.GetConfig()
+	config.StandbyTaskMissingEventsResendDelay = func(enumsspb.TaskType) time.Duration { return s.fetchHistoryDuration }
+	config.StandbyTaskMissingEventsDiscardDelay = func(enumsspb.TaskType) time.Duration { return s.discardDuration }
+	config.StandbyTaskRemoteVerificationAttemptInterval = func(enumsspb.TaskType) int { return 2 }
 
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	executable := queues.NewMockExecutable(s.controller)
+	executable.EXPECT().GetTask().Return(transferTask).AnyTimes()
+	executable.EXPECT().Attempt().Return(2)
+	s.timeSource.Update(now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
 
-	// The suite runs the executor as the namespace's active cluster, so once the task is past the discard delay
-	// the source lookup finds the namespace active here and retries the task instead of discarding it.
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	// The first attempt in the window is off cadence. The next eligible attempt checks the source.
+	s.timeSource.Update(now.Add(s.fetchHistoryDuration))
+	executable.EXPECT().Attempt().Return(3)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
+
+	executable.EXPECT().Attempt().Return(4)
+	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(s.mockRemoteAdminClient, nil)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: persistenceMutableState}, nil,
+	)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskRetry)
+
+	// The next eligible checks find the exact initiation resolved. The first sync
+	// leaves the local task pending. The second updates local state.
+	resolvedState := common.CloneProto(persistenceMutableState)
+	delete(resolvedState.SignalInfos, event.GetEventId())
+	artifact := &replicationspb.VersionedTransitionArtifact{}
+	source := cluster.TestAlternativeClusterName
+	s.clientBean.EXPECT().GetRemoteAdminClient(source).Return(s.mockRemoteAdminClient, nil).Times(2)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{DatabaseMutableState: resolvedState}, nil,
+	).Times(2)
+	s.mockRemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), protomock.Eq(&adminservice.SyncWorkflowStateRequest{
+		NamespaceId:         s.namespaceID.String(),
+		Execution:           execution,
+		VersionedTransition: transitionhistory.LastVersionedTransition(persistenceMutableState.ExecutionInfo.TransitionHistory),
+		VersionHistories:    persistenceMutableState.ExecutionInfo.VersionHistories,
+		ArchetypeId:         chasm.WorkflowArchetypeID,
+		TargetClusterId:     int32(cluster.TestCurrentClusterInitialFailoverVersion),
+	})).Return(&adminservice.SyncWorkflowStateResponse{VersionedTransitionArtifact: artifact}, nil).Times(2)
+
+	engine := historyi.NewMockEngine(s.controller)
+	s.transferQueueStandbyTaskExecutor.shardContext = standbyTestShardWithEngine{ShardContext: s.mockShard, engine: engine}
+	engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, artifact, source).Return(nil)
+	engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, artifact, source).
+		DoAndReturn(func(ctx context.Context, _ chasm.ArchetypeID, _ *replicationspb.VersionedTransitionArtifact, _ string) error {
+			workflowContext, release, err := getWorkflowExecutionContextForTask(ctx, s.mockShard, s.workflowCache, transferTask)
+			s.Require().NoError(err)
+			defer release(nil)
+			workflowContext.Clear()
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: resolvedState}, nil)
+			return nil
+		})
+
+	executable.EXPECT().Attempt().Return(6)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+
+	executable.EXPECT().Attempt().Return(8)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(s.T().Context(), executable)
+	s.NoError(resp.ExecutionErr)
+}
+
+type standbyTestShardWithEngine struct {
+	historyi.ShardContext
+	engine historyi.Engine
+}
+
+func (s standbyTestShardWithEngine) GetEngine(context.Context) (historyi.Engine, error) {
+	return s.engine, nil
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Success() {

@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -24,11 +25,22 @@ import (
 )
 
 type (
-	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (any, error)
-	standbyPostActionFn func(context.Context, tasks.Task, any, log.Logger) error
+	standbyActionFn       func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (any, error)
+	standbyVerificationFn func(context.Context, tasks.Task, historyi.MutableState) (any, error)
+	standbyPostActionFn   func(context.Context, tasks.Task, any, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
 )
+
+func standbyTaskVerifier[T tasks.Task](verify func(context.Context, T, historyi.MutableState) (any, error)) standbyVerificationFn {
+	return func(ctx context.Context, task tasks.Task, mutableState historyi.MutableState) (any, error) {
+		typedTask, ok := task.(T)
+		if !ok {
+			return nil, fmt.Errorf("unexpected standby task type %T", task)
+		}
+		return verify(ctx, typedTask, mutableState)
+	}
+}
 
 func standbyTaskPostActionNoOp(
 	_ context.Context,
@@ -284,12 +296,10 @@ func getStandbyPostActionFn(
 	taskTime := taskInfo.GetVisibilityTime()
 	discardTime := taskTime.Add(standbyTaskMissingEventsDiscardDelay)
 
-	// now < task start time + StandbyTaskMissingEventsResendDelay
 	if now.Before(discardTime) {
 		return standbyTaskPostActionNoOp
 	}
 
-	// task start time + StandbyTaskMissingEventsResendDelay <= now
 	return discardTaskStandbyPostActionFn
 }
 
