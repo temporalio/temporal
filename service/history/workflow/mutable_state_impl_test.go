@@ -3559,6 +3559,142 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	// Add more checks here if needed.
 }
 
+// TestAddContinueAsNewEvent_InheritsRetryPolicy pins the fix for
+// https://github.com/temporalio/temporal/issues/5249: when the
+// ContinueAsNewWorkflowExecutionCommandAttributes leaves RetryPolicy nil, the
+// continued run must inherit the previous run's retry policy, mirroring how
+// TaskQueue, WorkflowType, and the workflow-task timeout already fall back to
+// the previous run's executionInfo in this code path.
+func (s *mutableStateSuite) TestAddContinueAsNewEvent_InheritsRetryPolicy() {
+	dbState := s.buildWorkflowMutableState()
+	dbState.BufferedEvents = nil
+
+	// Seed the previous run's executionInfo with a retry policy, matching the
+	// scalar fields that AddWorkflowExecutionStartedEventWithOptions persists
+	// at the top of a run.
+	dbState.ExecutionInfo.HasRetryPolicy = true
+	dbState.ExecutionInfo.RetryInitialInterval = durationpb.New(time.Second)
+	dbState.ExecutionInfo.RetryMaximumInterval = durationpb.New(time.Minute)
+	dbState.ExecutionInfo.RetryMaximumAttempts = 7
+	dbState.ExecutionInfo.RetryBackoffCoefficient = 2.5
+	dbState.ExecutionInfo.RetryNonRetryableErrorTypes = []string{"BadInput", "Fatal"}
+
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+	workflowTaskCompletedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		workflowTaskInfo,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
+	var newRunStartEvent *historypb.HistoryEvent
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Do(func(_ events.EventKey, event *historypb.HistoryEvent) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			newRunStartEvent = event
+		}
+	}).Times(2)
+	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
+		context.Background(),
+		workflowTaskCompletedEvent.GetEventId(),
+		"",
+		&commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+			// RetryPolicy intentionally left nil so the previous run's policy
+			// must be inherited.
+			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+		},
+		nil,
+	)
+	s.NoError(err)
+
+	s.Require().NotNil(newRunStartEvent)
+	inherited := newRunStartEvent.GetWorkflowExecutionStartedEventAttributes().GetRetryPolicy()
+	s.Require().NotNil(inherited, "continued run's start event must carry the previous run's retry policy")
+	protorequire.ProtoEqual(s.T(), durationpb.New(time.Second), inherited.GetInitialInterval())
+	protorequire.ProtoEqual(s.T(), durationpb.New(time.Minute), inherited.GetMaximumInterval())
+	s.Equal(int32(7), inherited.GetMaximumAttempts())
+	s.Equal(2.5, inherited.GetBackoffCoefficient())
+	s.Equal([]string{"BadInput", "Fatal"}, inherited.GetNonRetryableErrorTypes())
+
+	newRunExecutionInfo := newRunMutableState.GetExecutionInfo()
+	s.True(newRunExecutionInfo.HasRetryPolicy, "continued run's executionInfo must mark HasRetryPolicy")
+	protorequire.ProtoEqual(s.T(), durationpb.New(time.Second), newRunExecutionInfo.RetryInitialInterval)
+	protorequire.ProtoEqual(s.T(), durationpb.New(time.Minute), newRunExecutionInfo.RetryMaximumInterval)
+	s.Equal(int32(7), newRunExecutionInfo.RetryMaximumAttempts)
+	s.Equal(2.5, newRunExecutionInfo.RetryBackoffCoefficient)
+	s.Equal([]string{"BadInput", "Fatal"}, newRunExecutionInfo.RetryNonRetryableErrorTypes)
+}
+
+// TestAddContinueAsNewEvent_ExplicitRetryPolicyOverridesInherited locks the
+// other side of the fallback: when the CAN command carries its own
+// RetryPolicy, that policy wins and the previous run's stored policy is not
+// copied on top.
+func (s *mutableStateSuite) TestAddContinueAsNewEvent_ExplicitRetryPolicyOverridesInherited() {
+	dbState := s.buildWorkflowMutableState()
+	dbState.BufferedEvents = nil
+
+	dbState.ExecutionInfo.HasRetryPolicy = true
+	dbState.ExecutionInfo.RetryInitialInterval = durationpb.New(time.Second)
+	dbState.ExecutionInfo.RetryMaximumInterval = durationpb.New(time.Minute)
+	dbState.ExecutionInfo.RetryMaximumAttempts = 7
+	dbState.ExecutionInfo.RetryBackoffCoefficient = 2.5
+	dbState.ExecutionInfo.RetryNonRetryableErrorTypes = []string{"BadInput"}
+
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+	workflowTaskCompletedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		workflowTaskInfo,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	explicit := &commonpb.RetryPolicy{
+		InitialInterval:        durationpb.New(5 * time.Second),
+		MaximumInterval:        durationpb.New(10 * time.Minute),
+		MaximumAttempts:        2,
+		BackoffCoefficient:     1.5,
+		NonRetryableErrorTypes: []string{"OverriddenOnly"},
+	}
+
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
+	var newRunStartEvent *historypb.HistoryEvent
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Do(func(_ events.EventKey, event *historypb.HistoryEvent) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			newRunStartEvent = event
+		}
+	}).Times(2)
+	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
+		context.Background(),
+		workflowTaskCompletedEvent.GetEventId(),
+		"",
+		&commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+			RetryPolicy:        explicit,
+		},
+		nil,
+	)
+	s.NoError(err)
+
+	s.Require().NotNil(newRunStartEvent)
+	got := newRunStartEvent.GetWorkflowExecutionStartedEventAttributes().GetRetryPolicy()
+	s.Require().NotNil(got)
+	protorequire.ProtoEqual(s.T(), explicit, got)
+
+	newRunExecutionInfo := newRunMutableState.GetExecutionInfo()
+	s.True(newRunExecutionInfo.HasRetryPolicy)
+	s.Equal(int32(2), newRunExecutionInfo.RetryMaximumAttempts)
+	s.Equal(1.5, newRunExecutionInfo.RetryBackoffCoefficient)
+	s.Equal([]string{"OverriddenOnly"}, newRunExecutionInfo.RetryNonRetryableErrorTypes)
+}
+
 func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
