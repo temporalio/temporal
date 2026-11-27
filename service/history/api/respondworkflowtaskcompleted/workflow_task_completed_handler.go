@@ -70,7 +70,7 @@ type (
 		stopProcessing                      bool // should stop processing any more commands
 		mutableState                        historyi.MutableState
 		effects                             effect.Controller
-		initiatedChildExecutionsInBatch     map[string]struct{} // Set of initiated child executions in the workflow task
+		initiatedChildExecutionsInBatch     map[api.InitiatedChildExecution]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                      update.Registry
 		pendingWorkerCommandsByControlQueue map[string][]*workerpb.WorkerCommand // Batched worker commands by control queue
 		eagerActivityCandidates             []eagerActivityCandidate
@@ -150,7 +150,7 @@ func newWorkflowTaskCompletedHandler(
 		stopProcessing:                  false,
 		mutableState:                    mutableState,
 		effects:                         effects,
-		initiatedChildExecutionsInBatch: make(map[string]struct{}),
+		initiatedChildExecutionsInBatch: make(map[api.InitiatedChildExecution]struct{}),
 		updateRegistry:                  updateRegistry,
 
 		// validation
@@ -1372,7 +1372,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands
-		handler.initiatedChildExecutionsInBatch[attr.GetWorkflowId()] = struct{}{}
+		handler.initiatedChildExecutionsInBatch[api.InitiatedChildExecution{NamespaceID: targetNamespaceID, WorkflowID: attr.GetWorkflowId()}] = struct{}{}
 	}
 	return event, err
 }
