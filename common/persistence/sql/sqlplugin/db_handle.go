@@ -84,15 +84,12 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 			// Another goroutine already reconnected
 			return prevConn
 		}
-
-		h.db.Store(nil)
-		// Store `nil` to prevent other goroutines from slamming the now-unusable database with
-		// transactions we know will fail
-		go prevConn.Close()
 	}
 
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
 
+	// check throttle before destroying the existing pool — if throttled, keep the
+	// current pool alive so callers can keep using it rather than getting nil
 	now := h.timeSource.Now()
 	lastRefresh := h.lastRefresh
 	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
@@ -100,10 +97,18 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 			tag.Duration("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := h.metrics.WithTags(metrics.FailureTag("throttle"))
 		metrics.PersistenceSessionRefreshFailures.With(handler).Record(1)
-		return nil
+		return prevConn
 	}
 
 	h.lastRefresh = now
+	h.db.Store(nil)
+	if prevConn != nil {
+		go func() {
+			if err := prevConn.Close(); err != nil {
+				h.logger.Warn("sql handle: unable to close database connection pool", tag.Error(err))
+			}
+		}()
+	}
 	newConn, err := h.connect()
 	if err != nil {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))
