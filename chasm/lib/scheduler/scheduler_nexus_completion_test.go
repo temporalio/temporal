@@ -85,10 +85,8 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 		require.Contains(t, sched.Schedule.State.Notes, "wf-1")
 	}
 
-	// Check that workflow ID lookup now returns empty (request completed)
 	require.Empty(t, invoker.RunningWorkflowID(tc.completion.RequestId))
 
-	// If we expect a specific status, verify the BufferedStart has Completed set
 	if tc.expectStatus != enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
 		found := false
 		for _, start := range invoker.BufferedStarts {
@@ -109,8 +107,6 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	}
 }
 
-// TestHandleNexusCompletion_Success verifies that a successful workflow completion
-// is properly recorded with the success payload and workflow status is updated.
 func TestHandleNexusCompletion_Success(t *testing.T) {
 	tc := nexusCompletionTestCase{
 		name: "successful completion",
@@ -328,8 +324,6 @@ func TestHandleNexusCompletion_MigratedRunningWorkflowKeepsCompletionState(t *te
 	require.NoError(t, err)
 }
 
-// TestHandleNexusCompletion_Failure verifies that a failed workflow completion
-// is properly recorded with the failure payload and workflow status is updated.
 func TestHandleNexusCompletion_Failure(t *testing.T) {
 	tc := nexusCompletionTestCase{
 		name: "failed completion",
@@ -361,8 +355,6 @@ func TestHandleNexusCompletion_Failure(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
-// TestHandleNexusCompletion_PauseOnFailure verifies that when PauseOnFailure is enabled,
-// a workflow failure causes the schedule to be paused and notes to be set.
 func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 	tc := nexusCompletionTestCase{
 		name: "pause on failure",
@@ -455,13 +447,11 @@ func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
 	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
 }
 
-// TestHandleNexusCompletion_Idempotent verifies that handling a completion for an
-// already-processed request ID (not in BufferedStarts) is a no-op.
 func TestHandleNexusCompletion_Idempotent(t *testing.T) {
 	tc := nexusCompletionTestCase{
 		name: "idempotent completion",
 		setupInvoker: func(invoker *scheduler.Invoker) {
-			// Empty BufferedStarts - request was already processed
+			// Request was already processed.
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{}
 		},
 		completion: &persistencespb.ChasmNexusCompletion{
@@ -477,8 +467,6 @@ func TestHandleNexusCompletion_Idempotent(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
-// TestHandleNexusCompletion_Canceled verifies that a canceled workflow completion
-// is properly recorded with CANCELED status.
 func TestHandleNexusCompletion_Canceled(t *testing.T) {
 	tc := nexusCompletionTestCase{
 		name: "canceled completion",
@@ -513,12 +501,8 @@ func TestHandleNexusCompletion_Canceled(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
-// Deferred starts (Attempt==-1, set by ProcessBuffer when overlap policy
-// holds them back) must be re-enabled when a running workflow completes.
-// recordCompletedAction flips -1 to 0; the immediate ProcessBufferTask
-// addTasks emits fires inline during CloseTransaction and promotes 0 to 1.
-// End state Attempt=1 demonstrates the full defer -> re-enable -> promote
-// cascade.
+// Deferred starts (Attempt -1) must be re-enabled on completion: recordCompletedAction flips -1 to 0, then
+// the immediate ProcessBufferTask fires inline during CloseTransaction and promotes 0 to 1.
 func TestHandleNexusCompletion_ReenablesDeferredStarts(t *testing.T) {
 	tc := nexusCompletionTestCase{
 		name: "completion re-enables deferred starts",
@@ -566,8 +550,6 @@ func TestHandleNexusCompletion_ReenablesDeferredStarts(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
-// TestHandleNexusCompletion_CompletionBeforeStart verifies that a workflow can
-// complete before its start is recorded (workflow has a BufferedStart but no RunId yet).
 func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	desiredTime := time.Now()
 	tc := nexusCompletionTestCase{
@@ -580,7 +562,7 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 					Attempt:     1,
 					ActualTime:  timestamppb.New(desiredTime),
 					DesiredTime: timestamppb.New(desiredTime),
-					// No RunId - workflow hasn't been started yet in our records
+					// Not yet recorded as started.
 				},
 			}
 		},
@@ -602,9 +584,8 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
-// TestHandleNexusCompletion_SuccessPayload: any success clears the failure. A value,
-// including an explicit binary/null, replaces the result; a no-result workflow (empty
-// or nil payload) clears it, so the next run gets no last completion result.
+// Any success clears the failure. A value, including explicit binary/null, replaces the result;
+// an empty or nil payload clears it.
 func TestHandleNexusCompletion_SuccessPayload(t *testing.T) {
 	empty := &schedulerpb.LastCompletionResult{}
 	previous := &schedulerpb.LastCompletionResult{

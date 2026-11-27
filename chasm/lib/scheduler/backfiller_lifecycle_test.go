@@ -26,13 +26,8 @@ type backfillerState struct {
 	attempt           int64
 }
 
-// TestBackfiller_ProcessedContinuationDoesNotRunAgain covers the historical
-// range failure from SCH-074. Once a continuation advances the range and
-// schedules its replacement, firing tasks at the same time must not execute
-// the processed continuation again.
 func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
-	// Use the CHASM test engine and a controllable clock so each task execution
-	// crosses the same transaction boundary as a production task.
+	// The test engine makes each task execution cross a production transaction boundary.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
 	timeSource := clock.NewEventTimeSource()
@@ -43,8 +38,7 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 		BusinessID:  scheduleID,
 	})
 
-	// Create a historical range large enough that the immediate task can only
-	// process its first batch and must leave a delayed continuation.
+	// Large enough that the immediate task must leave a delayed continuation.
 	now := timeSource.Now()
 	handler := scheduler.NewTestHandler(logger)
 	_, err := handler.CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{
@@ -65,7 +59,6 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Confirm schedule creation processed one batch and retained the Backfiller.
 	var afterCreate backfillerState
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
@@ -82,8 +75,6 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 	require.True(t, afterCreate.present, "backfiller should still be processing")
 	require.Equal(t, int64(1), afterCreate.attempt)
 
-	// Free the Invoker capacity consumed by the first batch, then run the
-	// delayed continuation once.
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			s.Invoker.Get(ctx).BufferedStarts = nil
@@ -95,8 +86,6 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 	_, err = engine.FirePureTasks(rootRef, fireTime)
 	require.NoError(t, err)
 
-	// The valid continuation must process exactly one more batch and advance
-	// the historical range cursor.
 	var afterFirst backfillerState
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
@@ -115,8 +104,7 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 	require.True(t, afterFirst.lastProcessedTime.After(afterCreate.lastProcessedTime),
 		"range cursor should advance on a legitimate continuation")
 
-	// Fire tasks again without advancing time. The replacement is scheduled in
-	// the future, so another execution here could only come from the old task.
+	// The replacement is scheduled in the future, so another execution here could only come from the old task.
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			s.Invoker.Get(ctx).BufferedStarts = nil
@@ -126,7 +114,6 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 	_, err = engine.FirePureTasks(rootRef, fireTime)
 	require.NoError(t, err)
 
-	// Verify the stale task did not consume another attempt or move the cursor.
 	var afterSecondFire backfillerState
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
@@ -146,11 +133,8 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 		"processed continuation must not advance the range cursor again")
 }
 
-// TestBackfiller_FutureRangeDoesNotStall covers the opposite clock-domain
-// failure. A range cursor later than wall-clock time must not invalidate the
-// continuations needed to finish the range.
+// A range cursor later than wall-clock time must not invalidate the continuations.
 func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
-	// Use the full task lifecycle so validation runs after each committed batch.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
 	timeSource := clock.NewEventTimeSource()
@@ -161,8 +145,6 @@ func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
 		BusinessID:  scheduleID,
 	})
 
-	// Create a forward-dated range that requires several batches. Its range
-	// cursor will move ahead of the task's wall-clock scheduled time.
 	now := timeSource.Now()
 	handler := scheduler.NewTestHandler(logger)
 	_, err := handler.CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{
@@ -183,7 +165,6 @@ func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Confirm the immediate task processed only the initial batch.
 	var afterCreate backfillerState
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
@@ -199,8 +180,7 @@ func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
 	require.True(t, afterCreate.present)
 	require.Equal(t, int64(1), afterCreate.attempt, "only the first batch should have run at create")
 
-	// Replenish capacity and advance past each backoff. Completion removes the
-	// Backfiller child, proving that every continuation remained valid.
+	// Completion removes the Backfiller, proving every continuation remained valid.
 	for i := 1; i <= 10; i++ {
 		_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 			func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
@@ -233,12 +213,7 @@ func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
 	require.Fail(t, "backfill should complete, but the continuation was invalidated and the range stalled")
 }
 
-// TestBackfiller_Validate_AcceptsOnlyCurrentStamp pins the steady-state stamp
-// validation. It must accept the current task, reject stale and impossible
-// future stamps, and make a replaced task stale.
 func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
-	// Create the schedule through the live handler API so the Backfiller and its
-	// initial task are produced by the same path used in production.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
 	timeSource := clock.NewEventTimeSource()
@@ -276,8 +251,6 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 		SpecProcessor:  specProcessor,
 	})
 
-	// Resolve the committed Backfiller and validate task stamps against
-	// the state created by the initial immediate execution.
 	var backfiller *scheduler.Backfiller
 	var stamp int64
 	var currentValid, staleValid, futureValid bool
@@ -311,8 +284,6 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 	require.False(t, staleValid, "an older/redelivered stamp must be rejected")
 	require.False(t, futureValid, "a stamp ahead of the component must be rejected")
 
-	// Restore capacity through an engine update, then deliver the current task
-	// through the CHASM pure-task lifecycle.
 	currentTask := &schedulerpb.BackfillerTask{Stamp: stamp}
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
@@ -325,8 +296,6 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, dropped)
 
-	// The exact payload that executed must now be invalid, while the successor
-	// stamp remains executable.
 	var nextStamp int64
 	var executedValid, successorValid bool
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
@@ -351,7 +320,7 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 	require.True(t, successorValid, "the newly-scheduled stamp must be valid")
 }
 
-// TestBackfiller_LegacyTaskSchedulesStampedSuccessor covers a rolling-upgrade handoff.
+// Covers a rolling-upgrade handoff.
 func TestBackfiller_LegacyTaskSchedulesStampedSuccessor(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
@@ -405,9 +374,7 @@ func TestBackfiller_LegacyTaskSchedulesStampedSuccessor(t *testing.T) {
 
 	legacyTaskAttrs := chasm.TaskAttributes{ScheduledTime: now}
 
-	// Arrange the persisted state at the handoff boundary directly: Attempt has
-	// advanced to the current stamp and a zero-stamp task is ready for the new
-	// code.
+	// Handoff state: Attempt has advanced to the current stamp and a zero-stamp task is pending.
 	var stamp, attemptBeforeWake int64
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
@@ -426,8 +393,6 @@ func TestBackfiller_LegacyTaskSchedulesStampedSuccessor(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, backfiller)
 
-	// The new validator rejects the stale stamped task and accepts the zero-stamp
-	// legacy task.
 	currentTask := &schedulerpb.BackfillerTask{Stamp: stamp}
 	legacyTask := &schedulerpb.BackfillerTask{}
 	var currentValid, legacyValid bool
@@ -449,14 +414,11 @@ func TestBackfiller_LegacyTaskSchedulesStampedSuccessor(t *testing.T) {
 	require.False(t, currentValid, "the stamped task must be stale")
 	require.True(t, legacyValid, "the zero-stamp task must remain executable")
 
-	// Execute the old task with the new handler through the CHASM lifecycle. It
-	// only schedules a stamped successor; it must not process the backfill range.
+	// The legacy task only schedules a stamped successor; it must not process the range.
 	executed, err := engine.FirePureTasks(rootRef, now)
 	require.NoError(t, err)
 	require.Equal(t, 1, executed)
 
-	// The migration wake-up keeps the range unprocessed, does not increment
-	// Attempt, and invalidates all zero-stamp tasks after scheduling the successor.
 	var attempt, taskStamp int64
 	var legacyStillValid, successorValid bool
 	var actualTimes []time.Time

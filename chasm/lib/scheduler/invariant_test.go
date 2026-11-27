@@ -14,64 +14,25 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// This file implements the "stuckness" invariant for Schedules/V2.
-//
-// Production has repeatedly produced schedules that are open, unpaused, and
-// carry no pending work: they never re-arm and never close. Every confirmed
-// instance violated exactly one predicate:
-//
-//	  !sched.Closed  =>  the tree carries at least one live logical task.
-//
-// Note that this is a liveness property, not a transition-validity property.
-// The scheduler has no state enum to validate transitions against:
-// Scheduler.LifecycleState is derived and two-valued (Completed iff Closed),
-// and every sub-component hardcodes LifecycleStateRunning. In each known bug
-// every transition taken was legal; the failure was that no transition
-// happened at all.
-//
-// IMPORTANT: nothing here may touch live components. Materializing a chasm
-// Field (e.g. sched.Invoker.Get(ctx)) escalates the root node's valueState and
-// marks the tree dirty even for a read, which is itself one of the fault
-// mechanisms behind the production bugs. So this check reads only:
-//   - plain Go field access on the embedded *schedulerpb.SchedulerState proto
-//   - the serialized snapshot returned by Node.Snapshot
-// It never constructs a chasm.Context.
+// Stuckness invariant: !sched.Closed => the tree carries at least one live logical task.
+// Reads only the proto and Node.Snapshot, since materializing a chasm Field marks the tree dirty even for a read.
 
-// schedState is a test-only vocabulary for the scheduler's lifecycle. It is
-// derived, never persisted: there is deliberately no state enum on the
-// component, and adding one is a proto change with V1->V2 migration and
-// rollback implications that this check does not require.
+// schedState is derived, never persisted; the component deliberately has no state enum.
 type schedState string
 
 const (
-	// stateSentinel is a schedule-ID reservation. Inert by design.
-	stateSentinel schedState = "sentinel"
-	// stateMigrating is mid-migration to a workflow-backed (V1) scheduler,
-	// driven by SchedulerMigrateToWorkflowTask.
+	// A schedule-ID reservation; inert by design.
+	stateSentinel  schedState = "sentinel"
 	stateMigrating schedState = "migrating"
-	// stateCompleted is terminal: Closed is set.
 	stateCompleted schedState = "completed"
-	// stateIdle is non-terminal and quiescent, awaiting its idle timer.
-	stateIdle schedState = "idle"
-	// stateRunning is non-terminal with pending work armed.
-	stateRunning schedState = "running"
-	// stateStuck is the bug: non-terminal, but nothing will ever wake it.
+	stateIdle      schedState = "idle"
+	stateRunning   schedState = "running"
+	// Non-terminal, but nothing will ever wake it.
 	stateStuck schedState = "stuck"
 )
 
-// liveTaskCount counts logical tasks across every node in the tree.
-//
-// This deliberately counts *logical* tasks, from ChasmComponentAttributes.
-// PureTasks and SideEffectTasks, rather than physical tasks. A physical task
-// can exist on the backend while the logical task it points at has been reaped
-// or invalidated, so counting physical tasks reports a schedule as armed when
-// it is in fact stuck. Side-effect tasks count because some valid states, such
-// as migration callback attachment, rely on one before arming pure tasks.
-// (chasmtest.Engine.Tasks and testEnv.NodeBackend.TasksByCategory both expose
-// physical tasks, and are the wrong source for this check.)
-//
-// node must be the root and the tree must be clean; Node.Snapshot panics
-// otherwise. Both hold immediately after a successful CloseTransaction.
+// liveTaskCount counts logical, not physical, tasks: a physical task can outlive the logical task it points at.
+// Requires the root node and a clean tree; Node.Snapshot panics otherwise.
 func liveTaskCount(node *chasm.Node) (int, map[string]int) {
 	byPath := make(map[string]int)
 	total := 0
@@ -87,9 +48,6 @@ func liveTaskCount(node *chasm.Node) (int, map[string]int) {
 	return total, byPath
 }
 
-// derivedState computes the scheduler's lifecycle state from the tuple that
-// actually represents it: (Sentinel, WorkflowMigration, Closed, IdleCloseTime,
-// live logical task count).
 func derivedState(sched *scheduler.Scheduler, liveTasks int) schedState {
 	switch {
 	case sched.GetSentinel():
@@ -107,9 +65,7 @@ func derivedState(sched *scheduler.Scheduler, liveTasks int) schedState {
 	}
 }
 
-// idleTaskCount counts armed SchedulerIdleTasks across the tree, resolving the
-// task's registered type ID rather than matching on node path (the root
-// Scheduler component also carries callback and migration tasks).
+// Matches on task type ID, not node path: the root also carries callback and migration tasks.
 func idleTaskCount(registry *chasm.Registry, node *chasm.Node) int {
 	wantTypeID, ok := registry.TaskIDFor(&schedulerpb.SchedulerIdleTask{})
 	if !ok {
@@ -126,19 +82,7 @@ func idleTaskCount(registry *chasm.Registry, node *chasm.Node) int {
 	return count
 }
 
-// requireIdleCloseTimeBacked asserts that a declared idle deadline is actually
-// backed by an armed idle task.
-//
-// IdleCloseTime is surfaced as the ScheduleIdleCloseTime search attribute and
-// is what the production stuck-schedule scanner reads. When
-// SchedulerIdleTaskHandler.Validate drops a task as expiration_shift and
-// nothing arms a replacement, IdleCloseTime is left behind: the schedule never
-// closes, and the very signal built to detect that reports a close time that
-// will never arrive. That combination is always wrong.
-//
-// Only asserted in this direction. Sentinels legitimately arm an idle task
-// without setting IdleCloseTime (see NewSentinel), so an armed task with no
-// declared deadline is not a defect.
+// A declared IdleCloseTime with no armed idle task never closes. The converse is fine: sentinels arm an idle task without IdleCloseTime.
 func requireIdleCloseTimeBacked(t *testing.T, registry *chasm.Registry, node *chasm.Node, sched *scheduler.Scheduler) {
 	t.Helper()
 
@@ -152,7 +96,6 @@ func requireIdleCloseTimeBacked(t *testing.T, registry *chasm.Registry, node *ch
 		sched.GetIdleCloseTime().AsTime(), describeSched(sched, total, byPath))
 }
 
-// requireNotStuck asserts the stuckness invariant against a clean tree.
 func requireNotStuck(t *testing.T, node *chasm.Node, sched *scheduler.Scheduler) {
 	t.Helper()
 
@@ -175,8 +118,6 @@ func requireValidSchedulerState(
 	requireIdleCloseTimeBacked(t, registry, node, sched)
 }
 
-// describeSched renders the full state tuple for a failure message, so a
-// triage does not require re-running under a debugger.
 func describeSched(sched *scheduler.Scheduler, total int, byPath map[string]int) string {
 	paths := make([]string, 0, len(byPath))
 	for p := range byPath {
@@ -198,9 +139,7 @@ func describeSched(sched *scheduler.Scheduler, total int, byPath map[string]int)
 	return b.String()
 }
 
-// TestDerivedState pins the classification tuple. Without this, a refactor
-// that made derivedState never return stateStuck would silently disarm every
-// stuckness assertion in the package while leaving the suite green.
+// Guards against derivedState never returning stateStuck, which would silently disarm every stuckness check.
 func TestDerivedState(t *testing.T) {
 	t.Parallel()
 

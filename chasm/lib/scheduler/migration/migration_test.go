@@ -85,7 +85,6 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, "test-ns-id", req.NamespaceId)
 
 	migrationState := req.State
-	// Scheduler state
 	require.NotNil(t, migrationState)
 	require.NotNil(t, migrationState.SchedulerState)
 	require.False(t, migrationState.SchedulerState.Schedule.State.Paused, "schedule should preserve unpaused state")
@@ -95,11 +94,9 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, int64(42), migrationState.SchedulerState.ConflictToken)
 	require.False(t, migrationState.SchedulerState.Closed)
 
-	// Generator state
 	require.NotNil(t, migrationState.GeneratorState)
 	require.Equal(t, now, migrationState.GeneratorState.LastProcessedTime.AsTime())
 
-	// Invoker state - buffered starts + running workflows + completed
 	require.NotNil(t, migrationState.InvokerState)
 	require.Len(t, migrationState.InvokerState.BufferedStarts, 3) // 1 buffered + 1 running + 1 completed
 
@@ -128,7 +125,6 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, 1, running, "expected 1 running workflow")
 	require.Equal(t, 1, completed, "expected 1 completed workflow")
 
-	// Backfillers
 	require.Len(t, migrationState.Backfillers, 1)
 	for id, backfiller := range migrationState.Backfillers {
 		require.Equal(t, id, backfiller.BackfillId)
@@ -136,22 +132,16 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		require.Equal(t, now.Add(-time.Hour), backfiller.GetBackfillRequest().StartTime.AsTime())
 	}
 
-	// Last completion result
 	require.NotNil(t, migrationState.LastCompletionResult)
 	require.Equal(t, []byte("result"), migrationState.LastCompletionResult.Success.Data)
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
-	// Search attributes and memo: user-defined SAs are preserved as-is.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
 	require.Equal(t, memo.GetFields(), migrationState.Memo)
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
-	// V1 scheduler workflows carry TemporalNamespaceDivision ('TemporalScheduler')
-	// and TemporalSchedulePaused in their search attributes. Both are system SAs
-	// that the CHASM framework manages independently, so they must not be stored in
-	// the CHASM entity's custom SA map. Storing them there causes a spurious
-	// warn-level log when the custom SA mapper finds no per-namespace mapping for them.
+	// CHASM manages system SAs itself; storing them in the custom SA map logs a spurious warning.
 	userSA := &commonpb.Payload{Data: []byte(`"my-value"`)}
 
 	tests := []struct {
@@ -327,17 +317,7 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	require.True(t, triggerFound)
 }
 
-// TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue verifies that a
-// still-pending manual trigger Backfiller -- even though its own due time predates an
-// already-pending regular buffered start -- ends up AFTER that start in the converted V1
-// BufferedStarts list, not before it. A pending trigger Backfiller hasn't been enqueued into the
-// invoker's buffer yet: BackfillerTaskHandler.processTrigger only calls
-// Invoker.EnqueueBufferedStarts (append-only) once its task actually executes, regardless of the
-// trigger's own due time. So simulating "if CHASM kept running" means the trigger belongs after
-// whatever's already buffered. V1's BUFFER_ONE (and "nothing running") always keeps whichever
-// entry is first in the list; if the earlier-due-but-not-yet-enqueued trigger were placed first
-// instead, a rolled-back scheduler with a running workflow would retain the trigger and
-// permanently drop the already-deferred regular start.
+// A pending trigger is only appended to the invoker buffer when its task runs, and V1 BUFFER_ONE keeps the first entry.
 func TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	scheduler := &schedulerpb.SchedulerState{
@@ -351,7 +331,6 @@ func TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue(
 	invoker := &schedulerpb.InvokerState{
 		BufferedStarts: []*schedulespb.BufferedStart{
 			{
-				// Due at -1m: later than the trigger below, but already enqueued.
 				NominalTime:   timestamppb.New(now.Add(-time.Minute)),
 				ActualTime:    timestamppb.New(now.Add(-time.Minute)),
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
@@ -360,9 +339,7 @@ func TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue(
 	}
 	backfillers := map[string]*schedulerpb.BackfillerState{
 		"trigger-1": {
-			BackfillId: "trigger-1",
-			// Requested well before the pending buffered start's own due time, but not
-			// yet enqueued into the invoker's buffer.
+			BackfillId:        "trigger-1",
 			LastProcessedTime: timestamppb.New(now.Add(-10 * time.Minute)),
 			Request: &schedulerpb.BackfillerState_TriggerRequest{
 				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
@@ -379,11 +356,7 @@ func TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue(
 	require.True(t, args.State.BufferedStarts[1].GetManual(), "the not-yet-enqueued trigger must land after it")
 }
 
-// TestCHASMToLegacyStartScheduleArgs_MultipleTriggersDeterministicOrder verifies that when
-// multiple trigger Backfillers are pending simultaneously (built from a randomized map
-// iteration, so they have no defined relative order of their own), they still land in the
-// converted V1 BufferedStarts list in a deterministic order -- sorted by ActualTime -- rather
-// than depending on map iteration order.
+// Pending triggers come from map iteration, so they must be sorted by ActualTime.
 func TestCHASMToLegacyStartScheduleArgs_MultipleTriggersDeterministicOrder(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	scheduler := &schedulerpb.SchedulerState{
@@ -424,14 +397,7 @@ func TestCHASMToLegacyStartScheduleArgs_MultipleTriggersDeterministicOrder(t *te
 	}
 }
 
-// TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder verifies that two
-// already-enqueued invoker BufferedStarts keep their original relative order even when the
-// later-enqueued one has an OLDER ActualTime -- exactly what a backfill (processing a
-// historical time range) can produce when it enqueues after a regular tick. A plain sort of
-// the combined list by ActualTime would put the backfill-derived entry first, and since V1's
-// BUFFER_ONE (and "nothing running") always keeps whichever entry is first in the list, that
-// would make the rolled-back scheduler execute the backfill and permanently discard the
-// already-deferred regular start instead.
+// A backfill can enqueue an older ActualTime after a regular start; V1 BUFFER_ONE keeps the first entry, so don't re-sort.
 func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	scheduler := &schedulerpb.SchedulerState{
@@ -445,14 +411,11 @@ func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing
 	invoker := &schedulerpb.InvokerState{
 		BufferedStarts: []*schedulespb.BufferedStart{
 			{
-				// Enqueued first: a regular deferred BUFFER_ONE start, due "now".
 				NominalTime:   timestamppb.New(now),
 				ActualTime:    timestamppb.New(now),
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
 			},
 			{
-				// Enqueued second, e.g. by a backfill processing a historical window --
-				// its own due time is OLDER than the entry already ahead of it.
 				NominalTime:   timestamppb.New(now.Add(-time.Hour)),
 				ActualTime:    timestamppb.New(now.Add(-time.Hour)),
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
@@ -469,15 +432,7 @@ func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing
 }
 
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
-	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
-	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1
-	// (version >= DontTrackOverlapping) intentionally keeps ALLOW_ALL runs out
-	// of Info.RunningWorkflows, because they don't participate in overlap
-	// resolution (see recordAction in the V1 scheduler workflow). The V2->V1
-	// migration must therefore not export them into RunningWorkflows: doing so
-	// would make a rolled-back schedule treat itself as busy and mis-apply
-	// SKIP/BUFFER/CANCEL/TERMINATE to later, non-ALLOW_ALL starts. The ALLOW_ALL
-	// runs must still appear in RecentActions, matching V1.
+	// V1 keeps ALLOW_ALL runs out of RunningWorkflows; exporting them would make a rolled-back schedule think it is busy.
 	now := time.Now().UTC()
 	scheduler := &schedulerpb.SchedulerState{
 		Namespace:     "test-ns",
@@ -490,8 +445,6 @@ func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *
 	invoker := &schedulerpb.InvokerState{
 		BufferedStarts: []*schedulespb.BufferedStart{
 			{
-				// Running, started under ALLOW_ALL: excluded from RunningWorkflows,
-				// but present in RecentActions.
 				NominalTime:   timestamppb.New(now.Add(-5 * time.Minute)),
 				ActualTime:    timestamppb.New(now.Add(-5 * time.Minute)),
 				StartTime:     timestamppb.New(now.Add(-5 * time.Minute)),
@@ -500,7 +453,6 @@ func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			},
 			{
-				// Running, non-ALLOW_ALL: tracked in RunningWorkflows, as in V1.
 				NominalTime:   timestamppb.New(now.Add(-3 * time.Minute)),
 				ActualTime:    timestamppb.New(now.Add(-3 * time.Minute)),
 				StartTime:     timestamppb.New(now.Add(-3 * time.Minute)),
@@ -509,7 +461,6 @@ func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 			{
-				// Completed ALLOW_ALL: a recent action only, never running.
 				NominalTime:   timestamppb.New(now.Add(-20 * time.Minute)),
 				ActualTime:    timestamppb.New(now.Add(-20 * time.Minute)),
 				StartTime:     timestamppb.New(now.Add(-20 * time.Minute)),
@@ -526,14 +477,11 @@ func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *
 
 	args := CHASMToLegacyStartScheduleArgs(scheduler, nil, invoker, nil, nil, nil, nil, now)
 
-	// Only the non-ALLOW_ALL running workflow is exported to RunningWorkflows.
 	require.Len(t, args.Info.RunningWorkflows, 1,
 		"ALLOW_ALL run must not be exported to RunningWorkflows")
 	require.Equal(t, "wf-skip", args.Info.RunningWorkflows[0].WorkflowId)
 	require.Equal(t, "run-skip", args.Info.RunningWorkflows[0].RunId)
 
-	// All three started executions still appear in RecentActions, matching V1,
-	// which records every action regardless of overlap policy.
 	recentStatusByRunID := make(map[string]enumspb.WorkflowExecutionStatus, len(args.Info.RecentActions))
 	for _, action := range args.Info.RecentActions {
 		recentStatusByRunID[action.GetStartWorkflowResult().GetRunId()] = action.GetStartWorkflowStatus()
@@ -544,14 +492,11 @@ func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *
 	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recentStatusByRunID["run-skip"])
 	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, recentStatusByRunID["run-allow-all-done"])
 
-	// NeedRefresh mirrors the (correctly reduced) running set.
 	require.True(t, args.State.NeedRefresh)
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t *testing.T) {
-	// V1's recordAction puts the same workflow in both RecentActions (with
-	// RUNNING status) and RunningWorkflows. The migration should not create
-	// duplicate BufferedStarts for the same execution.
+	// V1 records a running workflow in both RecentActions and RunningWorkflows.
 	now := time.Now().UTC()
 	state := &schedulespb.InternalState{
 		Namespace:     "test-ns",
@@ -565,14 +510,12 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 		},
 		RecentActions: []*schedulepb.ScheduleActionResult{
 			{
-				// Completed action - should be kept.
 				ScheduleTime:        timestamppb.New(now.Add(-2 * time.Hour)),
 				ActualTime:          timestamppb.New(now.Add(-2 * time.Hour)),
 				StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "wf-old", RunId: "run-old"},
 				StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
 			{
-				// Same workflow as RunningWorkflows - should be deduplicated.
 				ScheduleTime:        timestamppb.New(now.Add(-time.Hour)),
 				ActualTime:          timestamppb.New(now.Add(-time.Hour)),
 				StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"},
@@ -583,8 +526,6 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 
 	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, nil, nil, now)
 
-	// Should have 2 BufferedStarts: 1 running (from RunningWorkflows) + 1 completed (from RecentActions).
-	// The running entry in RecentActions should be excluded since it duplicates RunningWorkflows.
 	require.Len(t, req.State.InvokerState.BufferedStarts, 2)
 
 	var running, completed int
@@ -605,8 +546,6 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 	require.Equal(t, 1, running, "expected exactly 1 running workflow (not duplicated)")
 	require.Equal(t, 1, completed, "expected 1 completed workflow from recent actions")
 
-	// Verify the round-trip: converting back to legacy should also have no
-	// duplicate RunIds in RecentActions.
 	_, _, recentActions := splitBufferedStartsForLegacy(req.State.InvokerState.BufferedStarts)
 	seen := make(map[string]bool)
 	for _, action := range recentActions {
@@ -617,9 +556,7 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 }
 
 func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) {
-	// With ALLOW_ALL overlap policy, multiple workflows can be running
-	// concurrently. Each must get a unique RequestId so that
-	// recordCompletedAction matches the correct BufferedStart.
+	// Under ALLOW_ALL, recordCompletedAction needs a unique RequestId per running workflow.
 	now := time.Now().UTC()
 	running := []*commonpb.WorkflowExecution{
 		{WorkflowId: "wf-1", RunId: "run-aaa"},
@@ -642,8 +579,7 @@ func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) 
 	}
 }
 
-// An empty success payload (no-result workflow) must not be carried into V1,
-// which would otherwise forward it as a payload without encoding metadata.
+// V1 would forward an empty payload without encoding metadata.
 func TestCHASMToLegacyStartScheduleArgs_DropsEmptySuccessPayload(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	scheduler := &schedulerpb.SchedulerState{

@@ -19,16 +19,13 @@ import (
 
 const idleTestIdleTime = 7 * 24 * time.Hour
 
-// bufferedStartSeed describes a completed action to seed into the Invoker.
 type bufferedStartSeed struct {
 	requestID string
 	startTime time.Time
 	closeTime time.Time
 }
 
-// seedCompletedStarts replaces the Invoker's buffer with completed starts built
-// from seeds. Every start carries a RunId, since recentActions() skips starts
-// that never started.
+// Every start carries a RunId, since recentActions() skips starts that never started.
 func seedCompletedStarts(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context, seeds []bufferedStartSeed) {
 	t.Helper()
 	starts := make([]*schedulespb.BufferedStart, 0, len(seeds))
@@ -51,15 +48,9 @@ func seedCompletedStarts(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Con
 	sched.Invoker.Get(ctx).BufferedStarts = starts
 }
 
-// burstSeeds reproduces the production shape: `count` actions that all started
-// within the same instant, plus one that started marginally later but closed
-// first, so retention evicts precisely the start holding the maximum StartTime.
-//
-// Returned in close-time order, oldest first, which is the order
-// applyCompletedRetention evicts in.
+// The straggler has the latest StartTime but the oldest CloseTime, so retention evicts it first.
 func burstSeeds(base time.Time, count int, skew time.Duration) []bufferedStartSeed {
 	seeds := make([]bufferedStartSeed, 0, count)
-	// The straggler: latest StartTime, oldest CloseTime -> first to be evicted.
 	seeds = append(seeds, bufferedStartSeed{
 		requestID: "req-straggler",
 		startTime: base.Add(skew),
@@ -75,10 +66,7 @@ func burstSeeds(base time.Time, count int, skew time.Duration) []bufferedStartSe
 	return seeds
 }
 
-// countIdlePureTasks counts logical SchedulerIdleTask entries persisted on the
-// root component. This is the number that grew to 43 in production; the physical
-// timer count hides it, because CHASM materializes only the first pure task of
-// each (component, scheduled time) group.
+// Counts logical tasks, since CHASM materializes only one timer per (component, scheduled time).
 func countIdlePureTasks(t *testing.T, env *testEnv) int {
 	t.Helper()
 	idleTaskID, ok := env.Registry.TaskIDFor(&schedulerpb.SchedulerIdleTask{})
@@ -99,8 +87,6 @@ func countIdlePureTasks(t *testing.T, env *testEnv) int {
 	return count
 }
 
-// idlePureTaskTimes returns the scheduled times of every persisted idle task, in
-// persisted order (which CHASM keeps sorted by scheduled time).
 func idlePureTaskTimes(t *testing.T, env *testEnv) []time.Time {
 	t.Helper()
 	idleTaskID, ok := env.Registry.TaskIDFor(&schedulerpb.SchedulerIdleTask{})
@@ -120,8 +106,6 @@ func idlePureTaskTimes(t *testing.T, env *testEnv) []time.Time {
 	return times
 }
 
-// runGeneratorTick executes one GeneratorTask in its own transaction, mirroring
-// the production tick that HandleNexusCompletion triggers via Generate().
 func runGeneratorTick(t *testing.T, env *testEnv, handler *scheduler.GeneratorTaskHandler) {
 	t.Helper()
 	ctx := env.MutableContext()
@@ -135,24 +119,15 @@ func runGeneratorTick(t *testing.T, env *testEnv, handler *scheduler.GeneratorTa
 	require.NoError(t, env.CloseTransaction())
 }
 
-// -----------------------------------------------------------------------------
-// Root cause: the recomputed last-event time is not monotonic.
-// -----------------------------------------------------------------------------
-
-// Pins the underlying defect independently of the idle machinery: evicting the
-// start that held the largest StartTime drags the *recomputed* last-event time
-// backwards, while the high-water-mark read does not.
 func TestScheduler_LastEventTime_RegressesOnRetentionEviction(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
 	sched := env.Scheduler
 
-	// Actions start after the schedule was created, so they - not Info - set the
-	// last-event time. newTestEnv's initial CloseTransaction already ran a
-	// Generator tick, so the mark is non-nil and sits at creation time.
+	// Actions start after creation so they, not Info, set the last-event time.
 	base := env.TimeSource.Now().Add(time.Hour)
 	const skew = 1500 * time.Microsecond
-	// One more completed start than retention keeps, so exactly one is evicted.
+	// One more than retention keeps, so exactly one is evicted.
 	seeds := burstSeeds(base, scheduler.RecentActionCount+1, skew)
 	seedCompletedStarts(t, sched, ctx, seeds)
 
@@ -160,7 +135,6 @@ func TestScheduler_LastEventTime_RegressesOnRetentionEviction(t *testing.T) {
 	require.Equal(t, base.Add(skew).UTC(), before.UTC(),
 		"the straggler's StartTime should set the pre-eviction value")
 
-	// Publish the high water mark, exactly as the Generator tick does.
 	require.Equal(t, before.UTC(), sched.AdvanceLastEventTime(ctx).UTC())
 
 	sched.Invoker.Get(ctx).ApplyCompletedRetention()
@@ -172,7 +146,6 @@ func TestScheduler_LastEventTime_RegressesOnRetentionEviction(t *testing.T) {
 	require.Equal(t, skew, before.Sub(after),
 		"the regression should be exactly the evicted start's skew")
 
-	// The monotonic read path is what callers use, and it must hold the line.
 	require.Equal(t, before.UTC(), sched.GetLastEventTimeFloored(ctx).UTC(),
 		"high water mark must floor the regressed recompute")
 	require.Equal(t, before.Add(idleTestIdleTime).UTC(),
@@ -180,10 +153,7 @@ func TestScheduler_LastEventTime_RegressesOnRetentionEviction(t *testing.T) {
 		"idle deadline must not regress")
 }
 
-// A schedule persisted before LastEventTime existed has the field unset. The
-// read path must then behave exactly as it did before, so the rollout is inert
-// until the first Generator tick writes the mark. Rollback safety depends on
-// this being symmetric.
+// With the mark unset the read path must behave as before; rollback safety depends on it.
 func TestScheduler_LastEventTime_UnsetFallsBackToRecompute(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
@@ -192,21 +162,17 @@ func TestScheduler_LastEventTime_UnsetFallsBackToRecompute(t *testing.T) {
 	base := env.TimeSource.Now().Add(time.Hour)
 	seedCompletedStarts(t, sched, ctx, burstSeeds(base, scheduler.RecentActionCount+1, 1500*time.Microsecond))
 
-	// Simulate a schedule persisted before LastEventTime existed. newTestEnv's
-	// initial Generator tick writes the mark, so clear it explicitly rather than
-	// relying on it being absent.
+	// newTestEnv's initial Generator tick writes the mark, so clear it explicitly.
 	sched.LastEventTime = nil
 	require.Nil(t, sched.LastEventTime, "field must start unset")
 	require.Equal(t, sched.ComputeLastEventTime(ctx).UTC(), sched.GetLastEventTimeFloored(ctx).UTC())
 
-	// And with the mark unset, eviction still regresses - i.e. this test is
-	// asserting the old behaviour, not an accidental pass.
+	// Eviction still regresses, so the equality above is not an accidental pass.
 	before := sched.ComputeLastEventTime(ctx)
 	sched.Invoker.Get(ctx).ApplyCompletedRetention()
 	require.True(t, sched.GetLastEventTimeFloored(ctx).Before(before))
 }
 
-// The mark must never move backwards even if asked to.
 func TestScheduler_AdvanceLastEventTime_NeverRegresses(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
@@ -217,20 +183,13 @@ func TestScheduler_AdvanceLastEventTime_NeverRegresses(t *testing.T) {
 
 	high := sched.AdvanceLastEventTime(ctx)
 
-	// Drop every action; the recomputed value collapses back to Info's anchor.
 	sched.Invoker.Get(ctx).BufferedStarts = nil
 	require.True(t, sched.ComputeLastEventTime(ctx).Before(high))
 	require.Equal(t, high.UTC(), sched.AdvanceLastEventTime(ctx).UTC())
 	require.Equal(t, high.UTC(), sched.LastEventTime.AsTime().UTC())
 }
 
-// -----------------------------------------------------------------------------
-// Accumulation: the Generator must not re-arm an idle task it already armed.
-// -----------------------------------------------------------------------------
-
-// Repeated ticks with nothing changing must leave exactly one idle task. Before
-// the fix this grows by one per tick, because Validate can only invalidate tasks
-// whose deadline moved later and a no-op tick moves nothing.
+// Validate only invalidates tasks whose deadline moved later, so a no-op tick must not re-arm.
 func TestGeneratorTask_IdleTask_NotReArmedWhenDeadlineUnchanged(t *testing.T) {
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
 	handler := newGeneratorHandler(env)
@@ -245,9 +204,6 @@ func TestGeneratorTask_IdleTask_NotReArmedWhenDeadlineUnchanged(t *testing.T) {
 	require.NotNil(t, env.Scheduler.IdleCloseTime, "IdleCloseTime must be published")
 }
 
-// The production shape end to end: a burst of same-instant actions, then
-// retention evicting the straggler that held the maximum StartTime. Asserts both
-// symptoms are gone - a single idle task, and a deadline that never regresses.
 func TestGeneratorTask_IdleTask_DoesNotAccumulateAcrossActionBurst(t *testing.T) {
 	now := time.Now()
 	env := newTestEnv(t, withSchedule(expiredSchedule(now)))
@@ -255,7 +211,7 @@ func TestGeneratorTask_IdleTask_DoesNotAccumulateAcrossActionBurst(t *testing.T)
 
 	base := env.TimeSource.Now().Add(time.Hour)
 	const skew = 1500 * time.Microsecond
-	// 43 actions, matching the production backfill that surfaced this.
+	// 43 matches the production backfill that surfaced this.
 	seeds := burstSeeds(base, 43, skew)
 
 	var deadlines []time.Time
@@ -265,9 +221,7 @@ func TestGeneratorTask_IdleTask_DoesNotAccumulateAcrossActionBurst(t *testing.T)
 		require.NoError(t, err)
 		typed := sched.(*scheduler.Scheduler)
 
-		// Actions complete one at a time, each one growing the completed set and
-		// then being trimmed to the retention window - the same sequence
-		// HandleNexusCompletion -> recordCompletedAction drives in production.
+		// Mirrors HandleNexusCompletion -> recordCompletedAction: add one completion, then trim.
 		seedCompletedStarts(t, typed, ctx, seeds[:i+1])
 		typed.Invoker.Get(ctx).ApplyCompletedRetention()
 
@@ -299,17 +253,15 @@ func normalizeUTC(times []time.Time) []time.Time {
 	return out
 }
 
-// The skip must be observable, so an operator can tell "no task armed because
-// one already is" apart from "no task armed at all".
 func TestGeneratorTask_IdleTask_SkipEmitsMetric(t *testing.T) {
 	rec := metricstest.NewCaptureHandler()
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
 	handler := newGeneratorHandler(env, withGeneratorMetrics(rec))
 
-	runGeneratorTick(t, env, handler) // arms
+	runGeneratorTick(t, env, handler)
 	capture := rec.StartCapture()
 	defer rec.StopCapture(capture)
-	runGeneratorTick(t, env, handler) // skips
+	runGeneratorTick(t, env, handler)
 
 	recorded := capture.Snapshot()[metrics.ScheduleIdleTask.Name()]
 	require.Len(t, recorded, 1)
@@ -317,13 +269,6 @@ func TestGeneratorTask_IdleTask_SkipEmitsMetric(t *testing.T) {
 	require.Equal(t, "already_armed", recorded[0].Tags["reason"])
 }
 
-// -----------------------------------------------------------------------------
-// Stuck-open safety. Skipping the re-arm is only sound if every path that moves
-// the deadline still arms a fresh task; otherwise a schedule never closes.
-// -----------------------------------------------------------------------------
-
-// When the deadline genuinely advances, a new task must be armed and the stale
-// one must not survive alongside it.
 func TestGeneratorTask_IdleTask_ReArmedWhenDeadlineAdvances(t *testing.T) {
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
 	env.AllowStuck("test commits a direct state mutation before running the generator that re-arms the idle task")
@@ -333,7 +278,6 @@ func TestGeneratorTask_IdleTask_ReArmedWhenDeadlineAdvances(t *testing.T) {
 	require.Equal(t, 1, countIdlePureTasks(t, env))
 	first := env.Scheduler.IdleCloseTime.AsTime()
 
-	// A real event (here: an update) advances the deadline.
 	ctx := env.MutableContext()
 	sched, err := env.Node.Component(ctx, chasm.ComponentRef{})
 	require.NoError(t, err)
@@ -349,8 +293,7 @@ func TestGeneratorTask_IdleTask_ReArmedWhenDeadlineAdvances(t *testing.T) {
 	require.Equal(t, []time.Time{second.UTC()}, normalizeUTC(idlePureTaskTimes(t, env)))
 }
 
-// Pausing clears IdleCloseTime, so unpausing must arm again. This is the path
-// where a bad skip guard would strand a schedule open forever.
+// Pausing clears IdleCloseTime; a bad skip guard here would strand the schedule open forever.
 func TestGeneratorTask_IdleTask_ReArmedAfterPauseUnpause(t *testing.T) {
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
 	env.AllowStuck("test commits direct pause mutations before running the generator that reconciles idle tasks")
@@ -382,8 +325,6 @@ func TestGeneratorTask_IdleTask_ReArmedAfterPauseUnpause(t *testing.T) {
 		"a schedule with no armed idle task can never close, and a duplicate never drains")
 }
 
-// A live schedule must not arm an idle task at all - the guard must not turn the
-// non-idle branch into a skip.
 func TestGeneratorTask_IdleTask_NotArmedWhileSpecHasWork(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)
@@ -394,13 +335,6 @@ func TestGeneratorTask_IdleTask_NotArmedWhileSpecHasWork(t *testing.T) {
 	require.Nil(t, env.Scheduler.IdleCloseTime)
 }
 
-// -----------------------------------------------------------------------------
-// Validate: the regressed-deadline branch.
-// -----------------------------------------------------------------------------
-
-// With the high water mark published, a retention eviction can no longer push
-// Validate into its "deadline regressed" branch, so the task stays valid and
-// fires at the deadline the customer's retention window earned.
 func TestIdleTask_Validate_RetentionEvictionDoesNotRegressDeadline(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
@@ -425,12 +359,9 @@ func TestIdleTask_Validate_RetentionEvictionDoesNotRegressDeadline(t *testing.T)
 		"recomputed deadline must match the armed time exactly, so Validate takes neither shift branch")
 }
 
-// Guard against the snapshot helper silently returning nothing: if the root node
-// stopped carrying component attributes, or the idle task's registered FQN
-// changed, every count-based assertion above would pass vacuously.
+// Guards the count-based assertions above against passing vacuously.
 func TestCountIdlePureTasks_SeesArmedTask(t *testing.T) {
-	// newTestEnv's initial CloseTransaction runs the Generator's immediate task,
-	// which already arms one for an exhausted spec.
+	// newTestEnv's initial Generator tick already arms one for an exhausted spec.
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
 	require.Equal(t, 1, countIdlePureTasks(t, env))
 	require.Len(t, idlePureTaskTimes(t, env), 1)

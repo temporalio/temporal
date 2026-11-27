@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// configWith returns DefaultConfig with Tweakables adjusted by fn.
 func configWith(fn func(*scheduler.Tweakables)) *scheduler.Config {
 	cfg := schedulertest.DefaultConfig()
 	tweakables := scheduler.DefaultTweakables
@@ -22,7 +21,6 @@ func configWith(fn func(*scheduler.Tweakables)) *scheduler.Config {
 	return cfg
 }
 
-// oneShotSchedule fires exactly once, at start+offset.
 func oneShotSchedule(start time.Time, offset time.Duration) *schedulepb.Schedule {
 	s := schedulertest.DefaultSchedule()
 	s.Spec.Interval[0].Interval = durationpb.New(time.Hour)
@@ -32,8 +30,6 @@ func oneShotSchedule(start time.Time, offset time.Duration) *schedulepb.Schedule
 	return s
 }
 
-// collectViolations records every invariant violation instead of failing, so a
-// test can assert that a known bug is detected.
 func collectViolations(out *[]schedulertest.Violation) func(*schedulertest.Driver) {
 	var prev *schedulertest.Snapshot
 	return func(d *schedulertest.Driver) {
@@ -51,10 +47,7 @@ func violationNames(vs []schedulertest.Violation) []string {
 	return names
 }
 
-// The final action of a schedule is buffered by the same generator tick that
-// arms the idle task. If InvokerExecuteTask hasn't run by the time the idle task
-// fires, the schedule must stay open. Pre-#13016 the idle deadline ignored the
-// pending start and was already in the past.
+// The final start and the idle task are armed by the same tick; pre-#13016 the idle deadline ignored the pending start.
 func TestLedger_FinalStartPendingAtIdle(t *testing.T) {
 	const idle = time.Hour
 	start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -84,7 +77,6 @@ func TestLedger_FinalStartPendingAtIdle(t *testing.T) {
 				schedulertest.WithAfterStep(collectViolations(&violations)),
 			)
 
-			// Fire timers while InvokerExecuteTask lags, then drain.
 			for d.StepPure() {
 			}
 			_, quiescent := d.RunToQuiescence(50)
@@ -100,8 +92,6 @@ func TestLedger_FinalStartPendingAtIdle(t *testing.T) {
 	}
 }
 
-// A buffered start that vanishes with no RPC and no recorded discard is a
-// silent drop; one with a recorded discard is not.
 func TestCheckInvariants_Ledger(t *testing.T) {
 	pending := func(ids ...string) map[string]struct{} {
 		m := make(map[string]struct{}, len(ids))
@@ -169,12 +159,7 @@ func uniq(names []string) []string {
 	return out
 }
 
-// A start deferred behind a running workflow is only re-enabled by a workflow
-// completion. If that completion arrives while the schedule is paused,
-// ProcessBuffer drops the first start (paused) and re-defers the rest with
-// nothing running, so no completion will ever re-enable them. Unpause doesn't
-// re-process the buffer either; the starts (including a manual trigger, which
-// pause allows) sit until the idle task closes the schedule.
+// A completion while paused re-defers the remaining starts with nothing running, so nothing re-enables them.
 func TestLedger_DeferredStartsStrandedByPausedCompletion(t *testing.T) {
 	t.Skip("known bug: deferred starts stranded after a completion while paused")
 

@@ -36,14 +36,11 @@ const (
 	defaultCatchupWindow = 5 * time.Minute
 )
 
-// newLegacySpecBuilder builds a legacy SpecBuilder with the given warn/max compute-limit bounds.
-// A value of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
+// A bound of 0 means the default (GetNextTime treats a non-positive bound as its default).
 func newLegacySpecBuilder(warnIter, maxIter int) *legacyscheduler.SpecBuilder {
 	return legacyscheduler.NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
 }
 
-// defaultSchedule returns a protobuf definition for a schedule matching this
-// package's other testing defaults.
 func defaultSchedule() *schedulepb.Schedule {
 	return &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -134,9 +131,6 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 	)
 }
 
-// testEnv holds a scheduler execution on a CHASM test engine, with direct
-// access to its node, for tests that mutate the scheduler in an open
-// transaction and commit it with CloseTransaction.
 type testEnv struct {
 	t             *testing.T
 	Ctrl          *gomock.Controller
@@ -148,45 +142,32 @@ type testEnv struct {
 	SpecProcessor scheduler.SpecProcessor
 	Logger        log.Logger
 
-	// engine owns the execution backing Node; rootRef identifies it.
 	engine  *chasmtest.Engine
 	rootRef chasm.ComponentRef
 
-	// allowStuckReason, when non-empty, suppresses the stuckness invariant
-	// asserted by CloseTransaction. See AllowStuck.
 	allowStuckReason string
 }
 
-// testEnvConfig holds configuration options for testEnv.
 type testEnvConfig struct {
 	specProcessor scheduler.SpecProcessor
 	schedule      *schedulepb.Schedule
 }
 
-// testEnvOption is a functional option for configuring testEnv.
 type testEnvOption func(*testEnvConfig)
 
-// withSpecProcessor configures testEnv with a custom SpecProcessor.
-// By default, testEnv uses a real SpecProcessor. Use this option only
-// when you need to mock specific SpecProcessor behavior (e.g., simulating failures).
 func withSpecProcessor(sp scheduler.SpecProcessor) testEnvOption {
 	return func(c *testEnvConfig) {
 		c.specProcessor = sp
 	}
 }
 
-// withSchedule overrides defaultSchedule(), for tests that need a spec other
-// than the package default 1-minute interval (e.g. an exhausted spec, which is
-// what drives the Generator into its idle branch).
 func withSchedule(schedule *schedulepb.Schedule) testEnvOption {
 	return func(c *testEnvConfig) {
 		c.schedule = schedule
 	}
 }
 
-// expiredSchedule returns a schedule whose spec has already ended, so the
-// Generator finds no next wakeup and takes its idle branch. This is the shape
-// of a real schedule that has run to the end of its subscription window.
+// expiredSchedule's spec has already ended, so the Generator finds no next wakeup and goes idle.
 func expiredSchedule(now time.Time) *schedulepb.Schedule {
 	schedule := defaultSchedule()
 	schedule.Spec.StartTime = timestamppb.New(now.Add(-2 * time.Hour))
@@ -194,7 +175,6 @@ func expiredSchedule(now time.Time) *schedulepb.Schedule {
 	return schedule
 }
 
-// newRealSpecProcessor creates a real SpecProcessor for tests.
 func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.SpecProcessor {
 	mockMetrics := metrics.NewMockHandler(ctrl)
 	mockMetrics.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
@@ -209,26 +189,20 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 	)
 }
 
-// engineTestConfig holds configuration options for newTestEngineContext.
 type engineTestConfig struct {
 	specProcessor scheduler.SpecProcessor
 	timeSource    *clock.EventTimeSource
 	engineOpts    []chasmtest.EngineOption
 }
 
-// engineTestOption is a functional option for configuring newTestEngineContext.
 type engineTestOption func(*engineTestConfig)
 
-// withEngineSpecProcessor configures newTestEngineContext with a custom
-// SpecProcessor, instead of the default real one.
 func withEngineSpecProcessor(sp scheduler.SpecProcessor) engineTestOption {
 	return func(c *engineTestConfig) {
 		c.specProcessor = sp
 	}
 }
 
-// withEngineTimeSource configures the CHASM test engine with a controllable
-// time source, for tests that need to advance time explicitly.
 func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 	return func(c *engineTestConfig) {
 		c.timeSource = ts
@@ -256,10 +230,6 @@ func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
 	return config
 }
 
-// newTestEngineContext builds a CHASM registry with the core and scheduler
-// libraries registered, wraps it in a chasmtest.Engine, and returns the
-// engine along with an engine-bound context ready for chasm.StartExecution /
-// ReadComponent / etc.
 func newTestEngineContext(t *testing.T, logger log.Logger, opts ...engineTestOption) (*chasmtest.Engine, context.Context) {
 	return newTestEngineContextFromConfig(t, logger, newEngineTestConfig(opts...))
 }
@@ -285,10 +255,7 @@ func newTestEngineContextFromConfig(
 	return engine, chasm.NewEngineContext(context.Background(), engine)
 }
 
-// schedulerTestEngine bundles a CHASM test engine, a created Scheduler root
-// component, and convenience accessors, for tests that drive a Scheduler
-// through its actual task handlers and the engine's update and read paths,
-// rather than testEnv's open transaction on the execution's node.
+// schedulerTestEngine drives a Scheduler through its real task handlers and engine paths, unlike testEnv.
 type schedulerTestEngine struct {
 	engine     *chasmtest.Engine
 	engineCtx  context.Context
@@ -297,10 +264,7 @@ type schedulerTestEngine struct {
 	timeSource *clock.EventTimeSource
 }
 
-// newSchedulerTestEngine builds a schedulerTestEngine and creates a schedule
-// on it via the real CreateSchedule handler path. If no time source is
-// supplied via withEngineTimeSource, a controllable one is created and
-// wired in automatically.
+// If no time source is supplied, a controllable one is wired in.
 func newSchedulerTestEngine(
 	t *testing.T,
 	schedule *schedulepb.Schedule,
@@ -339,8 +303,6 @@ func newSchedulerTestEngine(
 	}
 }
 
-// updateScheduler runs update against the Scheduler root component through
-// the engine's UpdateComponent path.
 func (e *schedulerTestEngine) updateScheduler(
 	update func(*scheduler.Scheduler, chasm.MutableContext) error,
 ) error {
@@ -355,8 +317,6 @@ func (e *schedulerTestEngine) updateScheduler(
 	return err
 }
 
-// readScheduler runs read against the Scheduler root component through the
-// engine's read-only ReadComponent path.
 func (e *schedulerTestEngine) readScheduler(
 	read func(*scheduler.Scheduler, chasm.Context) error,
 ) error {
@@ -371,7 +331,6 @@ func (e *schedulerTestEngine) readScheduler(
 	return err
 }
 
-// newTestEnv creates a new test environment with the given options.
 func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	config := &testEnvConfig{}
 	for _, opt := range opts {
@@ -381,7 +340,6 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	ctrl := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 
-	// Configure spec processor: use custom if provided, otherwise use real.
 	var specProcessor scheduler.SpecProcessor
 	if config.specProcessor != nil {
 		specProcessor = config.specProcessor
@@ -403,7 +361,6 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		if err != nil {
 			return nil, err
 		}
-		// Advance Generator's high water mark to 'now'.
 		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(now)
 		return sched, nil
 	})
@@ -412,8 +369,6 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	return env
 }
 
-// startTestEnv builds a testEnv around a CHASM test engine and starts an
-// execution on it whose root component is built by startFn.
 func startTestEnv(
 	t *testing.T,
 	logger log.Logger,
@@ -449,33 +404,21 @@ func startTestEnv(
 	return env
 }
 
-// MutableContext returns a new mutable CHASM context.
 func (e *testEnv) MutableContext() chasm.MutableContext {
 	return chasm.NewMutableContext(context.Background(), e.Node)
 }
 
-// ReadContext returns a new read-only CHASM context.
 func (e *testEnv) ReadContext() chasm.Context {
 	return chasm.NewContext(context.Background(), e.Node)
 }
 
-// CloseTransaction commits the open CHASM transaction through the engine,
-// whose invariant check asserts the stuckness invariant: a scheduler that is not in a terminal state must carry
-// at least one live logical task, or nothing will ever wake it again.
-//
-// This runs on every test in the package that closes through testEnv, so the
-// existing suite doubles as a stuckness detector at no extra cost. Tests that
-// deliberately construct a state with no pending work must opt out explicitly
-// via AllowStuck.
-//
-// The invariant is checked only on a successful close, since Node.Snapshot
-// requires a clean tree.
+// CloseTransaction asserts the stuckness invariant on every successful close: a non-terminal scheduler
+// must carry at least one live logical task, or nothing will ever wake it. Opt out with AllowStuck.
 func (e *testEnv) CloseTransaction() error {
 	e.t.Helper()
 	return e.engine.CloseTransaction(context.Background(), e.rootRef)
 }
 
-// checkInvariants is the engine invariant check behind CloseTransaction.
 func (e *testEnv) checkInvariants(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
 	t.Helper()
 	if e.allowStuckReason == "" {
@@ -483,13 +426,7 @@ func (e *testEnv) checkInvariants(t *testing.T, node *chasm.Node, root chasm.Roo
 	}
 }
 
-// AllowStuck opts this test out of the stuckness invariant asserted by
-// CloseTransaction, for tests that deliberately drive the scheduler into a
-// state with no pending work.
-//
-// reason is mandatory: an unexplained opt-out is indistinguishable from a
-// silently tolerated bug, and the set of tests that need one is itself a
-// finding worth reviewing.
+// AllowStuck opts out of the stuckness invariant. reason is mandatory so every opt-out stays reviewable.
 func (e *testEnv) AllowStuck(reason string) {
 	e.t.Helper()
 	if reason == "" {
@@ -498,7 +435,6 @@ func (e *testEnv) AllowStuck(reason string) {
 	e.allowStuckReason = reason
 }
 
-// HasTask returns true if the given task type was added with the given visibilityTime.
 func (e *testEnv) HasTask(task any, visibilityTime time.Time) bool {
 	taskType := reflect.TypeOf(task)
 	for _, categoryTasks := range e.NodeBackend.TasksByCategory {
@@ -512,8 +448,7 @@ func (e *testEnv) HasTask(task any, visibilityTime time.Time) bool {
 	return false
 }
 
-// HasTaskInCategory is like HasTask but scoped to a single queue category, to
-// distinguish tasks that share a physical type but land in different queues.
+// HasTaskInCategory distinguishes tasks that share a physical type but land in different queues.
 func (e *testEnv) HasTaskInCategory(task any, category tasks.Category, visibilityTime time.Time) bool {
 	taskType := reflect.TypeOf(task)
 	for _, t := range e.NodeBackend.TasksByCategory[category] {
@@ -525,14 +460,10 @@ func (e *testEnv) HasTaskInCategory(task any, category tasks.Category, visibilit
 	return false
 }
 
-// EngineContext returns a context bound to the test engine, for side-effect
-// task handlers that read and update components through the engine.
 func (e *testEnv) EngineContext() context.Context {
 	return chasm.NewEngineContext(context.Background(), e.engine)
 }
 
-// ComponentRef returns the engine ref for component, as a task handler
-// would receive it.
 func (e *testEnv) ComponentRef(ctx chasm.Context, component chasm.Component) chasm.ComponentRef {
 	e.t.Helper()
 	serialized, err := ctx.Ref(component)
@@ -542,8 +473,6 @@ func (e *testEnv) ComponentRef(ctx chasm.Context, component chasm.Component) cha
 	return ref
 }
 
-// newTestRegistry builds a CHASM registry with the core and scheduler
-// libraries registered.
 func newTestRegistry(t *testing.T, logger log.Logger, specProcessor scheduler.SpecProcessor) *chasm.Registry {
 	registry := chasm.NewRegistry(logger)
 	if err := registry.Register(&chasm.CoreLibrary{}); err != nil {
@@ -555,8 +484,6 @@ func newTestRegistry(t *testing.T, logger log.Logger, specProcessor scheduler.Sp
 	return registry
 }
 
-// startTestExecution starts a scheduler execution on engine, with a root
-// component built by startFn, and returns a ref to it.
 func startTestExecution(
 	t *testing.T,
 	engine *chasmtest.Engine,
@@ -575,9 +502,6 @@ func startTestExecution(
 	return ref
 }
 
-// setupExecutionForTest starts an execution whose root component is built by
-// startFn, and returns its root, a fresh mutable context on it, and the
-// testEnv that owns it.
 func setupExecutionForTest(
 	t *testing.T,
 	specProcessor scheduler.SpecProcessor,
@@ -591,8 +515,7 @@ func setupExecutionForTest(
 	return env.Scheduler, env.MutableContext(), env
 }
 
-// newFixedSpecProcessor returns a mock SpecProcessor that always reports the
-// next wakeup an hour from now.
+// newFixedSpecProcessor always reports the next wakeup an hour from now.
 func newFixedSpecProcessor(t *testing.T) scheduler.SpecProcessor {
 	ctrl := gomock.NewController(t)
 	specProcessor := scheduler.NewMockSpecProcessor(ctrl)
@@ -615,9 +538,7 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	})
 }
 
-// setupMigratedSchedulerForTest is setupSchedulerForTest for a scheduler
-// created from V1 migration state. inspect runs on the new scheduler inside
-// the start transaction, before closing it runs any immediate tasks.
+// inspect runs inside the start transaction, before any immediate tasks run.
 func setupMigratedSchedulerForTest(
 	t *testing.T,
 	req *schedulerpb.CreateFromMigrationStateRequest,
