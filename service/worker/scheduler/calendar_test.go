@@ -192,16 +192,6 @@ func (s *calendarSuite) TestCalendarNextBasic() {
 	s.True(time.Date(2022, time.March, 16, 5, 55, 55, 0, pacific).Equal(next))
 }
 
-func (s *calendarSuite) TestGoDSTBehavior() {
-	pacific, err := time.LoadLocation("US/Pacific")
-	s.NoError(err)
-	// The time package's behavior when given a nonexistent time like 2022-03-13T02:33 is
-	// to return the previous hour. We depend on this, so check it here.
-	t1 := time.Date(2022, time.March, 13, 1, 33, 33, 0, pacific)
-	t2 := time.Date(2022, time.March, 13, 2, 33, 33, 0, pacific)
-	s.True(t1.Equal(t2))
-}
-
 func (s *calendarSuite) checkSequence(cs string, start time.Time, seq ...time.Time) {
 	s.T().Helper()
 	scs, _, tzName, err := parseCronString(cs)
@@ -261,6 +251,199 @@ func (s *calendarSuite) TestCalendarDSTStartInRepeatedHourButNotEnd() {
 	s.True(time.Date(2005, time.January, 2, 0, 1, 0, 0, loc).Equal(next))
 	next = cc.next(time.Date(2004, time.October, 31, 1, 7, 3, 0, loc))
 	s.True(time.Date(2005, time.January, 2, 0, 1, 0, 0, loc).Equal(next))
+}
+
+// Expected times are in UTC because a repeated wall clock time has no unique time.Date form.
+func TestCalendarNextAcrossTransitions(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		cron  string
+		start time.Time
+		want  []time.Time
+	}{
+		{
+			// Berlin repeats 02:00-03:00 on 2021-10-31. 01:30 occurs once.
+			name:  "hour before repeated hour east of UTC",
+			cron:  "CRON_TZ=Europe/Berlin 30 1 * * *",
+			start: time.Date(2021, time.October, 30, 12, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.October, 30, 23, 30, 0, 0, time.UTC),
+				time.Date(2021, time.November, 1, 0, 30, 0, 0, time.UTC),
+			},
+		},
+		{
+			name:  "repeated hour east of UTC",
+			cron:  "CRON_TZ=Europe/Berlin 30 2 * * *",
+			start: time.Date(2021, time.October, 30, 12, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.October, 31, 0, 30, 0, 0, time.UTC),
+				time.Date(2021, time.October, 31, 1, 30, 0, 0, time.UTC),
+				time.Date(2021, time.November, 1, 1, 30, 0, 0, time.UTC),
+			},
+		},
+		{
+			name:  "every hour through repeated hour east of UTC",
+			cron:  "CRON_TZ=Europe/Berlin 0 * * * *",
+			start: time.Date(2021, time.October, 30, 22, 30, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.October, 30, 23, 0, 0, 0, time.UTC),
+				time.Date(2021, time.October, 31, 0, 0, 0, 0, time.UTC),
+				time.Date(2021, time.October, 31, 1, 0, 0, 0, time.UTC),
+				time.Date(2021, time.October, 31, 2, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			// Berlin skips 02:00-03:00 on 2021-03-28.
+			name:  "skipped hour east of UTC",
+			cron:  "CRON_TZ=Europe/Berlin 30 2 * * *",
+			start: time.Date(2021, time.March, 27, 12, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.March, 29, 0, 30, 0, 0, time.UTC),
+			},
+		},
+		{
+			// Tehran repeats 23:00-00:00 on 2021-09-21.
+			name:  "repeated hour before midnight",
+			cron:  "CRON_TZ=Asia/Tehran 30 23 * * *",
+			start: time.Date(2021, time.September, 21, 12, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.September, 21, 19, 0, 0, 0, time.UTC),
+				time.Date(2021, time.September, 21, 20, 0, 0, 0, time.UTC),
+				time.Date(2021, time.September, 22, 20, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			// Santiago skips 00:00-01:00 on Sunday 2020-09-06.
+			name:  "day of week on day without midnight",
+			cron:  "CRON_TZ=America/Santiago 0 2 * * sun",
+			start: time.Date(2020, time.September, 5, 12, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2020, time.September, 6, 5, 0, 0, 0, time.UTC),
+				time.Date(2020, time.September, 13, 5, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			// Lord Howe repeats 01:30-02:00 on 2021-04-04.
+			name:  "repeated half hour",
+			cron:  "CRON_TZ=Australia/Lord_Howe 45 1 * * *",
+			start: time.Date(2021, time.April, 3, 0, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.April, 3, 14, 45, 0, 0, time.UTC),
+				time.Date(2021, time.April, 3, 15, 15, 0, 0, time.UTC),
+				time.Date(2021, time.April, 4, 15, 15, 0, 0, time.UTC),
+			},
+		},
+		{
+			name:  "same hour before repeated half hour",
+			cron:  "CRON_TZ=Australia/Lord_Howe 15 1 * * *",
+			start: time.Date(2021, time.April, 3, 0, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2021, time.April, 3, 14, 15, 0, 0, time.UTC),
+				time.Date(2021, time.April, 4, 14, 45, 0, 0, time.UTC),
+			},
+		},
+		{
+			// ZoneBounds returns an end before its receiver on 2040-12-31.
+			name:  "last day of leap year",
+			cron:  "CRON_TZ=Europe/Berlin 0 0 1 1 *",
+			start: time.Date(2040, time.December, 30, 0, 0, 0, 0, time.UTC),
+			want: []time.Time{
+				time.Date(2040, time.December, 31, 23, 0, 0, 0, time.UTC),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scs, _, tzName, err := parseCronString(tc.cron)
+			require.NoError(t, err)
+			tz, err := time.LoadLocation(tzName)
+			require.NoError(t, err)
+			cc := newCompiledCalendar(scs, tz)
+
+			var got []time.Time
+			for ts := tc.start; len(got) < len(tc.want); {
+				ts = cc.next(ts).UTC()
+				got = append(got, ts)
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// Every time that next returns matches the calendar, and next skips no time that matches.
+func TestCalendarNextAgreesWithMatches(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		tzName     string
+		transition time.Time
+	}{
+		{
+			name:       "repeated hour west of UTC",
+			tzName:     "US/Pacific",
+			transition: time.Date(2021, time.November, 7, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			name:       "skipped hour west of UTC",
+			tzName:     "US/Pacific",
+			transition: time.Date(2021, time.March, 14, 10, 0, 0, 0, time.UTC),
+		},
+		{
+			name:       "repeated hour east of UTC",
+			tzName:     "Europe/Berlin",
+			transition: time.Date(2021, time.October, 31, 1, 0, 0, 0, time.UTC),
+		},
+		{
+			name:       "skipped hour east of UTC",
+			tzName:     "Europe/Berlin",
+			transition: time.Date(2021, time.March, 28, 1, 0, 0, 0, time.UTC),
+		},
+		{
+			name:       "repeated hour before midnight",
+			tzName:     "Asia/Tehran",
+			transition: time.Date(2021, time.September, 21, 19, 30, 0, 0, time.UTC),
+		},
+		{
+			name:       "skipped hour after midnight",
+			tzName:     "Asia/Tehran",
+			transition: time.Date(2021, time.March, 21, 20, 30, 0, 0, time.UTC),
+		},
+		{
+			name:       "repeated half hour",
+			tzName:     "Australia/Lord_Howe",
+			transition: time.Date(2021, time.April, 3, 15, 0, 0, 0, time.UTC),
+		},
+		{
+			name:       "skipped half hour",
+			tzName:     "Australia/Lord_Howe",
+			transition: time.Date(2021, time.October, 2, 15, 30, 0, 0, time.UTC),
+		},
+		{
+			name:       "skipped day",
+			tzName:     "Pacific/Apia",
+			transition: time.Date(2011, time.December, 30, 10, 0, 0, 0, time.UTC),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tz, err := time.LoadLocation(tc.tzName)
+			require.NoError(t, err)
+			scs, err := parseCalendarToStructured(&schedulepb.CalendarSpec{Minute: "*/15", Hour: "*"})
+			require.NoError(t, err)
+			cc := newCompiledCalendar(scs, tz)
+			start := tc.transition.Add(-3 * time.Hour)
+			end := tc.transition.Add(3 * time.Hour)
+
+			var want []time.Time
+			for ts := start.Add(time.Second); !ts.After(end); ts = ts.Add(time.Second) {
+				if cc.matches(ts) {
+					want = append(want, ts)
+				}
+			}
+			var got []time.Time
+			for ts := cc.next(start); !ts.After(end) && len(got) <= len(want); ts = cc.next(ts) {
+				got = append(got, ts.UTC())
+			}
+			require.Equal(t, want, got)
+		})
+	}
 }
 
 func (s *calendarSuite) TestMakeMatcher() {
@@ -412,6 +595,9 @@ func FuzzCalendar(f *testing.F) {
 		}
 		if next.Before(now) {
 			t.Errorf("next %v not before now %v (for %+v)", next, now, cal)
+		}
+		if !cc.matches(next) {
+			t.Errorf("next(%v) = %v does not match (for %+v)", now, next, cal)
 		}
 		gap := int(next.Sub(now) / time.Second)
 		for range 1000 {

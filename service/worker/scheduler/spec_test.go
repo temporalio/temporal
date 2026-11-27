@@ -284,6 +284,19 @@ func (s *specSuite) TestSpecCalendarBasic() {
 	)
 }
 
+func (s *specSuite) TestSpecCalendarEndOfDST() {
+	// Berlin repeats 02:00-03:00 on 2021-10-31. 01:30 occurs once.
+	s.checkSequenceRaw(
+		&schedulepb.ScheduleSpec{
+			CronString:   []string{"30 1 * * *"},
+			TimezoneName: "Europe/Berlin",
+		},
+		time.Date(2021, time.October, 30, 12, 0, 0, 0, time.UTC),
+		time.Date(2021, time.October, 30, 23, 30, 0, 0, time.UTC),
+		time.Date(2021, time.November, 1, 0, 30, 0, 0, time.UTC),
+	)
+}
+
 func (s *specSuite) TestSpecCalendarMultiple() {
 	s.checkSequenceRaw(
 		&schedulepb.ScheduleSpec{
