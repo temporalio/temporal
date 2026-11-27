@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.workflow.proto.v1;
 
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/failure/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
@@ -11,4 +12,15 @@ message UpdateState {
   // Populated when the update was rejected by a validator.
   // Used to resolve the update outcome for callbacks on rejected updates.
   temporal.api.failure.v1.Failure rejection_failure = 2;
+  // References to Workflow history events that attached completion callbacks to
+  // this Workflow Update. Each entry is keyed by the request ID of the request
+  // that attached the callbacks.
+  map<string, CallbackAttachmentEventReference> callback_attachment_event_references = 3;
+}
+
+message CallbackAttachmentEventReference {
+  // The type of Workflow history event that attached the callbacks to the Workflow Update.
+  temporal.api.enums.v1.EventType event_type = 1;
+  // The ID of the Workflow history event that attached the callbacks to the Workflow Update.
+  int64 event_id = 2;
 }

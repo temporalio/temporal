@@ -2,6 +2,7 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -120,6 +122,79 @@ func (w *Workflow) ProcessUpdateCallbacks(ctx chasm.MutableContext, updateID str
 		return serviceerror.NewNotFoundf("update with ID %s not found", updateID)
 	}
 	return callback.ScheduleCompletionCallbacks(ctx, update.Get(ctx))
+}
+
+// CallbackAttachmentEventReference identifies the Workflow history event that attached completion
+// callbacks to a Workflow Update.
+type CallbackAttachmentEventReference struct {
+	EventType enumspb.EventType
+	EventID   int64
+}
+
+type readOnlyContext struct {
+	chasm.Context
+}
+
+// readWorkflowUpdate prevents a mutable context passed as a chasm.Context from marking the Update
+// node dirty. Field.Get checks the context's dynamic type, so wrapping it hides MutableContext's
+// mutation marker while preserving all read-only context behavior.
+func readWorkflowUpdate(
+	ctx chasm.Context,
+	updateField chasm.Field[*WorkflowUpdate],
+) *WorkflowUpdate {
+	return updateField.Get(readOnlyContext{ctx})
+}
+
+// LookupCallbackAttachmentEventReference returns the history event that attached callbacks for requestID.
+func (w *Workflow) LookupCallbackAttachmentEventReference(
+	ctx chasm.Context,
+	updateID string,
+	requestID string,
+) (CallbackAttachmentEventReference, bool) {
+	updateField, ok := w.Updates[updateID]
+	if !ok {
+		return CallbackAttachmentEventReference{}, false
+	}
+	update := readWorkflowUpdate(ctx, updateField)
+	info, ok := update.CallbackAttachmentEventReferences[requestID]
+	if !ok {
+		return CallbackAttachmentEventReference{}, false
+	}
+	return CallbackAttachmentEventReference{
+		EventType: info.GetEventType(),
+		EventID:   info.GetEventId(),
+	}, true
+}
+
+func (u *WorkflowUpdate) setCallbackAttachmentEventReference(
+	requestID string,
+	reference CallbackAttachmentEventReference,
+) {
+	if u.CallbackAttachmentEventReferences == nil {
+		u.CallbackAttachmentEventReferences = make(map[string]*chasmworkflowpb.CallbackAttachmentEventReference, 1)
+	}
+	u.CallbackAttachmentEventReferences[requestID] = &chasmworkflowpb.CallbackAttachmentEventReference{
+		EventType: reference.EventType,
+		EventId:   reference.EventID,
+	}
+}
+
+// SetCallbackAttachmentEventReferenceEventID records the durable event ID for a matching buffered attachment.
+func (w *Workflow) SetCallbackAttachmentEventReferenceEventID(
+	ctx chasm.MutableContext,
+	updateID string,
+	requestID string,
+	reference CallbackAttachmentEventReference,
+) {
+	updateField, ok := w.Updates[updateID]
+	if !ok {
+		return
+	}
+	info, ok := readWorkflowUpdate(ctx, updateField).CallbackAttachmentEventReferences[requestID]
+	if !ok || info.GetEventId() != common.BufferedEventID || info.GetEventType() != reference.EventType {
+		return
+	}
+	updateField.Get(ctx).CallbackAttachmentEventReferences[requestID].EventId = reference.EventID
 }
 
 // RejectUpdate stores the rejection failure on the WorkflowUpdate component and
