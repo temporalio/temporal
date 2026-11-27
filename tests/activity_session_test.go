@@ -22,7 +22,7 @@ import (
 
 func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
 	t.Parallel()
-	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true))
+	env := testcore.NewEnv(t)
 	tv := env.Tv()
 	started, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(), WorkflowId: tv.WorkflowID(), RequestId: tv.Any().String(),
@@ -74,7 +74,6 @@ func TestSessionActivityWithoutPlacementRollsBackCommands(t *testing.T) {
 func TestWorkflowSessionActivityRouting(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true),
 	)
 	tv := env.Tv()
@@ -151,7 +150,6 @@ func TestWorkflowSessionActivityRouting(t *testing.T) {
 // its bindings do not follow versioning transitions yet.
 func (s *Versioning3Suite) TestMultiSessionWorkerRejectedWithVersioning() {
 	env := s.setupEnv(
-		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true),
 	)
 	tv := env.Tv()

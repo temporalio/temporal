@@ -363,17 +363,37 @@ func (tm *priTaskMatcher) drainSessionWorkerQueue(
 
 		task := res.task
 		err := unbind(tm.tqCtx, task.event.AllocatedTaskInfo)
-		_, namespaceGone := errors.AsType[*serviceerror.NamespaceNotFound](err)
-		if err == nil || common.IsNotFoundError(err) || namespaceGone {
-			// History moved the workflow's tasks to the normal queue, or the workflow or its namespace is gone.
+		switch {
+		case unbindDropsTask(err):
 			task.finish(dropReasonSessionWorkerQueueDraining)
 			retrier.Reset()
-			continue
+		case unbindStopsDrain(err):
+			// Retrying would not change History's answer, and the drain keeps the partition loaded, so it would retry
+			// indefinitely. Keep the task and stop; the queue takes tasks again.
+			task.finish(err)
+			done(false)
+			return
+		default:
+			// The task reader retries transient errors in memory and re-spools the task on other errors.
+			task.finish(err)
+			_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(err))
 		}
-		// The task reader retries transient errors in memory and re-spools the task on other errors.
-		task.finish(err)
-		_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(err))
 	}
+}
+
+// unbindDropsTask reports whether a drained task can be dropped after History's answer: History moved the workflow's
+// tasks to the normal queue, or the workflow or its namespace is gone.
+func unbindDropsTask(err error) bool {
+	_, namespaceGone := errors.AsType[*serviceerror.NamespaceNotFound](err)
+	return err == nil || common.IsNotFoundError(err) || namespaceGone
+}
+
+// unbindStopsDrain reports whether History will not release the task's workflow here: it is bound to a single-session
+// worker, whose queue is never drained, or this cluster is standby for it.
+func unbindStopsDrain(err error) bool {
+	_, singleSessionBinding := errors.AsType[*serviceerror.FailedPrecondition](err)
+	_, notActive := errors.AsType[*serviceerror.NamespaceNotActive](err)
+	return singleSessionBinding || notActive
 }
 
 func (tm *priTaskMatcher) forwardPolls(

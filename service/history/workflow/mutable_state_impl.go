@@ -1510,7 +1510,7 @@ func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string) {
 func (ms *MutableStateImpl) recordSessionBound(exclusive bool) {
 	metrics.WorkflowBoundToSessionWorkerCounter.With(ms.metricsHandler).Record(1,
 		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
-		metrics.SessionModeTag(exclusive),
+		metrics.SessionAdmissionModeTag(exclusive),
 	)
 }
 

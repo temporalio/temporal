@@ -1311,10 +1311,7 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ms := historyi.NewMockMutableState(ctrl)
 	registry := namespace.NewMockRegistry(ctrl)
-	logger := log.NewNoopLogger()
-	client := dynamicconfig.NewMemoryClient()
-	client.OverrideSetting(dynamicconfig.EnableStickyActivityExecution, true)
-	config := configs.NewConfig(dynamicconfig.NewCollection(client, logger), 1)
+	config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue",
 	})

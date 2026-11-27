@@ -3,6 +3,7 @@ package unbindworkflowfromsessionworker
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -17,8 +18,8 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+	// A standby cluster must not change the workflow.
+	if _, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.GetExecution().GetWorkflowId()); err != nil {
 		return nil, err
 	}
 
@@ -49,6 +50,10 @@ func unbindWorkflowFromSessionWorker(mutableState historyi.MutableState, workerQ
 	}
 	if mutableState.SessionWorkerQueue() != workerQueue {
 		return &api.UpdateWorkflowAction{Noop: true}, nil
+	}
+	if mutableState.HasExclusiveBinding() {
+		// Only a multi-session worker's queue is drained; a single-session binding is never released.
+		return nil, serviceerror.NewFailedPrecondition("workflow is bound to a single-session worker and cannot be unbound from it")
 	}
 	unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue)
 	if err != nil {

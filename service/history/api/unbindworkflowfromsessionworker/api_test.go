@@ -40,30 +40,34 @@ func TestUnbindWorkflowFromSessionWorker(t *testing.T) {
 		})
 	}
 
-	for _, tc := range []struct {
-		name     string
-		unbound  bool
-		wantNoop bool
-	}{
-		{name: "bound to the drained worker", unbound: true, wantNoop: false},
-		{name: "bound exclusively to the drained worker", unbound: false, wantNoop: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ms := historyi.NewMockMutableState(gomock.NewController(t))
-			ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
-			ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
-			ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(tc.unbound, nil)
+	t.Run("bound to the drained worker", func(t *testing.T) {
+		ms := historyi.NewMockMutableState(gomock.NewController(t))
+		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+		ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
+		ms.EXPECT().HasExclusiveBinding().Return(false)
+		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(true, nil)
 
-			action, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
-			require.NoError(t, err)
-			require.Equal(t, tc.wantNoop, action.Noop)
-		})
-	}
+		action, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
+		require.NoError(t, err)
+		require.False(t, action.Noop)
+	})
+
+	t.Run("bound to a single-session worker", func(t *testing.T) {
+		ms := historyi.NewMockMutableState(gomock.NewController(t))
+		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+		ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
+		ms.EXPECT().HasExclusiveBinding().Return(true)
+
+		_, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)
+		var failedPrecondition *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecondition)
+	})
 
 	t.Run("unbind fails", func(t *testing.T) {
 		ms := historyi.NewMockMutableState(gomock.NewController(t))
 		ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 		ms.EXPECT().SessionWorkerQueue().Return(drainedQueue)
+		ms.EXPECT().HasExclusiveBinding().Return(false)
 		ms.EXPECT().UpdateNonExclusiveWorkerBinding(nil, "", drainedQueue).Return(false, errors.New("reschedule failed"))
 
 		_, err := unbindWorkflowFromSessionWorker(ms, drainedQueue)

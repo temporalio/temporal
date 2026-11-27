@@ -3,6 +3,7 @@ package resetstickytaskqueue
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -51,6 +52,10 @@ func resetStickyTaskQueue(mutableState historyi.MutableState) (*api.UpdateWorkfl
 	}
 	// Forgetting a bound worker unbinds the workflow, which also moves its session activities to the normal queue.
 	if workerQueue := mutableState.SessionWorkerQueue(); workerQueue != "" {
+		if mutableState.HasExclusiveBinding() {
+			// A single-session binding is never released, so there is no sticky queue to reset.
+			return nil, serviceerror.NewFailedPrecondition("workflow is bound to a single-session worker; its sticky task queue cannot be reset")
+		}
 		unbound, err := mutableState.UpdateNonExclusiveWorkerBinding(nil, "", workerQueue)
 		if err != nil {
 			return nil, err

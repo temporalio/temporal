@@ -1892,7 +1892,7 @@ var (
 	// Workflow sessions
 	WorkflowBoundToSessionWorkerCounter = NewCounterDef(
 		"workflow_bound_to_session_worker",
-		WithDescription("Workflows that use sessions, by session mode: counted once per workflow, when a single-session worker acquires it or a multi-session worker binds it before its first workflow task completes. Later binding changes are counted by workflow_binding_change."),
+		WithDescription("Workflows that use sessions, by the session admission mode of their worker: counted once per workflow, when a single-session worker acquires it or a multi-session worker binds it before its first workflow task completes. Later binding changes are counted by workflow_binding_change."),
 	)
 	WorkflowBindingChangeCounter = NewCounterDef(
 		"workflow_binding_change",

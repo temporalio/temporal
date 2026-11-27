@@ -50,7 +50,6 @@ func newSessionMoveEnv(t *testing.T, workflowTaskTimeout time.Duration, opts ...
 // nextRun needs.
 func newSessionMoveEnvForNextRun(t *testing.T, workflowTaskTimeout time.Duration, nextRun nextRunCase, opts ...testcore.TestOption) *sessionMoveEnv {
 	env := testcore.NewEnv(t, append([]testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableMultiSessionWorkers, true),
 	}, opts...)...)
 	tv := env.Tv()

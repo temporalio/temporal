@@ -11386,7 +11386,7 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 			if tc.wantAdopted {
 				s.Require().Len(adoptions, 1)
 				s.Equal(int64(1), adoptions[0].Value)
-				s.Equal("multi", adoptions[0].Tags["session_mode"])
+				s.Equal("multi", adoptions[0].Tags["session_admission_mode"])
 			} else {
 				s.Empty(adoptions)
 			}
@@ -11419,7 +11419,7 @@ func (s *mutableStateSuite) TestBindExclusiveWorkerCountsBinding() {
 	recordings := capture.SnapshotMetric(metrics.WorkflowBoundToSessionWorkerCounter.Name())
 	s.Require().Len(recordings, 1)
 	s.Equal(int64(1), recordings[0].Value)
-	s.Equal("single", recordings[0].Tags["session_mode"])
+	s.Equal("single", recordings[0].Tags["session_admission_mode"])
 	s.True(s.mutableState.HasExclusiveBinding())
 }
 

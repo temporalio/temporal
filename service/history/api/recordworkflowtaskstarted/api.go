@@ -80,12 +80,12 @@ func Invoke(
 				return nil, serviceerrors.NewObsoleteMatchingTask("Workflow task stamp mismatch")
 			}
 
-			singleSession := req.PollRequest.GetSessionOptions().GetSingleSession()
-			stableIdentity := singleSession.GetStableIdentity()
+			workerIsSingleSession := req.PollRequest.GetSessionOptions().GetSingleSession()
+			workerStableIdentity := workerIsSingleSession.GetStableIdentity()
 			// An unbound execution can acquire the polling session's stable identity.
 			// Once bound, every start request, including retries, must identify the same session.
-			exclusivelyBound := mutableState.HasExclusiveBinding()
-			if exclusivelyBound && (stableIdentity == "" || stableIdentity != mutableState.SessionWorkerQueue()) {
+			workflowIsExclusivelyBound := mutableState.HasExclusiveBinding()
+			if workflowIsExclusivelyBound && (workerStableIdentity == "" || workerStableIdentity != mutableState.SessionWorkerQueue()) {
 				return nil, serviceerrors.NewObsoleteMatchingTask("workflow is bound to another single-session destination")
 			}
 
@@ -178,7 +178,7 @@ func Invoke(
 			// is only updated further below, by BindExclusiveWorker and UpdateNonExclusiveWorkerBinding.
 			var sessionInfo *sessionpb.SessionInfo
 			if workerQueue := taskqueue.SessionWorkerStickyQueue(req.PollRequest.GetSessionOptions(), req.PollRequest.GetWorkerInstanceKey()); workerQueue != "" {
-				sessionInfo = &sessionpb.SessionInfo{ExclusiveWorker: singleSession != nil, WorkerQueue: workerQueue}
+				sessionInfo = &sessionpb.SessionInfo{ExclusiveWorker: workerIsSingleSession != nil, WorkerQueue: workerQueue}
 			}
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
@@ -198,10 +198,11 @@ func Invoke(
 				return nil, err
 			}
 
-			newSingleSessionBinding := singleSession != nil && !exclusivelyBound
+			newSingleSessionBinding := workerIsSingleSession != nil && !workflowIsExclusivelyBound
 			if newSingleSessionBinding {
-				// Bind after the task start is accepted so both changes commit in the same transaction.
-				mutableState.BindExclusiveWorker(stableIdentity)
+				// Bind only once the started event is added, so a rejected start binds nothing, and the binding commits in
+				// the same transaction as the started event.
+				mutableState.BindExclusiveWorker(workerStableIdentity)
 				// TODO (Shivam): A single-session worker can acquire a workflow that already has a non-exclusive binding.
 				// Its session activities stay queued at the previously bound worker. Decide how exclusive and non-exclusive
 				// workers on one task queue interact (reschedule, reject the acquisition, or keep unsupported).

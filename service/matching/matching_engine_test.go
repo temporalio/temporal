@@ -7694,7 +7694,9 @@ with the exclusive directive only to skip the bound-worker liveness check; their
     partition unloads once nothing is left.
  2. While the drain runs, new tasks are refused with StickyWorkerUnavailable.
  3. A queue that was never persisted is not loaded.
- 4. An exclusively assigned queue is left alone: its tasks wait for the single-session worker's replacement, so nothing
+ 4. When History will not release a task's workflow (it is bound to a single-session worker, or this cluster is
+    standby), the drain stops: the task stays queued and new tasks are admitted again.
+ 5. An exclusively assigned queue is left alone: its tasks wait for the single-session worker's replacement, so nothing
     is unbound or dropped and new tasks are still admitted.
 */
 func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
@@ -7780,6 +7782,47 @@ func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
 		require.NoError(t, err)
 		require.Nil(t, loaded(t.Context(), tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 	})
+
+	for _, tc := range []struct {
+		name      string
+		unbindErr error
+	}{
+		{name: "single-session binding stops the drain", unbindErr: serviceerror.NewFailedPrecondition("single-session")},
+		{name: "standby cluster stops the drain", unbindErr: serviceerror.NewNamespaceNotActive("ns", "standby", "active")},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.matchingEngine.Stop()
+			s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
+			s.matchingEngine.metricsHandler = metricsHandler
+			s.matchingEngine.Start()
+			require.NoError(t, addTask(ctx, tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+			s.mockHistoryClient.EXPECT().UnbindWorkflowFromSessionWorker(gomock.Any(), gomock.Any()).Return(nil, tc.unbindErr)
+
+			_, err := s.matchingEngine.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+			})
+			require.NoError(t, err)
+
+			await.RequireTrue(t, func() bool {
+				return len(capture.SnapshotMetric(metrics.SessionWorkerQueueDrainCounter.Name())) > 0
+			}, 10*time.Second, 50*time.Millisecond)
+			recordings := capture.SnapshotMetric(metrics.SessionWorkerQueueDrainCounter.Name())
+			require.Len(t, recordings, 1)
+			require.Equal(t, sessionWorkerQueueDrainStopped, recordings[0].Tags["outcome"])
+			// A stopped drain keeps the task queued, and the queue takes tasks again.
+			pm := loaded(ctx, tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+			require.NotNil(t, pm)
+			queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+			require.NoError(t, addTask(ctx, tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+			require.Equal(t, 2, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
+		})
+	}
 
 	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
 		s.Run("exclusive assignment/"+taskType.String(), func() {

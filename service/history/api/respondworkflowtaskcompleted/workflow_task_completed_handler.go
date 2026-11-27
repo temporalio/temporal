@@ -958,10 +958,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
-	// starts unbound.
-	sessionInfo := handler.mutableState.SessionInfo()
-
 	// Always add workflow completed event to this one
 	event, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
@@ -970,7 +966,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 
 	// Check if this workflow has a cron schedule
 	if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID, sessionInfo)
+		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID)
 	}
 
 	return event, nil
@@ -1024,8 +1020,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
-	// starts unbound.
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit.
 	sessionInfo := handler.mutableState.SessionInfo()
 
 	// Always add workflow failed event
@@ -1043,7 +1038,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 	if retryBackoff != backoff.NoBackoff {
 		return event, handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID, sessionInfo)
 	} else if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID, sessionInfo)
+		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
 	}
 
 	// No retry or cron
@@ -1631,7 +1626,6 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	newRunID string,
-	previousSessionInfo *sessionpb.SessionInfo,
 ) error {
 	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -1661,7 +1655,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		ctx,
 		handler.mutableState,
 		newMutableState,
-		previousSessionInfo,
+		nil, // a cron run starts unbound
 		newRunID,
 		startAttr,
 		startEvent.Links,

@@ -49,7 +49,6 @@ TestSingleSessionAcquisitionAndReplacement tests admission, routing, and replace
 func TestSingleSessionAcquisitionAndReplacement(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
-		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -616,7 +615,6 @@ func TestSingleSessionTaskAddHooks(t *testing.T) {
 	t.Parallel()
 	env := newVersioning3TestEnv(t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -1051,7 +1049,6 @@ type singleSessionEnv struct {
 func newSingleSessionEnv(t *testing.T, workflowTaskTimeout time.Duration, commands func(*testvars.TestVars) []*commandpb.Command) *singleSessionEnv {
 	env := testcore.NewEnv(t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableSingleSessionWorkers, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableStickyActivityExecution, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
