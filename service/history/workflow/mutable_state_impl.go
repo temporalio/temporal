@@ -2825,6 +2825,24 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
+	// Inherit the previous run's retry policy when the ContinueAsNew command
+	// does not carry one, mirroring how taskQueue/workflowType/taskTimeout
+	// above fall back to previousExecutionInfo. Without this fallback, a user
+	// ContinueAsNew (as opposed to the automatic retry/cron path that reads
+	// the policy from the started event in retry.go) silently drops the
+	// workflow's retry policy on every hop. See
+	// https://github.com/temporalio/temporal/issues/5249.
+	retryPolicy := command.RetryPolicy
+	if retryPolicy == nil && previousExecutionInfo.HasRetryPolicy {
+		retryPolicy = &commonpb.RetryPolicy{
+			InitialInterval:        previousExecutionInfo.RetryInitialInterval,
+			BackoffCoefficient:     previousExecutionInfo.RetryBackoffCoefficient,
+			MaximumInterval:        previousExecutionInfo.RetryMaximumInterval,
+			MaximumAttempts:        previousExecutionInfo.RetryMaximumAttempts,
+			NonRetryableErrorTypes: previousExecutionInfo.RetryNonRetryableErrorTypes,
+		}
+	}
+
 	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(ctx, previousExecutionState)
 	if err != nil {
 		return nil, err
@@ -2919,7 +2937,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		WorkflowTaskTimeout:      taskTimeout,
 		Input:                    command.Input,
 		Header:                   command.Header,
-		RetryPolicy:              command.RetryPolicy,
+		RetryPolicy:              retryPolicy,
 		CronSchedule:             command.CronSchedule,
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
