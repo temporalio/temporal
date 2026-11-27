@@ -59,6 +59,41 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 	return target
 }
 
+// addCallbackAttachmentEventReferences adds CHASM-owned Workflow Update callback attachment
+// references for request IDs that lack a legacy entry. Incoming signals are merged afterward
+// and retain precedence over both sources.
+func addCallbackAttachmentEventReferences(
+	ctx chasm.Context,
+	wf *chasmworkflow.Workflow,
+	requestIDInfos map[string]*workflowpb.RequestIdInfo,
+) {
+	wf.VisitCallbackAttachmentEventReferences(ctx, func(
+		_ string,
+		requestID string,
+		reference chasmworkflow.CallbackAttachmentEventReference,
+	) {
+		if _, exists := requestIDInfos[requestID]; exists {
+			return
+		}
+		if reference.EventType == enumspb.EVENT_TYPE_UNSPECIFIED ||
+			(reference.EventID < common.FirstEventID && reference.EventID != common.BufferedEventID) {
+			return
+		}
+		requestIDInfos[requestID] = newRequestIDInfo(reference.EventType, reference.EventID)
+	})
+}
+
+func newRequestIDInfo(eventType enumspb.EventType, eventID int64) *workflowpb.RequestIdInfo {
+	info := &workflowpb.RequestIdInfo{
+		EventType: eventType,
+		Buffered:  eventID == common.BufferedEventID,
+	}
+	if !info.Buffered {
+		info.EventId = eventID
+	}
+	return info
+}
+
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
@@ -173,14 +208,10 @@ func Invoke(
 	}
 
 	for requestID, requestIDInfo := range mutableState.GetExecutionState().GetRequestIds() {
-		info := &workflowpb.RequestIdInfo{
-			EventType: requestIDInfo.EventType,
-			Buffered:  requestIDInfo.EventId == common.BufferedEventID,
-		}
-		if !info.Buffered {
-			info.EventId = requestIDInfo.EventId
-		}
-		result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
+		result.WorkflowExtendedInfo.RequestIdInfos[requestID] = newRequestIDInfo(
+			requestIDInfo.EventType,
+			requestIDInfo.EventId,
+		)
 	}
 
 	if executionInfo.ParentRunId != "" {
@@ -291,19 +322,15 @@ func Invoke(
 			return nil, err
 		}
 		result.Callbacks = append(result.Callbacks, chasmCallbackInfos...)
+		addCallbackAttachmentEventReferences(chasmCtx, wf, result.WorkflowExtendedInfo.RequestIdInfos)
 
 		if wf.IncomingSignals != nil {
 			for requestID, incomingSignalDataField := range wf.IncomingSignals {
 				incomingSignalData := incomingSignalDataField.Get(chasmCtx)
-				buffered := incomingSignalData.EventId == common.BufferedEventID
-				info := &workflowpb.RequestIdInfo{
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-					Buffered:  buffered,
-				}
-				if !buffered {
-					info.EventId = incomingSignalData.EventId
-				}
-				result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
+				result.WorkflowExtendedInfo.RequestIdInfos[requestID] = newRequestIDInfo(
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					incomingSignalData.EventId,
+				)
 			}
 			if n := len(wf.IncomingSignals); n > 0 {
 				metrics.DescribeWorkflowSignalBacklinksCount.With(

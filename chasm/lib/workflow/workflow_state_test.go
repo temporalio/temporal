@@ -119,6 +119,16 @@ func TestCallbackAttachmentReferenceReadsDoNotDirtyUpdateNode(t *testing.T) {
 			require.True(t, found)
 			require.Equal(t, reference, got)
 		}},
+		{"Visit", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
+			visits := 0
+			wf.VisitCallbackAttachmentEventReferences(ctx, func(updateID, requestID string, got CallbackAttachmentEventReference) {
+				visits++
+				require.Equal(t, "update-id", updateID)
+				require.Equal(t, "request-id", requestID)
+				require.Equal(t, reference, got)
+			})
+			require.Equal(t, 1, visits)
+		}},
 		{"DuplicateAttach", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
 			require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), UpdateCallbackAttachment{
 				UpdateID: "update-id", RequestID: "request-id", Callbacks: nexusCallbacks("http://callback"),

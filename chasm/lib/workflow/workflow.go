@@ -189,6 +189,23 @@ type UpdateCallbackAttachment struct {
 	LegacyEventReference *CallbackAttachmentEventReference
 }
 
+// VisitCallbackAttachmentEventReferences visits each request ID and Workflow history event
+// reference stored on every WorkflowUpdate component. Visit order is unspecified. Unflushed
+// references may contain common.BufferedEventID.
+func (w *Workflow) VisitCallbackAttachmentEventReferences(
+	ctx chasm.Context,
+	visitor func(updateID string, requestID string, reference CallbackAttachmentEventReference),
+) {
+	for updateID, updateField := range w.Updates {
+		for requestID, info := range readWorkflowUpdate(ctx, updateField).CallbackAttachmentEventReferences {
+			visitor(updateID, requestID, CallbackAttachmentEventReference{
+				EventType: info.GetEventType(),
+				EventID:   info.GetEventId(),
+			})
+		}
+	}
+}
+
 // tryBackfillCallbackAttachmentEventReference converges a callback written by an older server by
 // copying its legacy attachment event reference into the WorkflowUpdate component. It returns true
 // when the callback was already represented in CHASM and therefore makes the current attachment a
