@@ -199,7 +199,7 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 
 func (d *RPCFactory) createGRPCListener() net.Listener {
 	rpcConfig := d.config.Services[string(d.serviceName)].RPC
-	hostAddress := net.JoinHostPort(getListenIP(&rpcConfig, d.logger).String(), convert.IntToString(rpcConfig.GRPCPort))
+	hostAddress := net.JoinHostPort(GetListenIP(&rpcConfig, d.logger).String(), convert.IntToString(rpcConfig.GRPCPort))
 
 	grpcListener, err := net.Listen("tcp", hostAddress)
 	if err != nil || grpcListener == nil || grpcListener.Addr() == nil {
@@ -210,7 +210,8 @@ func (d *RPCFactory) createGRPCListener() net.Listener {
 	return grpcListener
 }
 
-func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
+// GetListenIP resolves the IP address used by a service's RPC listener.
+func GetListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	if cfg.BindOnLocalHost && len(cfg.BindOnIP) > 0 {
 		logger.Fatal("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
 		return nil

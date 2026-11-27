@@ -79,6 +79,19 @@ func buildCLI() *cli.App {
 
 	app.Commands = []*cli.Command{
 		{
+			Name:      "healthcheck",
+			Usage:     "Check that the configured local Temporal services are serving",
+			ArgsUsage: " ",
+			Flags:     serviceFlags(),
+			Before:    validateConfigFlags,
+			Action: func(c *cli.Context) error {
+				if err := checkHealth(c); err != nil {
+					return cli.Exit(err, 1)
+				}
+				return nil
+			},
+		},
+		{
 			Name:      "validate-dynamic-config",
 			Usage:     "Validate a dynamic config file[s] with known keys and types",
 			ArgsUsage: "<file> ...",
@@ -126,57 +139,21 @@ func buildCLI() *cli.App {
 			Name:      "start",
 			Usage:     "Start Temporal server",
 			ArgsUsage: " ",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "services",
-					Aliases: []string{"s"},
-					Usage:   "comma separated list of services to start. Deprecated",
-					Hidden:  true,
-				},
-				&cli.StringSliceFlag{
-					Name:    "service",
-					Aliases: []string{"svc"},
-					Value:   cli.NewStringSlice(temporal.DefaultServices...),
-					Usage:   "service(s) to start",
-					EnvVars: []string{"TEMPORAL_SERVICES"},
-				},
-			},
+			Flags:     serviceFlags(),
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
-
-				if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone") || c.IsSet("root")) {
-					return cli.Exit("ERROR: can not use --config, --env, --zone, or --root with --config-file", 1)
-				}
-				return nil
+				return validateConfigFlags(c)
 			},
 			Action: func(c *cli.Context) error {
-				services := c.StringSlice("service")
 				allowNoAuth := c.Bool("allow-no-auth")
 
-				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
 					stdlog.Println("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
-					services = strings.Split(c.String("services"), ",")
 				}
 
-				var cfg *config.Config
-				var err error
-
-				switch {
-				case c.IsSet("config-file"):
-					cfg, err = config.Load(config.WithConfigFile(c.String("config-file")))
-				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
-					cfg, err = config.Load(
-						config.WithEnv(c.String("env")),
-						config.WithConfigDir(path.Join(c.String("root"), c.String("config"))),
-						config.WithZone(c.String("zone")),
-					)
-				default:
-					cfg, err = config.Load(config.WithEmbedded())
-				}
-
+				cfg, err := loadServerConfig(c)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
@@ -220,7 +197,7 @@ func buildCLI() *cli.App {
 				}
 
 				s, err := temporal.NewServer(
-					temporal.ForServices(services),
+					temporal.ForServices(configuredServices(c)),
 					temporal.WithConfig(cfg),
 					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),
@@ -245,4 +222,51 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
+}
+
+func serviceFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "services",
+			Aliases: []string{"s"},
+			Usage:   "comma separated list of services to start. Deprecated",
+			Hidden:  true,
+		},
+		&cli.StringSliceFlag{
+			Name:    "service",
+			Aliases: []string{"svc"},
+			Value:   cli.NewStringSlice(temporal.DefaultServices...),
+			Usage:   "Temporal service(s)",
+			EnvVars: []string{"TEMPORAL_SERVICES"},
+		},
+	}
+}
+
+func configuredServices(c *cli.Context) []string {
+	if c.IsSet("services") {
+		return strings.Split(c.String("services"), ",")
+	}
+	return c.StringSlice("service")
+}
+
+func validateConfigFlags(c *cli.Context) error {
+	if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone") || c.IsSet("root")) {
+		return cli.Exit("ERROR: can not use --config, --env, --zone, or --root with --config-file", 1)
+	}
+	return nil
+}
+
+func loadServerConfig(c *cli.Context) (*config.Config, error) {
+	switch {
+	case c.IsSet("config-file"):
+		return config.Load(config.WithConfigFile(c.String("config-file")))
+	case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
+		return config.Load(
+			config.WithEnv(c.String("env")),
+			config.WithConfigDir(path.Join(c.String("root"), c.String("config"))),
+			config.WithZone(c.String("zone")),
+		)
+	default:
+		return config.Load(config.WithEmbedded())
+	}
 }
