@@ -5,9 +5,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/namespace"
 	test "go.temporal.io/server/common/testing"
@@ -21,6 +23,78 @@ func newTestCHASMContext(t *testing.T) *chasm.MockMutableContext {
 		},
 	}
 	return ctx
+}
+
+func TestSetCallbackAttachmentEventReferenceEventID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("UpdatesOnlyTargetedBufferedReference", func(t *testing.T) {
+		ctx := newTestCHASMContext(t)
+		wf := newTestWorkflow()
+		bufferedReference := CallbackAttachmentEventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			EventID:   common.BufferedEventID,
+		}
+		wf.Updates = make(chasm.Map[string, *WorkflowUpdate], 2)
+		for _, updateID := range []string{"update-1", "update-2"} {
+			update := NewWorkflowUpdate(ctx, updateID, wf.MSPointer)
+			update.setCallbackAttachmentEventReference("request-id", bufferedReference)
+			wf.Updates[updateID] = chasm.NewComponentField(ctx, update)
+		}
+
+		wf.SetCallbackAttachmentEventReferenceEventID(ctx, "update-1", "request-id", CallbackAttachmentEventReference{
+			EventType: bufferedReference.EventType,
+			EventID:   11,
+		})
+
+		reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-1", "request-id")
+		require.True(t, ok)
+		require.Equal(t, int64(11), reference.EventID)
+		reference, ok = wf.LookupCallbackAttachmentEventReference(ctx, "update-2", "request-id")
+		require.True(t, ok)
+		require.Equal(t, common.BufferedEventID, reference.EventID)
+	})
+
+	for _, tc := range []struct {
+		name      string
+		reference CallbackAttachmentEventReference
+	}{
+		{
+			name: "LeavesDurableReferenceUnchanged",
+			reference: CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventID:   11,
+			},
+		},
+		{
+			name: "LeavesBufferedReferenceForDifferentEventTypeUnchanged",
+			reference: CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+				EventID:   common.BufferedEventID,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := newTestCHASMContext(t)
+			wf := newTestWorkflow()
+			update := NewWorkflowUpdate(ctx, "update-id", wf.MSPointer)
+			update.setCallbackAttachmentEventReference("request-id", tc.reference)
+			wf.Updates = chasm.Map[string, *WorkflowUpdate]{
+				"update-id": chasm.NewComponentField(ctx, update),
+			}
+
+			wf.SetCallbackAttachmentEventReferenceEventID(ctx, "update-id", "request-id", CallbackAttachmentEventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventID:   12,
+			})
+
+			reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+			require.True(t, ok)
+			require.Equal(t, tc.reference, reference)
+		})
+	}
 }
 
 func newTestWorkflow() *Workflow {

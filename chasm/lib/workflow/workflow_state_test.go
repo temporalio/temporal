@@ -88,6 +88,53 @@ func cloneNodes(nodes map[string]*persistencespb.ChasmNode) map[string]*persiste
 	return cloned
 }
 
+func TestCallbackAttachmentReferenceReadsDoNotDirtyUpdateNode(t *testing.T) {
+	t.Parallel()
+
+	backend := &chasm.MockNodeBackend{}
+	root := newWorkflowTestTree(t, backend, nil)
+	mutableCtx := chasm.NewMutableContext(t.Context(), root)
+	workflow := NewWorkflow(mutableCtx, chasm.NewMSPointer(backend))
+	update := NewWorkflowUpdate(mutableCtx, "update-id", workflow.MSPointer)
+	reference := CallbackAttachmentEventReference{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		EventID:   11,
+	}
+	update.setCallbackAttachmentEventReference("request-id", reference)
+	workflow.Updates = chasm.Map[string, *WorkflowUpdate]{
+		"update-id": chasm.NewComponentField(mutableCtx, update),
+	}
+	require.NoError(t, root.SetRootComponent(workflow))
+
+	mutation, err := root.CloseTransaction(t.Context(), true)
+	require.NoError(t, err)
+	require.NotEmpty(t, mutation.UpdatedNodes)
+
+	for _, tc := range []struct {
+		name string
+		run  func(*testing.T, *Workflow, chasm.MutableContext)
+	}{
+		{"Lookup", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
+			got, found := wf.LookupCallbackAttachmentEventReference(ctx, "update-id", "request-id")
+			require.True(t, found)
+			require.Equal(t, reference, got)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := newWorkflowTestTree(t, backend, cloneNodes(mutation.UpdatedNodes))
+			readCtx := chasm.NewContext(t.Context(), root)
+			component, err := root.ComponentByPath(readCtx, nil)
+			require.NoError(t, err)
+			wf := component.(*Workflow)
+			tc.run(t, wf, chasm.NewMutableContext(t.Context(), root))
+
+			got, err := root.CloseTransaction(t.Context(), true)
+			require.NoError(t, err)
+			require.Empty(t, got.UpdatedNodes)
+		})
+	}
+}
+
 // TestWorkflowStateReplacesEmptyState pins the on-disk compatibility of swapping the workflow
 // root component's state proto from emptypb.Empty to WorkflowState. Executions written by an
 // older server persisted either no data blob at all (NewWorkflow left Empty nil) or the zero
