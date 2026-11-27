@@ -18,8 +18,13 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
+	chasmlib "go.temporal.io/server/chasm/lib/all"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -386,8 +391,9 @@ func (s *UpdateWorkflowSdkSuite) pollUpdate(env *testcore.TestEnv, waitPolicy *u
 	})
 }
 
-// TestUpdateSameRequestIDDeduplicatesCallbacks verifies requestID-based
-// deduplication in AttachCallbacks. The update blocks (stays in stateAccepted), then:
+// TestUpdateSameRequestIDDeduplicatesCallbacks verifies requestID-based deduplication while
+// request IDs are dual-written to legacy execution state and the CHASM WorkflowUpdate.
+// The update blocks (stays in stateAccepted), then:
 //   - A second request with the same requestID is deduped (no new callback).
 //   - A third request with a different requestID creates an additional callback.
 //
@@ -473,6 +479,44 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 		}
 	}
 	s.Equal(2, updateCallbackCount, "expected 2 callbacks: requestID1 (original) + requestID2 (new), with duplicate requestID1 deduped")
+	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, requestIDInfos[requestID1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, requestIDInfos[requestID2].GetEventType())
+	s.GreaterOrEqual(requestIDInfos[requestID1].GetEventId(), int64(1))
+	s.GreaterOrEqual(requestIDInfos[requestID2].GetEventId(), int64(1))
+	s.False(requestIDInfos[requestID1].GetBuffered())
+	s.False(requestIDInfos[requestID2].GetBuffered())
+
+	mutableState, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	requestIDs := mutableState.GetDatabaseMutableState().GetExecutionState().GetRequestIds()
+	s.Contains(requestIDs, requestID1)
+	s.Contains(requestIDs, requestID2)
+
+	// Decode the persisted CHASM tree directly. Detached CHASM lookup does not consult the legacy
+	// request ID map, so this verifies that both event references survived service persistence.
+	registry, err := chasmlib.NewNilRegistry(log.NewNoopLogger())
+	s.NoError(err)
+	detachedWorkflow, chasmCtx, err := chasm.NewDetachedExecution[*chasmworkflow.Workflow](
+		s.Context(),
+		mutableState.GetDatabaseMutableState(),
+		registry,
+	)
+	s.NoError(err)
+	reference, found := detachedWorkflow.LookupCallbackAttachmentEventReference(chasmCtx, env.Tv().UpdateID(), requestID1)
+	s.True(found)
+	s.Equal(requestIDs[requestID1].GetEventType(), reference.EventType)
+	s.Equal(requestIDs[requestID1].GetEventId(), reference.EventID)
+	s.Equal(requestIDInfos[requestID1].GetEventId(), reference.EventID)
+	reference, found = detachedWorkflow.LookupCallbackAttachmentEventReference(chasmCtx, env.Tv().UpdateID(), requestID2)
+	s.True(found)
+	s.Equal(requestIDs[requestID2].GetEventType(), reference.EventType)
+	s.Equal(requestIDs[requestID2].GetEventId(), reference.EventID)
+	s.Equal(requestIDInfos[requestID2].GetEventId(), reference.EventID)
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))

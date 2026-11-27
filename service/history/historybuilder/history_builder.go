@@ -29,6 +29,9 @@ const (
 	HistoryBuilderStateSealed
 )
 
+// FirstBufferedUpdateCallbackAttachment selects the original event for a CHASM-owned attachment.
+const FirstBufferedUpdateCallbackAttachment = -1
+
 type (
 	HistoryBuilder struct {
 		EventStore
@@ -49,7 +52,21 @@ type (
 		// scheduled to started event ID mapping for flushed buffered event
 		ScheduledIDToStartedID map[int64]int64
 		// request id to event ID mapping for flushed buffered event
-		RequestIDToEventID map[string]int64
+		RequestIDToEventID map[RequestEventKey]int64
+		// Update callback attachments are scoped to an Update and the type of event that attached them.
+		UpdateCallbackEventIDs map[UpdateCallbackRequestKey]int64
+	}
+
+	RequestEventKey struct {
+		RequestID             string
+		EventType             enumspb.EventType
+		BufferedEventPosition int64
+	}
+
+	UpdateCallbackRequestKey struct {
+		UpdateID  string
+		RequestID string
+		EventType enumspb.EventType
 	}
 
 	TaskIDGenerator func(number int) ([]int64, error)
@@ -83,7 +100,7 @@ func New(
 			memLatestBatch:         nil,
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: make(map[int64]int64),
-			requestIDToEventID:     make(map[string]int64),
+			requestIDToEventID:     make(map[RequestEventKey]int64),
 
 			maxEventBatchSizeInBytes: maxEventBatchSizeInBytes,
 
