@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -240,6 +241,16 @@ func recordChildWorkflowCompleted(
 			}
 
 			completionEvent := request.CompletionEvent
+			if deferred, err := deferOutrunningChildCompletion(mutableState, parentInitiatedID, completionEvent); err != nil {
+				return nil, err
+			} else if deferred {
+				// The completion stays on the child until the parent's earlier timers
+				// and timeouts have been delivered. CloseTransaction performs that step.
+				return &api.UpdateWorkflowAction{
+					Noop:               false,
+					CreateWorkflowTask: false,
+				}, nil
+			}
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
@@ -267,6 +278,24 @@ func recordChildWorkflowCompleted(
 		nil,
 	)
 	return resetRunID, retError
+}
+
+// childCompletionDeferrer is implemented by workflow mutable state. Tests that mock
+// MutableState keep the previous behavior of recording the completion immediately.
+type childCompletionDeferrer interface {
+	DeferOutrunningChildCompletion(initiatedID int64, completionEvent *historypb.HistoryEvent) (bool, error)
+}
+
+func deferOutrunningChildCompletion(
+	mutableState historyi.MutableState,
+	initiatedID int64,
+	completionEvent *historypb.HistoryEvent,
+) (bool, error) {
+	deferrer, ok := mutableState.(childCompletionDeferrer)
+	if !ok {
+		return false, nil
+	}
+	return deferrer.DeferOutrunningChildCompletion(initiatedID, completionEvent)
 }
 
 // childFirstRunLinked reports that this pending child is the one the completion is for.

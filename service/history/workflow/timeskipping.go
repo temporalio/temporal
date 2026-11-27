@@ -6,6 +6,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -422,7 +423,7 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 			return false
 		}
 	}
-	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+	if ms.hasInFlightPendingChild() {
 		noSkippingReason = "has pending child execution"
 		return false
 	}
@@ -437,15 +438,55 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	return true
 }
 
+// hasInFlightPendingChild reports whether a child is still running.
+// A child whose terminal event is deferred has already finished. It does not block
+// time skipping. The parent may skip up to that child's close time so its own timers
+// and timeouts are delivered first.
+func (ms *MutableStateImpl) hasInFlightPendingChild() bool {
+	for _, ci := range ms.GetPendingChildExecutionInfos() {
+		if ci.GetDeferredCompletionEvent() == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // findNextSkipTarget finds the earliest future target time among pending timers, activity retries,
 // workflow backoff, and execution timeouts, then applies the fast-forward bound. A pending task due
 // now or earlier blocks time skipping until it is processed. Call only after isWorkflowSkippable returns true.
 func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 	transition := chasm.NewTimeSkippingTransition(ms.Now())
-	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		if ms.trackFutureOrReportDueTaskForWorkflow(transition, timerInfo.ExpiryTime.AsTime(), "user timer") {
-			return nil
+	blocked := false
+	ms.forEachTimeSkippingDeadline(func(deadline time.Time, name string) {
+		if blocked {
+			return
 		}
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, deadline, name) {
+			blocked = true
+		}
+	})
+	if blocked {
+		return nil
+	}
+
+	// fast-forward is also a target time, and this is the furthest target time a time skipping can skip to
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if !tsi.GetFastForwardInfo().GetHasReached() && tsi.GetFastForwardInfo().GetTargetTime() != nil {
+		transition.GateByFastForward(tsi.GetFastForwardInfo())
+	}
+
+	if !transition.IsValid() || ms.skipTargetPassesDeferredChild(transition) {
+		return nil
+	}
+	return transition
+}
+
+// forEachTimeSkippingDeadline visits user timers, activity retry backoffs, workflow
+// backoff, and run/execution timeouts. Fast-forward is applied separately because
+// reaching it also disables time skipping.
+func (ms *MutableStateImpl) forEachTimeSkippingDeadline(fn func(deadline time.Time, name string)) {
+	for _, timerInfo := range ms.GetPendingTimerInfos() {
+		fn(timerInfo.GetExpiryTime().AsTime(), "user timer")
 	}
 
 	// Activities waiting out a retry backoff are skip targets: advance to the earliest
@@ -454,9 +495,7 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		if !activityPendingRetry(ai) {
 			continue
 		}
-		if ms.trackFutureOrReportDueTaskForWorkflow(transition, ai.GetScheduledTime().AsTime(), "activity retry") {
-			return nil
-		}
+		fn(ai.GetScheduledTime().AsTime(), "activity retry")
 	}
 	if !ms.HadOrHasWorkflowTask() {
 		// Support start-with-delay, cron, retry, and CaN-with-backoff: the workflow is
@@ -466,9 +505,7 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		executionTime := ms.executionInfo.GetExecutionTime().AsTime()
 		startTime := ms.executionInfo.GetStartTime().AsTime()
 		if executionTime.After(startTime) {
-			if ms.trackFutureOrReportDueTaskForWorkflow(transition, executionTime, "workflow backoff") {
-				return nil
-			}
+			fn(executionTime, "workflow backoff")
 		}
 	}
 	if ms.HadOrHasWorkflowTask() {
@@ -479,27 +516,12 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		// skip all the way to its run timeout before ever running its first task, so it never sets
 		// its internal timers.
 		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			if ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow run timeout") {
-				return nil
-			}
+			fn(t.AsTime(), "workflow run timeout")
 		}
 		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			if ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow execution timeout") {
-				return nil
-			}
+			fn(t.AsTime(), "workflow execution timeout")
 		}
 	}
-
-	// fast-forward is also a target time, and this is the furthest target time a time skipping can skip to
-	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	if !tsi.GetFastForwardInfo().GetHasReached() && tsi.GetFastForwardInfo().GetTargetTime() != nil {
-		transition.GateByFastForward(tsi.GetFastForwardInfo())
-	}
-
-	if transition.IsValid() {
-		return transition
-	}
-	return nil
 }
 
 // trackFutureOrReportDueTaskForWorkflow reports whether a due task blocks skipping and tracks a
@@ -517,6 +539,268 @@ func (ms *MutableStateImpl) trackFutureOrReportDueTaskForWorkflow(
 	}
 	transition.TrackEarliestFutureTime(deadline)
 	return false
+}
+
+// skipTargetPassesDeferredChild reports that this transition would move the parent
+// past a deferred child's close time. A disable-only fast-forward has no target
+// and does not move the clock.
+func (ms *MutableStateImpl) skipTargetPassesDeferredChild(transition *chasm.TimeSkippingTransition) bool {
+	closeTime, ok := ms.earliestDeferredChildClose()
+	if !ok || transition == nil {
+		return false
+	}
+	target := transition.GetTargetTime()
+	if target.IsZero() {
+		return false
+	}
+	return target.After(closeTime)
+}
+
+// DeferOutrunningChildCompletion holds a child's terminal event when that child's
+// virtual close time is still ahead of the parent. The parent then delivers its own
+// earlier timers and timeouts, and advances to the child's close time, before the
+// completion is written.
+func (ms *MutableStateImpl) DeferOutrunningChildCompletion(
+	initiatedID int64,
+	completionEvent *historypb.HistoryEvent,
+) (bool, error) {
+	ci, ok := ms.GetChildExecutionInfo(initiatedID)
+	if !ok || completionEvent == nil {
+		return false, nil
+	}
+	if ci.GetDeferredCompletionEvent() != nil {
+		return true, nil
+	}
+	closeTime := completionEvent.GetEventTime().AsTime()
+	if closeTime.IsZero() || !closeTime.After(ms.Now()) {
+		return false, nil
+	}
+	if !ms.IsWorkflow() {
+		return false, nil
+	}
+	if !NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).IsEnabled() ||
+		!ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
+		return false, nil
+	}
+
+	ms.approximateSize -= ci.Size()
+	ci.DeferredCompletionEvent = common.CloneProto(completionEvent)
+	ms.updateChildExecutionInfos[initiatedID] = ci
+	ms.approximateSize += ci.Size()
+	return true, nil
+}
+
+// closeTransactionFlushDeferredChildCompletions writes deferred child completions
+// whose close time is not after every remaining parent deadline. When a deadline
+// is still earlier, the completion stays deferred so that deadline is delivered first.
+func (ms *MutableStateImpl) closeTransactionFlushDeferredChildCompletions(
+	ctx context.Context,
+	transactionPolicy historyi.TransactionPolicy,
+) (bool, error) {
+	if transactionPolicy != historyi.TransactionPolicyActive || !ms.IsWorkflow() {
+		return false, nil
+	}
+	if !ms.IsWorkflowExecutionRunning() || ms.HasPendingWorkflowTask() || ms.IsWorkflowExecutionStatusPaused() {
+		return false, nil
+	}
+	closeTime, ok := ms.earliestDeferredChildClose()
+	if !ok {
+		return false, nil
+	}
+	if ms.hasTimeSkippingDeadlineBefore(closeTime) {
+		return false, nil
+	}
+
+	advanced, err := ms.advanceVirtualTimeTo(ctx, closeTime)
+	if err != nil {
+		return false, err
+	}
+	if err := ms.recordDeferredChildCompletions(ms.Now()); err != nil {
+		return false, err
+	}
+	if ms.IsWorkflowExecutionRunning() {
+		if err := ScheduleWorkflowTask(ms); err != nil {
+			return false, err
+		}
+	}
+	return advanced, nil
+}
+
+// hasTimeSkippingDeadlineBefore reports whether a parent timer, timeout, backoff,
+// activity retry, or pending fast-forward is at or before limit.
+func (ms *MutableStateImpl) hasTimeSkippingDeadlineBefore(limit time.Time) bool {
+	if limit.IsZero() {
+		return false
+	}
+	found := false
+	consider := func(deadline time.Time) {
+		if deadline.IsZero() || deadline.After(limit) {
+			return
+		}
+		found = true
+	}
+	ms.forEachTimeSkippingDeadline(func(deadline time.Time, _ string) {
+		consider(deadline)
+	})
+	if target, ok := ms.pendingFastForwardTarget(); ok {
+		consider(target)
+	}
+	return found
+}
+
+func (ms *MutableStateImpl) pendingFastForwardTarget() (time.Time, bool) {
+	util := NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo())
+	if !util.HasPendingFastForward() {
+		return time.Time{}, false
+	}
+	target := util.GetFastForwardTargetTime().AsTime()
+	if target.IsZero() {
+		return time.Time{}, false
+	}
+	return target, true
+}
+
+func (ms *MutableStateImpl) earliestDeferredChildClose() (time.Time, bool) {
+	_, ci, ok := ms.earliestDeferredChild()
+	if !ok {
+		return time.Time{}, false
+	}
+	closeTime := ci.GetDeferredCompletionEvent().GetEventTime().AsTime()
+	if closeTime.IsZero() {
+		return time.Time{}, false
+	}
+	return closeTime, true
+}
+
+func (ms *MutableStateImpl) earliestDeferredChild() (int64, *persistencespb.ChildExecutionInfo, bool) {
+	var (
+		foundID int64
+		found   *persistencespb.ChildExecutionInfo
+		foundAt time.Time
+	)
+	ok := false
+	for id, ci := range ms.GetPendingChildExecutionInfos() {
+		event := ci.GetDeferredCompletionEvent()
+		if event.GetEventTime() == nil {
+			continue
+		}
+		closeTime := event.GetEventTime().AsTime()
+		if closeTime.IsZero() {
+			continue
+		}
+		if !ok || closeTime.Before(foundAt) {
+			foundID = id
+			found = ci
+			foundAt = closeTime
+			ok = true
+		}
+	}
+	return foundID, found, ok
+}
+
+func (ms *MutableStateImpl) advanceVirtualTimeTo(ctx context.Context, target time.Time) (bool, error) {
+	if !target.After(ms.Now()) {
+		return false, nil
+	}
+	if !NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).IsEnabled() ||
+		!ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
+		return false, nil
+	}
+	skipped := target.Sub(ms.Now())
+	accumulated := ms.accumulatedSkippedDuration()
+	maxDuration := ms.TimeSkippingMaxAccumulatedDuration()
+	if skipped > maxDuration-accumulated {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+		ms.logger.Warn("workflow time skipping exceeds maximum accumulated duration",
+			tag.Duration("accumulated-skipped-duration", accumulated),
+			tag.Duration("proposed-skipped-duration", skipped),
+			tag.Duration("maximum-accumulated-skipped-duration", maxDuration))
+		return false, nil
+	}
+	if _, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx, target, false); err != nil {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+		ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
+		return false, err
+	}
+	return true, nil
+}
+
+func (ms *MutableStateImpl) recordDeferredChildCompletions(until time.Time) error {
+	type readyChild struct {
+		id int64
+		ci *persistencespb.ChildExecutionInfo
+	}
+	var ready []readyChild
+	for id, ci := range ms.GetPendingChildExecutionInfos() {
+		event := ci.GetDeferredCompletionEvent()
+		if event == nil {
+			continue
+		}
+		closeTime := event.GetEventTime().AsTime()
+		if closeTime.After(until) {
+			continue
+		}
+		ready = append(ready, readyChild{id: id, ci: ci})
+	}
+	if len(ready) == 0 {
+		// The clock could not reach the child's close time. Record the earliest
+		// completion anyway so the parent does not wait on an event it will not skip to.
+		id, ci, ok := ms.earliestDeferredChild()
+		if !ok {
+			return nil
+		}
+		ready = append(ready, readyChild{id: id, ci: ci})
+	}
+	for _, child := range ready {
+		if err := ms.recordDeferredChildCompletion(child.id, child.ci); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ms *MutableStateImpl) recordDeferredChildCompletion(
+	initiatedID int64,
+	ci *persistencespb.ChildExecutionInfo,
+) error {
+	event := ci.GetDeferredCompletionEvent()
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: ci.GetStartedWorkflowId(),
+		RunId:      ci.GetStartedRunId(),
+	}
+	var err error
+	switch event.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		_, err = ms.AddChildWorkflowExecutionCompletedEvent(
+			initiatedID, childExecution, event.GetWorkflowExecutionCompletedEventAttributes())
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		_, err = ms.AddChildWorkflowExecutionFailedEvent(
+			initiatedID, childExecution, event.GetWorkflowExecutionFailedEventAttributes())
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		_, err = ms.AddChildWorkflowExecutionCanceledEvent(
+			initiatedID, childExecution, event.GetWorkflowExecutionCanceledEventAttributes())
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		_, err = ms.AddChildWorkflowExecutionTerminatedEvent(initiatedID, childExecution)
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		_, err = ms.AddChildWorkflowExecutionTimedOutEvent(
+			initiatedID, childExecution, event.GetWorkflowExecutionTimedOutEventAttributes())
+	default:
+		ms.logger.Error("deferred child completion event type is unknown",
+			tag.WorkflowInitiatedID(initiatedID))
+		ms.clearDeferredChildCompletion(ci)
+		return nil
+	}
+	return err
+}
+
+func (ms *MutableStateImpl) clearDeferredChildCompletion(ci *persistencespb.ChildExecutionInfo) {
+	if ci.GetDeferredCompletionEvent() == nil {
+		return
+	}
+	ms.approximateSize -= ci.Size()
+	ci.DeferredCompletionEvent = nil
+	ms.updateChildExecutionInfos[ci.GetInitiatedEventId()] = ci
+	ms.approximateSize += ci.Size()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
