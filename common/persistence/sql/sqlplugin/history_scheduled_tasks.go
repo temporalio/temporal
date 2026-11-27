@@ -46,7 +46,7 @@ type (
 		// DeleteFromScheduledTasks deletes one or more rows from history_scheduled_tasks table
 		DeleteFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksFilter) (sql.Result, error)
 		// RangeDeleteFromScheduledTasks deletes one or more rows from history_scheduled_tasks table
-		//  ScheduledTasksRangeFilter - {TaskID, PageSize} will be ignored
+		//  ScheduledTasksRangeFilter - {TaskID} will be ignored, PageSize > 0 caps the number of rows deleted
 		RangeDeleteFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksRangeFilter) (sql.Result, error)
 	}
 )

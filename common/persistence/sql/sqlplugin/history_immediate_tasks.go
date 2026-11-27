@@ -42,7 +42,7 @@ type (
 		// DeleteFromHistoryImmediateTasks deletes one rows from history_immediate_tasks table.
 		DeleteFromHistoryImmediateTasks(ctx context.Context, filter HistoryImmediateTasksFilter) (sql.Result, error)
 		// RangeDeleteFromHistoryImmediateTasks deletes one or more rows from history_immediate_tasks table.
-		//  HistoryImmediateTasksRangeFilter - {PageSize} will be ignored
+		//  HistoryImmediateTasksRangeFilter - PageSize > 0 caps the number of rows deleted
 		RangeDeleteFromHistoryImmediateTasks(ctx context.Context, filter HistoryImmediateTasksRangeFilter) (sql.Result, error)
 	}
 )

@@ -2264,6 +2264,19 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
 keys.`,
 	)
+	QueueRangeCompleteBatchSize = NewGlobalIntSetting(
+		"history.queueRangeCompleteBatchSize",
+		0,
+		`Max number of completed tasks one statement deletes when a history queue cleans up its completed range.
+Only SQL persistence honors it. Each batch commits on its own, so a large range makes progress even when the whole
+cleanup doesn't finish within history.queueRangeCompleteTimeout. A value <= 0 deletes the whole range in one statement.`,
+	)
+	QueueRangeCompleteTimeout = NewGlobalDurationSetting(
+		"history.queueRangeCompleteTimeout",
+		5*time.Second,
+		`Timeout for one cleanup of a history queue's completed task range, covering all of its delete batches.
+A longer timeout can delay new task pickup and shard unload while a large range is cleaned up.`,
+	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,

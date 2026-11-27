@@ -39,7 +39,7 @@ type (
 		// DeleteFromVisibilityTasks deletes one rows from visibility_tasks table.
 		DeleteFromVisibilityTasks(ctx context.Context, filter VisibilityTasksFilter) (sql.Result, error)
 		// RangeDeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table.
-		//  VisibilityTasksRangeFilter - {PageSize} will be ignored
+		//  VisibilityTasksRangeFilter - PageSize > 0 caps the number of rows deleted
 		RangeDeleteFromVisibilityTasks(ctx context.Context, filter VisibilityTasksRangeFilter) (sql.Result, error)
 	}
 )

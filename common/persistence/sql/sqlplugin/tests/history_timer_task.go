@@ -286,6 +286,46 @@ func (s *historyHistoryTimerTaskSuite) TestHistoryScheduledTasksPaginateAcrossTi
 	s.Equal(expected, rows)
 }
 
+func (s *historyHistoryTimerTaskSuite) TestRangeDeleteWithPageSize() {
+	shardID := rand.Int31()
+	timestamp := s.now()
+	laterTimestamp := timestamp.Add(time.Millisecond)
+	tasks := []sqlplugin.TimerTasksRow{
+		s.newRandomTimerTaskRow(shardID, timestamp, 1),
+		s.newRandomTimerTaskRow(shardID, timestamp, 2),
+		s.newRandomTimerTaskRow(shardID, timestamp, 3),
+		s.newRandomTimerTaskRow(shardID, laterTimestamp, 4),
+		s.newRandomTimerTaskRow(shardID, laterTimestamp, 5),
+	}
+	_, err := s.store.InsertIntoTimerTasks(newExecutionContext(), tasks)
+	s.NoError(err)
+
+	filter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		ExclusiveMaxVisibilityTimestamp: laterTimestamp.Add(time.Millisecond),
+		PageSize:                        2,
+	}
+	deleted := 0
+	for _, batch := range []int{2, 2, 1} {
+		result, err := s.store.RangeDeleteFromTimerTasks(newExecutionContext(), filter)
+		s.NoError(err)
+		rowsAffected, err := result.RowsAffected()
+		s.NoError(err)
+		s.Equal(batch, int(rowsAffected))
+		deleted += batch
+
+		selectFilter := filter
+		selectFilter.PageSize = len(tasks)
+		rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), selectFilter)
+		s.NoError(err)
+		for index := range rows {
+			rows[index].ShardID = shardID
+		}
+		s.ElementsMatch(tasks[deleted:], rows)
+	}
+}
+
 func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {
 	shardID := rand.Int31()
 	timestamp := s.now()
