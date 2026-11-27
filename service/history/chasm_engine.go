@@ -193,8 +193,11 @@ func (e *ChasmEngine) prepareStartExecution(
 		return nil, chasm.UnspecifiedArchetypeID, err
 	}
 
-	_, err = api.GetActiveNamespace(shardContext, namespace.ID(ref.NamespaceID), ref.BusinessID)
+	nsEntry, err := api.GetNamespace(shardContext, namespace.ID(ref.NamespaceID))
 	if err != nil {
+		return nil, chasm.UnspecifiedArchetypeID, err
+	}
+	if err := validateChasmOwnership(shardContext, nsEntry, ref.BusinessID, common.EmptyVersion); err != nil {
 		return nil, chasm.UnspecifiedArchetypeID, err
 	}
 
@@ -203,6 +206,27 @@ func (e *ChasmEngine) prepareStartExecution(
 		return nil, chasm.UnspecifiedArchetypeID, err
 	}
 	return shardContext, archetypeID, nil
+}
+
+// validateChasmOwnership returns NamespaceNotActive unless the current cluster owns the execution.
+// Ownership follows the newer of the namespace and execution versions, so execution state newer than
+// the namespace cache still counts. Pass common.EmptyVersion when there is no existing execution.
+func validateChasmOwnership(
+	shardContext historyi.ShardContext,
+	nsEntry *namespace.Namespace,
+	businessID string,
+	executionVersion int64,
+) error {
+	clusterMetadata := shardContext.GetClusterMetadata()
+	activeCluster := nsEntry.ActiveClusterName(namespace.RoutingKey{ID: businessID})
+	if executionVersion > nsEntry.FailoverVersion(businessID) {
+		activeCluster = clusterMetadata.ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(), executionVersion)
+	}
+	currentCluster := clusterMetadata.GetCurrentClusterName()
+	if activeCluster != currentCluster {
+		return serviceerror.NewNamespaceNotActive(nsEntry.Name().String(), currentCluster, activeCluster)
+	}
+	return nil
 }
 
 func (e *ChasmEngine) startExecution(
@@ -345,6 +369,12 @@ func (e *ChasmEngine) updateWithStartExecution(
 	_, executionLease, err := e.getExecutionLease(ctx, executionRef)
 	switch err.(type) {
 	case nil:
+		mutableState := executionLease.GetMutableState()
+		// Loading the lease refreshes namespace metadata and exposes the execution's version.
+		if err := validateChasmOwnership(shardContext, mutableState.GetNamespaceEntry(), executionRef.BusinessID, mutableState.GetCurrentVersion()); err != nil {
+			executionLease.GetReleaseFn()(nil)
+			return chasm.EngineUpdateWithStartExecutionResult{}, err
+		}
 		if executionLease.GetMutableState().IsWorkflowExecutionRunning() {
 			return e.updateRunningForUpdateWithStart(
 				ctx,
@@ -423,7 +453,7 @@ func (e *ChasmEngine) updateRunningForUpdateWithStart(
 		}, nil
 	}
 
-	if err := runningExecutionAllowsUpdate(shardContext, executionRef, mutableState, transitionOptions.ConflictPolicy); err != nil {
+	if err := conflictPolicyAllowsUpdate(executionRef.BusinessID, currentExecutionInfoFromMutableState(mutableState), transitionOptions.ConflictPolicy); err != nil {
 		executionLease.GetReleaseFn()(nil)
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
@@ -660,8 +690,21 @@ func (e *ChasmEngine) updateComponent(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	transitionOptions chasm.TransitionOptions,
 ) (updatedRef []byte, retError error) {
-	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+	shardContext, err := e.getShardContext(ctx, ref)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := api.GetNamespace(shardContext, namespace.ID(ref.NamespaceID)); err != nil {
+		return nil, err
+	}
+	_, executionLease, err := e.getExecutionLeaseInShard(ctx, shardContext, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	mutableState := executionLease.GetMutableState()
+	if err := validateChasmOwnership(shardContext, mutableState.GetNamespaceEntry(), ref.BusinessID, mutableState.GetCurrentVersion()); err != nil {
+		executionLease.GetReleaseFn()(nil)
 		return nil, err
 	}
 
@@ -1053,9 +1096,11 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 	executionRef.RunID = primitives.NewUUID().String()
 
 	executionKey := executionRef.ExecutionKey
-	nsRegistry := shardContext.GetNamespaceRegistry()
-	nsEntry, err := nsRegistry.GetNamespaceByID(namespace.ID(executionKey.NamespaceID))
+	nsEntry, err := api.GetNamespace(shardContext, namespace.ID(executionKey.NamespaceID))
 	if err != nil {
+		return newExecutionParams{}, err
+	}
+	if err := validateChasmOwnership(shardContext, nsEntry, executionKey.BusinessID, common.EmptyVersion); err != nil {
 		return newExecutionParams{}, err
 	}
 
@@ -1186,6 +1231,15 @@ func (e *ChasmEngine) handleExecutionConflict(
 	currentRunInfo currentExecutionInfo,
 	options chasm.TransitionOptions,
 ) (chasm.StartExecutionResult, error) {
+	ref := newExecutionParams.executionRef
+	nsEntry, err := api.GetNamespace(shardContext, namespace.ID(ref.NamespaceID))
+	if err != nil {
+		return chasm.StartExecutionResult{}, err
+	}
+	// A create conflict can reveal a newer version after the candidate was prepared.
+	if err := validateChasmOwnership(shardContext, nsEntry, ref.BusinessID, currentRunInfo.LastWriteVersion); err != nil {
+		return chasm.StartExecutionResult{}, err
+	}
 	// Check if this a retried request using requestID.
 	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
 		newExecutionParams.executionRef.RunID = currentRunInfo.RunID
@@ -1199,67 +1253,16 @@ func (e *ChasmEngine) handleExecutionConflict(
 		}, nil
 	}
 
-	mutableState := newExecutionParams.mutableState
-	err := checkNamespaceActive(
-		shardContext,
-		mutableState.GetNamespaceEntry(),
-		mutableState.GetCurrentVersion(),
-		currentRunInfo.LastWriteVersion,
-	)
-	if err != nil {
-		return chasm.StartExecutionResult{}, err
-	}
-
 	switch currentRunInfo.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return e.handleConflictPolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ConflictPolicy)
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		return e.handleReusePolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ReusePolicy)
+		return e.handleReusePolicy(ctx, shardContext, nsEntry, newExecutionParams, currentRunInfo, options.ReusePolicy)
 	default:
 		return chasm.StartExecutionResult{}, serviceerror.NewInternal(
 			fmt.Sprintf("unexpected current run state when creating new execution: %v", currentRunInfo.State),
 		)
 	}
-}
-
-func checkNamespaceActive(
-	shardContext historyi.ShardContext,
-	nsEntry *namespace.Namespace,
-	localVersion int64,
-	lastWriteVersion int64,
-) error {
-	if localVersion >= lastWriteVersion {
-		return nil
-	}
-	clusterMetadata := shardContext.GetClusterMetadata()
-	return serviceerror.NewNamespaceNotActive(
-		nsEntry.Name().String(),
-		clusterMetadata.GetCurrentClusterName(),
-		clusterMetadata.ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(), lastWriteVersion),
-	)
-}
-
-func runningExecutionAllowsUpdate(
-	shardContext historyi.ShardContext,
-	executionRef chasm.ComponentRef,
-	mutableState historyi.MutableState,
-	conflictPolicy chasm.BusinessIDConflictPolicy,
-) error {
-	nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(executionRef.NamespaceID))
-	if err != nil {
-		return err
-	}
-	currentRunInfo := currentExecutionInfoFromMutableState(mutableState)
-	err = checkNamespaceActive(
-		shardContext,
-		nsEntry,
-		nsEntry.FailoverVersion(executionRef.BusinessID),
-		currentRunInfo.LastWriteVersion,
-	)
-	if err != nil {
-		return err
-	}
-	return conflictPolicyAllowsUpdate(executionRef.BusinessID, currentRunInfo, conflictPolicy)
 }
 
 // newConflictPolicyFailErr returns the error for a start that BusinessIDConflictPolicyFail rejects
@@ -1349,6 +1352,7 @@ func (e *ChasmEngine) handleConflictPolicy(
 func (e *ChasmEngine) handleReusePolicy(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	nsEntry *namespace.Namespace,
 	newExecutionParams newExecutionParams,
 	currentRunInfo currentExecutionInfo,
 	reusePolicy chasm.BusinessIDReusePolicy,
@@ -1385,6 +1389,16 @@ func (e *ChasmEngine) handleReusePolicy(
 	default:
 		return chasm.StartExecutionResult{}, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID reuse policy: %v", reusePolicy),
+		)
+	}
+
+	// Reject a new run whose version is older than the closed run's. The new run can be prepared
+	// before newer state for this execution is found.
+	if writeVersion := newExecutionParams.mutableState.GetCurrentVersion(); writeVersion < currentRunInfo.LastWriteVersion {
+		return chasm.StartExecutionResult{}, serviceerror.NewUnavailablef(
+			"execution write version %d is older than existing execution version %d",
+			writeVersion,
+			currentRunInfo.LastWriteVersion,
 		)
 	}
 
@@ -1467,7 +1481,15 @@ func (e *ChasmEngine) getExecutionLease(
 	if err != nil {
 		return nil, nil, err
 	}
+	return e.getExecutionLeaseInShard(ctx, shardContext, ref)
+}
 
+// getExecutionLeaseInShard loads state and refreshes namespace metadata under the execution lock.
+func (e *ChasmEngine) getExecutionLeaseInShard(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	ref chasm.ComponentRef,
+) (historyi.ShardContext, api.WorkflowLease, error) {
 	consistencyChecker := api.NewWorkflowConsistencyChecker(
 		shardContext,
 		e.executionCache,
