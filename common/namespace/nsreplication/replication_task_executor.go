@@ -305,7 +305,7 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		if options.Trusted {
+		if options.Membership == UseSourceMembership {
 			return true, nil
 		}
 		return h.admitter.Admit(ctx, h.currentCluster, task, options), nil

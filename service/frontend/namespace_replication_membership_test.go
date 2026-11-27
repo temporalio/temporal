@@ -147,10 +147,12 @@ func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
 
 func TestDeliveryPolicy(t *testing.T) {
 	t.Parallel()
-	trustAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) { return true, nil }
+	useSourceMembership := func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.MembershipDecision, error) {
+		return nsreplication.UseSourceMembership, nil
+	}
 	policyErr := serviceerror.NewInvalidArgument("invalid payload data")
-	rejectAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
-		return false, policyErr
+	rejectAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.MembershipDecision, error) {
+		return nsreplication.UseReceiverMembership, policyErr
 	}
 	for _, tc := range []struct {
 		name            string
@@ -160,14 +162,14 @@ func TestDeliveryPolicy(t *testing.T) {
 		excludeReceiver bool
 		wantCode        codes.Code
 		wantPolicyError bool
-		wantTrusted     bool
+		wantMembership  nsreplication.MembershipDecision
 	}{
-		{name: "delivery addressed to another cluster is rejected", policy: trustAll, target: "cellB", wantCode: codes.FailedPrecondition},
+		{name: "delivery addressed to another cluster is rejected", policy: useSourceMembership, target: "cellB", wantCode: codes.FailedPrecondition},
 		// The receiver is still in the payload's cluster list, so it disagrees with the source.
 		{name: "default policy keeps the removed-peer check", target: "cellC", removedPeer: true, wantCode: codes.InvalidArgument},
-		{name: "trusted delivery follows the source", policy: trustAll, target: "cellC", removedPeer: true, wantTrusted: true},
-		// Older sources do not address deliveries, so the receiver checks membership itself.
-		{name: "unaddressed delivery is not trusted", policy: trustAll, removedPeer: true, wantCode: codes.InvalidArgument},
+		{name: "addressed delivery follows source membership", policy: useSourceMembership, target: "cellC", removedPeer: true, wantMembership: nsreplication.UseSourceMembership},
+		{name: "unaddressed removal uses the receiver's checks", policy: useSourceMembership, removedPeer: true, wantCode: codes.InvalidArgument},
+		{name: "unaddressed delivery uses receiver admission", policy: useSourceMembership},
 		{name: "default policy admits through the admission policy", target: "cellC"},
 		{name: "policy rejects an otherwise valid removal", policy: rejectAll, target: "cellC", removedPeer: true, excludeReceiver: true, wantCode: codes.InvalidArgument, wantPolicyError: true},
 		{name: "policy rejects before the removed-peer check", policy: rejectAll, target: "cellC", removedPeer: true, wantCode: codes.InvalidArgument, wantPolicyError: true},
@@ -182,13 +184,17 @@ func TestDeliveryPolicy(t *testing.T) {
 			executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
 			if tc.wantCode == codes.OK {
 				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), nsreplication.MutationApplyOptions{
-					Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removedPeer, Trusted: tc.wantTrusted},
+					Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removedPeer, Membership: tc.wantMembership},
 				}).DoAndReturn(func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes, _ nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
 					// The executor reports the apply, so its events must say how the receiver treated the delivery.
 					taskContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
 					require.True(t, ok)
 					require.Equal(t, tc.removedPeer, taskContext.EventData.Details["removed_peer"])
-					require.Equal(t, tc.wantTrusted, taskContext.EventData.Details["trusted"])
+					wantMembershipDetail := "receiver"
+					if tc.wantMembership == nsreplication.UseSourceMembership {
+						wantMembershipDetail = "source"
+					}
+					require.Equal(t, wantMembershipDetail, taskContext.EventData.Details["membership"])
 					return nsreplication.ApplyOutcomeApplied, nil
 				})
 			}
@@ -231,8 +237,8 @@ func TestDeliveryPolicyRejectionIsRecordedAsError(t *testing.T) {
 		namespaceMutationExecutor: nsreplication.NewMockMutationTaskExecutor(ctrl),
 		metricsHandler:            mh, eventLogger: events,
 		config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)},
-		deliveryPolicy: func(context.Context, *replicationspb.NamespaceTaskAttributes) (bool, error) {
-			return false, serviceerror.NewInvalidArgument("invalid payload data")
+		deliveryPolicy: func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.MembershipDecision, error) {
+			return nsreplication.UseReceiverMembership, serviceerror.NewInvalidArgument("invalid payload data")
 		}}
 	payload, err := nsreplication.MarshalNamespaceTask(removalTestTask(false))
 	require.NoError(t, err)
@@ -249,5 +255,5 @@ func TestDeliveryPolicyRejectionIsRecordedAsError(t *testing.T) {
 	require.Equal(t, nsreplication.CHASMApplyOutcomeError, details["outcome"])
 	require.Equal(t, err.Error(), details["error"])
 	require.Equal(t, false, details["removed_peer"])
-	require.NotContains(t, details, "trusted")
+	require.NotContains(t, details, "membership")
 }

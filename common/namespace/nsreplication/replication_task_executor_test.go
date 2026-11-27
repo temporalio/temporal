@@ -780,7 +780,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
 }
 
-func (s *namespaceReplicationTaskExecutorSuite) TestExecute_TrustedTaskSkipsAdmitter() {
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_SourceMembershipSkipsAdmitter() {
 	// The admission policy would decline: this cluster is not in the snapshot.
 	task := &replicationspb.NamespaceTaskAttributes{
 		Id:                 uuid.NewString(),
@@ -802,7 +802,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_TrustedTaskSkipsAdmi
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{ID: task.GetId()}, nil)
 
 	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task, MutationApplyOptions{
-		Admission: AdmissionOptions{Trusted: true},
+		Admission: AdmissionOptions{Membership: UseSourceMembership},
 	})
 	s.Require().NoError(err)
 	s.Equal(ApplyOutcomeCreated, outcome)

@@ -2241,10 +2241,9 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 			return proto.Equal(want, request)
 		})).Return(&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
 		result, err := applier.Apply(t.Context(), PeerApplyRequest{
-			TargetCluster:      "cellB",
-			Operation:          enumsspb.NAMESPACE_OPERATION_UPDATE,
-			Detail:             detail,
-			MembershipRecorded: true,
+			TargetCluster: "cellB",
+			Operation:     enumsspb.NAMESPACE_OPERATION_UPDATE,
+			Detail:        detail,
 		})
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultApplied, result)
@@ -2256,6 +2255,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *adminservice.ApplyNamespaceMutationRequest, _ ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
 				require.True(t, request.GetShadow())
+				require.Equal(t, "cellB", request.GetTargetCluster())
 				require.Equal(t, []byte("legacy-reference"), request.GetShadowLegacyTaskPayload())
 				payload := request.GetNamespaceTaskPayload()
 				require.NotEmpty(t, payload)

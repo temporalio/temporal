@@ -164,8 +164,8 @@ type (
 		CategoryRegistry tasks.TaskCategoryRegistry
 		matchingClient   matchingservice.MatchingServiceClient
 
-		// DeliveryPolicy checks CHASM deliveries and decides whether to trust
-		// the source's membership decision for an addressed delivery.
+		// DeliveryPolicy validates CHASM deliveries and selects which membership
+		// decision governs removal and admission.
 		DeliveryPolicy nsreplication.DeliveryPolicy
 	}
 )
@@ -1117,8 +1117,9 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
 	// Reject a misrouted delivery in both modes, so shadow cannot report a match
 	// that an authoritative apply would refuse.
-	if target := request.GetTargetCluster(); target != "" && target != currentCluster {
-		err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", target, currentCluster)
+	targetCluster := request.GetTargetCluster()
+	if targetCluster != "" && targetCluster != currentCluster {
+		err := serviceerror.NewFailedPreconditionf("namespace mutation addressed to cluster %q reached cluster %q", targetCluster, currentCluster)
 		if request.GetShadow() {
 			comparisonOutcome, comparisonReason = "error", "wrong_target_cluster"
 		} else {
@@ -1132,19 +1133,18 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Transport: namespaceMutationTransport(request),
 		})
 		// The delivery policy validates the payload before any namespace membership check.
-		policyTrusts := false
+		membershipDecision := nsreplication.UseReceiverMembership
 		if adh.deliveryPolicy != nil {
-			var err error
-			if policyTrusts, err = adh.deliveryPolicy(ctx, payloadTask); err != nil {
+			decision, err := adh.deliveryPolicy(ctx, payloadTask)
+			if err != nil {
 				adh.observeAuthoritativeNamespaceMutation(request, payloadTask, nsreplication.CHASMApplyOutcomeError, err, startTime, deliveryDetails)
 				return nil, err
 			}
+			if targetCluster != "" && decision == nsreplication.UseSourceMembership {
+				membershipDecision = decision
+			}
 		}
-		// A trusted delivery follows the membership decision the source made when
-		// it created the mutation, so the receiver neither re-checks a removal nor
-		// consults its admission policy. Trust needs a delivery addressed here.
-		trusted := request.GetTargetCluster() != "" && policyTrusts
-		deliveryDetails["trusted"] = trusted
+		deliveryDetails["membership"] = membershipDecision.String()
 		ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request, payloadTask, deliveryDetails)
 		if isOperatorRepair(request) {
 			// Refuse what the payload shows. The executor also checks the stored
@@ -1158,7 +1158,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		// peer has not received its earlier addition: the config version fences
 		// that delayed addition. Otherwise it can create stale membership after
 		// the source has stopped targeting this peer. Legacy never sets this marker.
-		if request.GetRemovedPeer() && !trusted {
+		if request.GetRemovedPeer() && membershipDecision != nsreplication.UseSourceMembership {
 			clusters := payloadTask.GetReplicationConfig().GetClusters()
 			if payloadTask.GetNamespaceOperation() != enumsspb.NAMESPACE_OPERATION_UPDATE || len(clusters) == 0 ||
 				slices.ContainsFunc(clusters, func(c *replicationpb.ClusterReplicationConfig) bool {
@@ -1181,7 +1181,10 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			WithMaximumAttempts(namespaceMutationApplyMaxAttempts)
 		outcome, err := backoff.ThrottleRetryContextWithReturn(ctx, func(ctx context.Context) (nsreplication.ApplyOutcome, error) {
 			return adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask, nsreplication.MutationApplyOptions{
-				Admission:      nsreplication.AdmissionOptions{RemovedPeer: request.GetRemovedPeer(), Trusted: trusted},
+				Admission: nsreplication.AdmissionOptions{
+					RemovedPeer: request.GetRemovedPeer(),
+					Membership:  membershipDecision,
+				},
 				OperatorRepair: isOperatorRepair(request),
 			})
 		}, policy, func(err error) bool {
