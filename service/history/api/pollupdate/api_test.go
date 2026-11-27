@@ -62,7 +62,7 @@ func (mockUpdateEventStore) CanAddEvent() bool                       { return tr
 func (mockUpdateEventStore) RejectWorkflowExecutionUpdate(string, *failurepb.Failure) error {
 	return nil
 }
-func (mockUpdateEventStore) HasRequestID(string) bool { return false }
+func (mockUpdateEventStore) HasCallbackAttachment(string, string) (bool, error) { return false, nil }
 
 func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,

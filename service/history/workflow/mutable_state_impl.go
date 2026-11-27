@@ -740,15 +740,22 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	return ms.shard.GetConfig().EnableCHASMCallbacks(ms.GetNamespaceEntry().Name().String())
 }
 
+// StoresUpdateCallbacksInChasm reports whether new Workflow Update callbacks are stored in CHASM for
+// this mutable state's namespace.
+func (ms *MutableStateImpl) StoresUpdateCallbacksInChasm() bool {
+	return ms.chasmCallbacksEnabled() &&
+		ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String())
+}
+
 // attachesCallbacksToChasm reports whether the completion callbacks for updateID, or the
 // workflow's own when updateID is empty, are attached to the CHASM tree. Update callbacks that
 // are not attached to CHASM are dropped. Attaching and ValidateCallbackAddition both route on
 // this, so that validation covers exactly the callbacks that get attached.
 func (ms *MutableStateImpl) attachesCallbacksToChasm(updateID string) bool {
-	if !ms.chasmCallbacksEnabled() {
-		return false
+	if updateID != "" {
+		return ms.StoresUpdateCallbacksInChasm()
 	}
-	return updateID == "" || ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String())
+	return ms.chasmCallbacksEnabled()
 }
 
 // ChasmSignalBacklinksEnabled returns true if CHASM-based signal requestID backlink tracking is enabled.

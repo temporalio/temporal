@@ -3771,6 +3771,20 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockMutableState)(nil).StartTransaction), entry)
 }
 
+// StoresUpdateCallbacksInChasm mocks base method.
+func (m *MockMutableState) StoresUpdateCallbacksInChasm() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StoresUpdateCallbacksInChasm")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// StoresUpdateCallbacksInChasm indicates an expected call of StoresUpdateCallbacksInChasm.
+func (mr *MockMutableStateMockRecorder) StoresUpdateCallbacksInChasm() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoresUpdateCallbacksInChasm", reflect.TypeOf((*MockMutableState)(nil).StoresUpdateCallbacksInChasm))
+}
+
 // TaskQueueScheduleToStartTimeout mocks base method.
 func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*taskqueue.TaskQueue, *durationpb.Duration) {
 	m.ctrl.T.Helper()

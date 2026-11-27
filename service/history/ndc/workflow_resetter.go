@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1129,6 +1130,38 @@ func reapplyEvents(
 					return reappliedEvents, serviceerror.NewInternalf("unable to reapply WorkflowExecutionOptionsUpdated event: %d completion callbacks are already attached but the event contains additional workflow option updates", len(callbacks))
 				}
 			}
+			workflowUpdateOptions := attr.GetWorkflowUpdateOptions()
+			if len(workflowUpdateOptions) > 0 {
+				workflowUpdateOptions = make(
+					[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+					0,
+					len(attr.GetWorkflowUpdateOptions()),
+				)
+			}
+			for _, updateOptions := range attr.GetWorkflowUpdateOptions() {
+				if len(updateOptions.GetAttachedCompletionCallbacks()) > 0 && updateOptions.GetAttachedRequestId() != "" {
+					exists, err := workflow.HasUpdateCallbackAttachment(
+						ctx,
+						mutableState,
+						updateOptions.GetUpdateId(),
+						updateOptions.GetAttachedRequestId(),
+					)
+					if err != nil {
+						return reappliedEvents, err
+					}
+					if exists {
+						continue
+					}
+				}
+				workflowUpdateOptions = append(workflowUpdateOptions, updateOptions)
+			}
+			if len(attr.GetWorkflowUpdateOptions()) > 0 && len(workflowUpdateOptions) == 0 && len(event.GetLinks()) == 0 {
+				remaining := common.CloneProto(attr)
+				remaining.WorkflowUpdateOptions = nil
+				if proto.Size(remaining) == 0 {
+					continue
+				}
+			}
 			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 				attr.GetVersioningOverride(),
 				attr.GetUnsetVersioningOverride(),
@@ -1139,7 +1172,7 @@ func reapplyEvents(
 				attr.GetPriority(),
 				attr.GetTimeSkippingConfig(),
 				attr.GetTimeSkippingConfigUpdated(),
-				attr.GetWorkflowUpdateOptions(),
+				workflowUpdateOptions,
 			); err != nil {
 				return reappliedEvents, err
 			}
