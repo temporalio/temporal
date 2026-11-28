@@ -65,6 +65,13 @@ execution reaching a point, `fp.Pause(d)` to delay executions, `fp.Disable()` to
 off and release held executions, `registry.Swap(fp)` when replacing an entry that may hold blocked
 executions, and `registry.Delete(key)` to detach it from the registry.
 
+## Declarative rules
+
+A `RuleSet` keeps the failpoints of a registry in line with a list of `Rule`s, for example ones
+loaded from a configuration file. Rules name errors registered with `RegisterError` and keys
+declared with `NewKey` or with a reserved prefix. `Apply` creates, reconfigures and removes the
+failpoints that the set created without overwriting failpoints registered by other code.
+
 ## Default policy (BUGGIFY)
 
 `Registry.SetPolicy` installs a `Policy` that decides `ExecuteError` and `ExecuteSwitch` call sites
