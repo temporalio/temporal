@@ -267,6 +267,10 @@ var (
 
 	errNoTasks       = errors.New("no tasks")
 	errQueryNotFound = serviceerror.NewNotFound("query task not found, or already expired")
+	// errUserDataUpdateSuperseded is the result of a user data update that was not written because
+	// a later update for the same task queue was in the same batch. A retry is checked against the
+	// current user data version.
+	errUserDataUpdateSuperseded = serviceerror.NewUnavailable("task queue user data update was superseded by another update in the same batch, please try again")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -357,7 +361,7 @@ func NewEngine(
 		taskHookFactories:         taskHookFactories,
 		partitionScalerFactory:    partitionScalerFactory,
 	}
-	e.userDataUpdateBatcher = streambatcher.NewKeyedBatcher(
+	e.userDataUpdateBatcher = streambatcher.NewKeyedBatcherWithPerItemResults(
 		e.applyUserDataUpdateBatch,
 		userDataBatcherOptions,
 		e.timeSource,
@@ -3301,7 +3305,9 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
+// applyUserDataUpdateBatch writes a batch of user data updates in one persistence request and
+// returns one result per item, in the same order as batch.
+func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) []error {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	// TODO: should use namespace name here
 	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(namespaceId.String()))
@@ -3313,11 +3319,26 @@ func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, 
 		updatesMap[update.taskQueue] = &update.update
 	}
 
+	// If the batch has several updates for one task queue, only the last one is in the map.
+	// The others are not written.
+	results := make([]error, len(batch))
+	for i, update := range batch {
+		if updatesMap[update.taskQueue] != &update.update {
+			results[i] = errUserDataUpdateSuperseded
+		}
+	}
+
 	// now apply the batch of updates
-	return e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId.String(),
 		Updates:     updatesMap,
 	})
+	for i := range results {
+		if results[i] == nil {
+			results[i] = err
+		}
+	}
+	return results
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
