@@ -23,6 +23,8 @@ const VersionCheckInterval = 24 * time.Hour
 type VersionChecker struct {
 	config                 *Config
 	shutdownChan           chan struct{}
+	ctx                    context.Context
+	cancelFunc             context.CancelFunc
 	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
@@ -36,9 +38,14 @@ func NewVersionChecker(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {
+	ctx, cancel := context.WithCancel(headers.SetCallerInfo(
+		context.Background(), headers.SystemBackgroundHighCallerInfo,
+	))
 	return &VersionChecker{
 		config:                 config,
 		shutdownChan:           make(chan struct{}),
+		ctx:                    ctx,
+		cancelFunc:             cancel,
 		metricsHandler:         metricsHandler.WithTags(metrics.OperationTag(metrics.VersionCheckScope)),
 		clusterMetadataManager: clusterMetadataManager,
 		sdkVersionRecorder:     sdkVersionRecorder,
@@ -48,23 +55,16 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			// TODO: specify a timeout for the context
-			ctx := headers.SetCallerInfo(
-				context.TODO(),
-				headers.SystemBackgroundHighCallerInfo,
-			)
-
-			go vc.versionCheckLoop(ctx)
+			go vc.versionCheckLoop(vc.ctx)
 		})
 	}
 }
 
 func (vc *VersionChecker) Stop() {
-	if vc.config.EnableServerVersionCheck() {
-		vc.stopOnce.Do(func() {
-			close(vc.shutdownChan)
-		})
-	}
+	vc.stopOnce.Do(func() {
+		vc.cancelFunc()
+		close(vc.shutdownChan)
+	})
 }
 
 func (vc *VersionChecker) versionCheckLoop(
@@ -72,6 +72,9 @@ func (vc *VersionChecker) versionCheckLoop(
 ) {
 	timer := time.NewTicker(VersionCheckInterval)
 	defer timer.Stop()
+	if ctx.Err() != nil {
+		return
+	}
 	vc.performVersionCheck(ctx)
 	for {
 		select {
@@ -105,7 +108,7 @@ func (vc *VersionChecker) performVersionCheck(
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
-	resp, err := vc.getVersionInfo(req)
+	resp, err := vc.getVersionInfo(ctx, req)
 	if err != nil {
 		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
@@ -146,8 +149,8 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 	}, nil
 }
 
-func (vc *VersionChecker) getVersionInfo(req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
-	return versioninfo.NewCaller().Call(req)
+func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
+	return versioninfo.NewCaller().CallWithContext(ctx, req)
 }
 
 func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
