@@ -47,6 +47,7 @@ type activityConfig struct {
 	BackoffCoefficient     float64       // RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval)
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
+	ZeroNextRetryDelay     bool          // send NextRetryDelay with RespondFailed even when it is zero
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
 
 	StartToClose     time.Duration // 0 => activityLongDuration, so it does not fire
@@ -283,15 +284,15 @@ var activityLargeFailureMessage = strings.Repeat("x", 2*activityFailureSizeLimit
 
 // respondFailedFailure is the Failure a RespondFailed event carries, or nil when the event omits it
 // (modeling a worker that calls RespondActivityTaskFailed without a Failure).
-func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurepb.Failure {
+func respondFailedFailure(e model.Event, cfg activityConfig) *failurepb.Failure {
 	if e.Failure == nil {
 		return nil
 	}
 	switch e.Failure.Type {
 	case model.ApplicationFailureType:
 		info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: e.Failure.NonRetryable}
-		if nextRetryDelay > 0 {
-			info.NextRetryDelay = durationpb.New(nextRetryDelay)
+		if cfg.NextRetryDelay > 0 || cfg.ZeroNextRetryDelay {
+			info.NextRetryDelay = durationpb.New(cfg.NextRetryDelay)
 		}
 		message := "test failure"
 		if e.Failure.LargeMessage {
