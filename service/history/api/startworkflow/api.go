@@ -909,6 +909,70 @@ func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *mutableS
 	return events, nil
 }
 
+// ApplyOnConflictOptions applies conflict options to the running workflow held by workflowLease.
+func ApplyOnConflictOptions(
+	ctx context.Context,
+	workflowLease api.WorkflowLease,
+	request *workflowservice.StartWorkflowExecutionRequest,
+) (*commonpb.Link, metrics.ReasonString, error) {
+	workflowKey := workflowLease.GetContext().GetWorkflowKey()
+	responseLink := api.GenerateStartedEventRefLink(request.GetNamespace(), request.GetWorkflowId(), workflowKey.RunID)
+	onConflictOptions := request.GetOnConflictOptions()
+	if onConflictOptions == nil {
+		return responseLink, "", nil
+	}
+
+	requestID := ""
+	if onConflictOptions.AttachRequestId {
+		requestID = request.GetRequestId()
+		responseLink = api.GenerateRequestIDRefLink(
+			request.GetNamespace(),
+			request.GetWorkflowId(),
+			workflowKey.RunID,
+			requestID,
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		)
+	}
+	var completionCallbacks []*commonpb.Callback
+	if onConflictOptions.AttachCompletionCallbacks {
+		completionCallbacks = request.GetCompletionCallbacks()
+	}
+	var links []*commonpb.Link
+	if onConflictOptions.AttachLinks {
+		links = request.GetLinks()
+	}
+
+	var nexusContextMatch metrics.ReasonString
+	if len(completionCallbacks) > 0 {
+		mutableState := workflowLease.GetMutableState()
+		existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
+		incoming := request.GetPropagatedNexusSerializationContext()
+		nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+
+		if err := validateAttachedCallbacks(ctx, workflowLease, requestID, completionCallbacks); err != nil {
+			return nil, "", err
+		}
+	}
+
+	_, err := workflowLease.GetMutableState().AddWorkflowExecutionOptionsUpdatedEvent(
+		nil,
+		false,
+		requestID,
+		completionCallbacks,
+		links,
+		"",    // identity
+		nil,   // priority
+		nil,   // timeSkippingConfig
+		false, // timeSkippingConfigUpdated
+		nil,   // workflowUpdateOptions
+	)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return responseLink, nexusContextMatch, nil
+}
+
 func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -920,22 +984,8 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	responseLink := s.generateStartedEventRefLink(currentWorkflowConditionFailed.RunID)
 
 	var err error
-	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
 	var nexusContextMatch metrics.ReasonString
-	if onConflictOptions != nil {
-		requestID := ""
-		if onConflictOptions.AttachRequestId {
-			requestID = s.request.StartRequest.GetRequestId()
-			responseLink = s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID)
-		}
-		var completionCallbacks []*commonpb.Callback
-		if onConflictOptions.AttachCompletionCallbacks {
-			completionCallbacks = s.request.StartRequest.GetCompletionCallbacks()
-		}
-		var links []*commonpb.Link
-		if onConflictOptions.AttachLinks {
-			links = s.request.StartRequest.GetLinks()
-		}
+	if s.request.StartRequest.GetOnConflictOptions() != nil {
 		err = api.GetAndUpdateWorkflowWithNew(
 			ctx,
 			nil,
@@ -946,30 +996,9 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					return nil, consts.ErrWorkflowCompleted
 				}
 
-				if onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
-					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
-					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
-					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
-
-					err := validateAttachedCallbacks(ctx, workflowLease, requestID, completionCallbacks)
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
-					nil,
-					false,
-					requestID,
-					completionCallbacks,
-					links,
-					"",    // identity
-					nil,   // priority
-					nil,   // timeSkippingConfig
-					false, // timeSkippingConfigUpdated
-					nil,   // workflowUpdateOptions
-				)
-				return api.UpdateWorkflowWithoutWorkflowTask, err
+				var applyErr error
+				responseLink, nexusContextMatch, applyErr = ApplyOnConflictOptions(ctx, workflowLease, s.request.StartRequest)
+				return api.UpdateWorkflowWithoutWorkflowTask, applyErr
 			},
 			nil, // no new workflow
 			s.shardContext,

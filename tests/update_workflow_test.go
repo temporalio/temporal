@@ -16,6 +16,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -5650,6 +5651,166 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 				s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
 			})
 		}
+	})
+}
+
+func (s *UpdateWithStartSuite) TestWorkflowIsRunning_OnConflictOptions() {
+	s.Run("attaches options and dedupes the start request", func(s *UpdateWithStartSuite) {
+		env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(
+			chasmcb.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		))
+		tv := env.Tv()
+
+		initialStartReq := s.updateWithStartReq(env, tv)
+		initialStartReq.RequestId = tv.WithRequestID("initial-request-id").RequestID()
+		initialStartResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), initialStartReq)
+		s.NoError(err)
+		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+		s.NoError(err)
+
+		callbacks := []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
+		}}
+		links := []*commonpb.Link{{
+			Variant: &commonpb.Link_Workflow_{Workflow: &commonpb.Link_Workflow{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: tv.WorkflowID(),
+				RunId:      initialStartResp.RunId,
+				Reason:     "attached by update-with-start",
+			}},
+		}}
+		startReq := s.updateWithStartReq(env, tv)
+		startReq.RequestId = tv.RequestID()
+		startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+		startReq.OnConflictOptions = &workflowpb.OnConflictOptions{
+			AttachRequestId:           true,
+			AttachCompletionCallbacks: true,
+			AttachLinks:               true,
+		}
+		startReq.CompletionCallbacks = callbacks
+		startReq.Links = links
+
+		updateReq := updateWorkflowRequest(env, tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		uwsCh := s.sendUpdateWithStart(env, startReq, updateReq)
+		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: env.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+				}, nil
+			})
+		s.NoError(err)
+
+		uwsRes := <-uwsCh
+		s.NoError(uwsRes.err)
+		startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+		requireNotStartedButRunning(s.T(), startResp)
+		s.Equal(initialStartResp.RunId, startResp.RunId)
+		protorequire.ProtoEqual(s.T(), &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: tv.WorkflowID(),
+				RunId:      initialStartResp.RunId,
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: startReq.RequestId,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				},
+			}},
+		}, startResp.GetLink())
+
+		history := env.RequireHistory(s, tv.WorkflowExecution())
+		optionsEvent := s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
+		protorequire.ProtoEqual(s.T(), &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			AttachedRequestId:           startReq.RequestId,
+			AttachedCompletionCallbacks: callbacks,
+		}, optionsEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes())
+		protorequire.ProtoSliceEqual(s.T(), links, optionsEvent.GetLinks())
+
+		uwsCompletedRetry := <-s.sendUpdateWithStart(env, startReq, updateReq)
+		s.NoError(uwsCompletedRetry.err)
+		completedRetryStartResp := uwsCompletedRetry.response.Responses[0].GetStartWorkflow()
+		s.Equal(initialStartResp.RunId, completedRetryStartResp.RunId)
+		protorequire.ProtoEqual(s.T(), startResp.GetLink(), completedRetryStartResp.GetLink())
+		protorequire.ProtoEqual(s.T(), uwsRes.response.Responses[1].GetUpdateWorkflow(), uwsCompletedRetry.response.Responses[1].GetUpdateWorkflow())
+
+		tv2 := tv.WithUpdateIDNumber(2)
+		updateReq2 := updateWorkflowRequest(env, tv2,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		uwsCh2 := s.sendUpdateWithStart(env, startReq, updateReq2)
+		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv2,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: env.UpdateAcceptCompleteMessages(tv2, task.Messages[0]),
+				}, nil
+			})
+		s.NoError(err)
+		uwsRes2 := <-uwsCh2
+		s.NoError(uwsRes2.err)
+		retryStartResp := uwsRes2.response.Responses[0].GetStartWorkflow()
+		s.Equal(initialStartResp.RunId, retryStartResp.RunId)
+		protorequire.ProtoEqual(s.T(), startResp.GetLink(), retryStartResp.GetLink())
+
+		history = env.RequireHistory(s, tv.WorkflowExecution())
+		optionsEventCount := 0
+		for _, event := range history {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+				optionsEventCount++
+			}
+		}
+		s.Equal(1, optionsEventCount)
+	})
+
+	s.Run("callback validation failure aborts the update", func(s *UpdateWithStartSuite) {
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(
+				chasmcb.AllowedAddresses,
+				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+			),
+			testcore.WithDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 1),
+			testcore.WithDynamicConfig(chasmcb.MaxPerExecution, 1),
+		)
+		tv := env.Tv()
+		callback := &commonpb.Callback{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
+		}
+
+		initialStartReq := s.updateWithStartReq(env, tv)
+		initialStartReq.CompletionCallbacks = []*commonpb.Callback{callback}
+		initialStartResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), initialStartReq)
+		s.NoError(err)
+		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+		s.NoError(err)
+
+		startReq := s.updateWithStartReq(env, tv)
+		startReq.RequestId = tv.RequestID()
+		startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+		startReq.OnConflictOptions = &workflowpb.OnConflictOptions{
+			AttachRequestId:           true,
+			AttachCompletionCallbacks: true,
+		}
+		startReq.CompletionCallbacks = []*commonpb.Callback{callback}
+		updateReq := updateWorkflowRequest(env, tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+
+		workflowExecution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: initialStartResp.RunId}
+		historyBefore := env.RequireHistory(s, workflowExecution)
+		uwsRes := <-s.sendUpdateWithStart(env, startReq, updateReq)
+		s.Error(uwsRes.err)
+		var multiOpErr *serviceerror.MultiOperationExecution
+		s.ErrorAs(uwsRes.err, &multiOpErr)
+		operationErrors := multiOpErr.OperationErrors()
+		s.Len(operationErrors, 2)
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(operationErrors[0], &failedPrecondition)
+		s.Equal("Operation was aborted.", operationErrors[1].Error())
+
+		history := env.RequireHistory(s, workflowExecution)
+		protorequire.ProtoSliceEqual(s.T(), historyBefore, history)
+		s.RequireNoHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
+		s.RequireNoHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 	})
 }
 
