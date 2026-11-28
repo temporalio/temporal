@@ -44,6 +44,7 @@ type (
 		mockExecutionManager *persistence.MockExecutionManager
 
 		shardID     int32
+		rangeID     int64
 		shardOwner  string
 		config      *configs.Config
 		requestChan chan *replicationTaskRequest
@@ -71,6 +72,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.requestChan = make(chan *replicationTaskRequest, 10)
 
 	s.shardID = rand.Int31()
+	s.rangeID = rand.Int63()
 	s.shardOwner = "test-shard-owner"
 	s.mockShard = historyi.NewMockShardContext(s.controller)
 	s.mockEngine = historyi.NewMockEngine(s.controller)
@@ -94,6 +96,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.mockShard.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()
 	s.mockShard.EXPECT().GetShardID().Return(s.shardID).AnyTimes()
+	s.mockShard.EXPECT().GetRangeID().Return(s.rangeID).AnyTimes()
 	s.mockShard.EXPECT().GetOwner().Return(s.shardOwner).AnyTimes()
 	s.taskProcessorManager = NewTaskProcessorManager(
 		s.config,
@@ -179,6 +182,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 		gomock.Any(),
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.shardID,
+			RangeID:             s.rangeID,
 			TaskCategory:        tasks.CategoryReplication,
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
 		},
