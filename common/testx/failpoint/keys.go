@@ -5,8 +5,8 @@ import (
 	"sync"
 )
 
-// Key identifies a failpoint by name. The type parameter types the key, so call sites
-// and tests agree on the type of a failpoint at compile time. A key applies to all
+// Key identifies a failpoint by name. The type parameter is the type of the value that the
+// failpoint returns, so call sites and tests agree on it at compile time. A key applies to all
 // scopes unless it is scoped to one with ForScope. A scope is a string that the code under test
 // chooses, such as the ID of a tenant, so that a failpoint only fires for the requests of that
 // scope.
@@ -46,7 +46,7 @@ var (
 	declaredKeys = map[string]struct{}{}
 )
 
-// NewKey returns the key for the named failpoint, of type T. Each name must be
+// NewKey returns the key for the named failpoint, whose value has type T. Each name must be
 // non-empty and can only be declared once; NewKey panics on an empty or duplicate name so that
 // zero-value keys are always invalid and two failpoints cannot share a name by accident.
 func NewKey[T any](name string) Key[T] {

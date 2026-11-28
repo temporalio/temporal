@@ -15,19 +15,37 @@ func TestFailpointSuite(t *testing.T) {
 	parallelsuite.Run(t, &failpointSuite{})
 }
 
+func (s *failpointSuite) TestReturn() {
+	fp := failpoint.New[int](intKey)
+	fp.Return(43)
+	s.Equal(failpoint.State{Key: intKey, Action: failpoint.ActionReturn}, fp.State())
+	for range 5 {
+		got, set := fp.Execute()
+		s.True(set)
+		s.Equal(43, got)
+	}
+}
+
 func (s *failpointSuite) TestOn() {
 	fp := failpoint.New[int](intKey)
-	s.Equal(failpoint.State{Key: intKey, Action: failpoint.ActionNone}, fp.State())
-
+	fp.Return(42)
 	fp.On()
 	s.Equal(failpoint.State{Key: intKey, Action: failpoint.ActionOn}, fp.State())
+
+	got, set := fp.Execute()
+	s.True(set)
+	s.Zero(got, "On does not return the value of an earlier Return")
 }
 
 func (s *failpointSuite) TestDisable() {
 	fp := failpoint.New[int](intKey)
-	fp.On()
+	fp.Return(42)
 	fp.Disable()
 	s.Equal(failpoint.State{Key: intKey, Action: failpoint.ActionNone}, fp.State())
+
+	got, set := fp.Execute()
+	s.False(set)
+	s.Zero(got)
 }
 
 func (s *failpointSuite) TestTotalFires() {
@@ -50,6 +68,7 @@ func (s *failpointSuite) TestTotalFires() {
 
 func (s *failpointSuite) TestActionString() {
 	s.Equal("None", failpoint.ActionNone.String())
+	s.Equal("Return", failpoint.ActionReturn.String())
 	s.Equal("On", failpoint.ActionOn.String())
 	s.Equal("Action(99)", failpoint.Action(99).String())
 }

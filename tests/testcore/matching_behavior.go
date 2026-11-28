@@ -73,11 +73,11 @@ func (b MatchingBehavior) InjectHooks(env hookInjector) {
 	} else {
 		env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
 	}
+	// Without ForceAsync the failpoint doesn't fire, but its registration keeps BUGGIFY from
+	// skipping the sync match.
+	fp := InjectFailpointIn(env.T(), env.GetTestCluster(), matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String()))
 	if b.ForceAsync {
-		// The tests of the matching behaviors don't all dispatch a task that history adds, such as the
-		// Nexus ones, so the failpoint may not fire.
-		InjectFailpointIn(env.T(), env.GetTestCluster(),
-			matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String()), MayNotFire()).On()
+		fp.On()
 	}
 }
 
