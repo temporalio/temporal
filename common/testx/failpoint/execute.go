@@ -21,7 +21,8 @@ func Execute[T any](registry *Registry, key Key[T]) (value T, set bool) {
 			// configured for this call site.
 			return zero, false
 		}
-		return typed.Execute()
+		value, set, _ = typed.execute(nil)
+		return value, set
 	}
 	return executePolicyError(policy, key)
 }
@@ -43,6 +44,76 @@ func executePolicyError[T any](policy Policy, key Key[T]) (value T, set bool) {
 	// T is error, as checked above.
 	value, set = any(err).(T)
 	return value, set
+}
+
+// Result is the outcome of ExecuteInOrder.
+type Result[T any] struct {
+	// Value is the value that the failpoint set. It is the zero value unless Set.
+	Value T
+	// Set reports whether the failpoint set Value.
+	Set bool
+	// Fired reports whether a failpoint fired with any action, including one that paused, blocked
+	// and was released, or called back. A failpoint without an action or skipped by its Trigger
+	// did not fire.
+	Fired bool
+}
+
+// ExecuteOptions configures ExecuteInOrder.
+type ExecuteOptions struct {
+	// Arg is passed to the callback of a failpoint configured with CallWithArg, for example the
+	// request that the call site is about to handle.
+	Arg any
+	// PolicyKey overrides the key name passed to the Registry's Policy when no failpoint is
+	// registered for any of keys. When empty (and ExplicitOnly is false), Policy decides for
+	// keys[0].Name().
+	PolicyKey string
+	// PolicyScope overrides the scope passed to the Registry's Policy. When empty and PolicyKey is
+	// empty, Policy decides for keys[0].Scope().
+	PolicyScope string
+	// ExplicitOnly skips the Registry's Policy even when no failpoint is registered.
+	ExplicitOnly bool
+}
+
+// ExecuteInOrder executes the error failpoints registered for keys in registry, in order, passing
+// opts.Arg to CallWithArg callbacks, and returns the result of the first failpoint that fired with
+// any action. Consecutive keys with the same name form a scope-precedence group: the first
+// registered scope in the group wins (even if disabled), falling back to the unscoped key. If no
+// failpoint is registered for any of keys and !opts.ExplicitOnly, the registry's Policy decides for
+// (opts.PolicyKey, opts.PolicyScope) (defaulting to keys[0]). The failpoints and policy are chosen
+// from one snapshot of the registry and run outside the registry lock.
+func ExecuteInOrder(registry *Registry, opts ExecuteOptions, keys ...Key[error]) Result[error] {
+	if registry == nil || !registry.MayFire() {
+		return Result[error]{}
+	}
+	registered, policy := registry.snapshot(keys)
+	for _, e := range registered {
+		fp, ok := e.(*Failpoint[error])
+		if !ok {
+			// A failpoint of another type, registered under the name of the key, can't have been
+			// configured for this call site.
+			continue
+		}
+		if value, set, fired := fp.execute(opts.Arg); fired {
+			return Result[error]{Value: value, Set: set, Fired: true}
+		}
+	}
+	if len(registered) > 0 || policy == nil || opts.ExplicitOnly {
+		return Result[error]{}
+	}
+	policyName, policyScope := opts.PolicyKey, opts.PolicyScope
+	if policyName == "" {
+		if len(keys) == 0 {
+			return Result[error]{}
+		}
+		policyName = keys[0].Name()
+		if policyScope == "" {
+			policyScope = keys[0].Scope()
+		}
+	}
+	if err := policy.Error(policyName, policyScope); err != nil {
+		return Result[error]{Value: err, Set: true, Fired: true}
+	}
+	return Result[error]{}
 }
 
 // ExecuteError executes an error failpoint for key in registry and returns its error.

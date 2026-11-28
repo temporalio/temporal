@@ -121,6 +121,39 @@ func (r *Registry) lookupLocked(key keyID) (entry, bool) {
 	return nil, false
 }
 
+// snapshot returns the registered failpoints matching keys and the installed Policy from one
+// snapshot of the registry. Consecutive keys with the same name form a scope-precedence group: the
+// first key in the group whose exact (name, scope) is registered wins (even if disabled), falling
+// back to the unscoped key if none of the group's scopes is registered.
+func (r *Registry) snapshot(keys []Key[error]) (matched []entry, policy Policy) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := 0; i < len(keys); {
+		name := keys[i].name
+		j := i + 1
+		for j < len(keys) && keys[j].name == name {
+			j++
+		}
+		if fp, ok := r.lookupGroupLocked(keys[i:j]); ok {
+			matched = append(matched, fp)
+		}
+		i = j
+	}
+	return matched, r.policy
+}
+
+func (r *Registry) lookupGroupLocked(group []Key[error]) (entry, bool) {
+	for _, k := range group {
+		if fp := r.failpoints[k.id()]; fp != nil {
+			return fp, true
+		}
+	}
+	if fp := r.failpoints[keyID{name: group[0].name}]; fp != nil {
+		return fp, true
+	}
+	return nil, false
+}
+
 // Set registers fp for its key, replacing the failpoint registered for the key, if any. It panics
 // if fp is nil or its key has an empty name. Callers replacing a failpoint that may hold blocked
 // executions should use Swap and call Disable on the displaced entry so those executions are not
