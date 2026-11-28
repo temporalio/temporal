@@ -11,6 +11,9 @@ type Failpoint[T any] struct {
 
 	key    Key[T]
 	action Action
+
+	// totalFires counts every fire of the failpoint, so tests can check that it was reached.
+	totalFires int64
 }
 
 // New creates a Failpoint with the given key.
@@ -43,12 +46,24 @@ func (f *Failpoint[T]) On() {
 	f.action = ActionOn
 }
 
-// isOn reports whether the failpoint is configured with On.
+// isOn reports whether the failpoint is configured with On, and counts the fire if it is.
 func (f *Failpoint[T]) isOn() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.action == ActionOn
+	if f.action != ActionOn {
+		return false
+	}
+	f.totalFires++
+	return true
+}
+
+// TotalFires returns how often the failpoint fired in its lifetime.
+func (f *Failpoint[T]) TotalFires() int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.totalFires
 }
 
 func (f *Failpoint[T]) id() keyID {

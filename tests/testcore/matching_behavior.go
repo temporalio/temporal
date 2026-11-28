@@ -74,7 +74,10 @@ func (b MatchingBehavior) InjectHooks(env hookInjector) {
 		env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
 	}
 	if b.ForceAsync {
-		InjectFailpointIn(env.T(), env.GetTestCluster(), matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String())).On()
+		// The tests of the matching behaviors don't all dispatch a task that history adds, such as the
+		// Nexus ones, so the failpoint may not fire.
+		InjectFailpointIn(env.T(), env.GetTestCluster(),
+			matching.SkipSyncMatchKey.ForScope(env.NamespaceID().String()), MayNotFire()).On()
 	}
 }
 

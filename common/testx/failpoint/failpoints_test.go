@@ -30,6 +30,24 @@ func (s *failpointSuite) TestDisable() {
 	s.Equal(failpoint.State{Key: intKey, Action: failpoint.ActionNone}, fp.State())
 }
 
+func (s *failpointSuite) TestTotalFires() {
+	registry := failpoint.NewRegistry()
+	fp := failpoint.New[int](intKey)
+	registry.Set(fp)
+
+	s.False(intKey.Trip(registry))
+	s.Zero(fp.TotalFires(), "a failpoint that is off doesn't fire")
+
+	fp.On()
+	s.True(intKey.Trip(registry))
+	s.True(intKey.Trip(registry))
+	s.EqualValues(2, fp.TotalFires())
+
+	fp.Disable()
+	s.False(intKey.Trip(registry))
+	s.EqualValues(2, fp.TotalFires(), "disabling keeps the count")
+}
+
 func (s *failpointSuite) TestActionString() {
 	s.Equal("None", failpoint.ActionNone.String())
 	s.Equal("On", failpoint.ActionOn.String())
