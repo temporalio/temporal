@@ -166,6 +166,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
+			CompactQueueState:                   f.Config.EnableQueueStateCompaction,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

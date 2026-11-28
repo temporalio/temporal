@@ -208,6 +208,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
+			CompactQueueState:                   f.Config.EnableQueueStateCompaction,
 		},
 		f.HostReaderRateLimiter,
 		logger,

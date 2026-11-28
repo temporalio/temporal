@@ -113,6 +113,7 @@ func (a *adminClientPeerApplier) Apply(
 		ComponentRunId:          request.ComponentRunID,
 		AttemptCount:            request.AttemptCount,
 		RemovedPeer:             request.RemovedPeer,
+		TargetCluster:           request.TargetCluster,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err

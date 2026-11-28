@@ -1,0 +1,259 @@
+package frontend
+
+import (
+	"context"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/wideevents"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc/codes"
+)
+
+// dataMembershipResolver models a deployment whose replica membership lives in
+// namespace data rather than ReplicationConfig.Clusters.
+type dataMembershipResolver struct {
+	namespace.ReplicationResolver
+	members []string
+}
+
+func (r dataMembershipResolver) ClusterNames(string) []string { return slices.Clone(r.members) }
+
+func dataMembershipFactory() namespace.ReplicationResolverFactory {
+	defaultFactory := namespace.NewDefaultReplicationResolverFactory()
+	return func(detail *persistencespb.NamespaceDetail) namespace.ReplicationResolver {
+		resolver := defaultFactory(detail)
+		if members, ok := detail.GetInfo().GetData()["members"]; ok {
+			return dataMembershipResolver{ReplicationResolver: resolver, members: strings.Split(members, ",")}
+		}
+		return resolver
+	}
+}
+
+func TestNamespaceReplicationUsesResolverMembership(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		mode           string
+		factory        namespace.ReplicationResolverFactory
+		newMembers     string
+		wantPeers      []string
+		wantRemoved    []string
+		wantPublish    bool
+		wantLocalWrite bool
+	}{
+		// ReplicationConfig.Clusters is only cell-a, so stock OSS never replicates.
+		{name: "chasm/default factory", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM,
+			factory: namespace.NewDefaultReplicationResolverFactory(), wantLocalWrite: true},
+		{name: "chasm/membership factory", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM,
+			factory: dataMembershipFactory(), wantPeers: []string{"cell-b", "cell-c"}},
+		{name: "chasm/membership factory, removed member stays a peer", mode: dynamicconfig.NamespaceReplicationTransportModeCHASM,
+			factory: dataMembershipFactory(), newMembers: "cell-a,cell-c", wantPeers: []string{"cell-b", "cell-c"}, wantRemoved: []string{"cell-b"}},
+		{name: "legacy/default factory", mode: dynamicconfig.NamespaceReplicationTransportModeLegacy,
+			factory: namespace.NewDefaultReplicationResolverFactory(), wantLocalWrite: true},
+		// The legacy path decides from the same membership.
+		{name: "legacy/membership factory", mode: dynamicconfig.NamespaceReplicationTransportModeLegacy,
+			factory: dataMembershipFactory(), wantLocalWrite: true, wantPublish: true},
+		// Shadow validates the membership peer list while the legacy path replicates.
+		{name: "shadow/membership factory", mode: dynamicconfig.NamespaceReplicationTransportModeShadow,
+			factory: dataMembershipFactory(), wantLocalWrite: true, wantPublish: true, wantPeers: []string{"cell-b", "cell-c"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			metadata := persistence.NewMockMetadataManager(ctrl)
+			clusters := cluster.NewMockMetadata(ctrl)
+			queue := persistence.NewMockNamespaceReplicationQueue(ctrl)
+			logger := log.NewNoopLogger()
+			dc := dynamicconfig.NewNoopCollection()
+			cfg := NewConfig(dc, 32)
+			cfg.NamespaceReplicationTransportMode = dynamicconfig.GetStringPropertyFn(tc.mode)
+			client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
+			handler := newNamespaceHandler(logger, wideevents.NoopLogger(), metadata, nil, clusters,
+				nsreplication.NewReplicator(queue, logger, nil, dynamicconfig.GetBoolPropertyFn(false), "cell-a"),
+				archiver.NewArchivalMetadata(dc, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
+				nil, clock.NewEventTimeSource(), cfg, client, metrics.NoopMetricsHandler, tc.factory)
+			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+			clusters.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+			clusters.EXPECT().GetCurrentClusterName().Return("cell-a").AnyTimes()
+			clusters.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+				"cell-a": {Enabled: true}, "cell-b": {Enabled: true}, "cell-c": {Enabled: true},
+			}).AnyTimes()
+			metadata.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+			metadata.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+				Namespace: &persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "ns", State: enumspb.NAMESPACE_STATE_REGISTERED,
+						Data: map[string]string{"members": "cell-a,cell-b,cell-c"}},
+					Config:            &persistencespb.NamespaceConfig{BadBinaries: &namespacepb.BadBinaries{}},
+					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{ActiveClusterName: "cell-a", Clusters: []string{"cell-a"}},
+					FailoverVersion:   1,
+				}, IsGlobalNamespace: true,
+			}, nil)
+			if tc.wantLocalWrite {
+				metadata.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
+			}
+			if tc.wantPublish {
+				queue.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, task *replicationspb.ReplicationTask) error {
+					require.Equal(t, "updated", task.GetNamespaceTaskAttributes().GetInfo().GetDescription())
+					return nil
+				})
+			}
+			updateInfo := &namespacepb.UpdateNamespaceInfo{Description: "updated"}
+			if tc.newMembers != "" {
+				updateInfo.Data = map[string]string{"members": tc.newMembers}
+			}
+			_, err := handler.UpdateNamespace(t.Context(), &workflowservice.UpdateNamespaceRequest{Namespace: "ns", UpdateInfo: updateInfo})
+			require.NoError(t, err)
+
+			// Shadow triggers asynchronously, so wait briefly either way.
+			select {
+			case request := <-client.requests:
+				require.NotNil(t, tc.wantPeers, "unexpected CHASM trigger")
+				require.Equal(t, tc.mode == dynamicconfig.NamespaceReplicationTransportModeShadow, request.GetMutation().GetShadow())
+				peers := request.GetMutation().GetPeerCells()
+				slices.Sort(peers)
+				require.Equal(t, tc.wantPeers, peers)
+				require.NotNil(t, request.GetMutation().GetRemovedPeers(), "the source always records the removed set")
+				require.Equal(t, tc.wantRemoved, request.GetMutation().GetRemovedPeers().GetCells())
+			case <-time.After(2 * time.Second):
+				require.Nil(t, tc.wantPeers, "expected a CHASM trigger")
+			}
+		})
+	}
+}
+
+func TestDeliveryPolicy(t *testing.T) {
+	t.Parallel()
+	useSourceMembership := func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.MembershipDecision, error) {
+		return nsreplication.UseSourceMembership, nil
+	}
+	policyErr := serviceerror.NewInvalidArgument("invalid payload data")
+	rejectAll := func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.MembershipDecision, error) {
+		return nsreplication.UseReceiverMembership, policyErr
+	}
+	for _, tc := range []struct {
+		name            string
+		policy          nsreplication.DeliveryPolicy
+		target          string
+		removedPeer     bool
+		excludeReceiver bool
+		wantCode        codes.Code
+		wantPolicyError bool
+		wantMembership  nsreplication.MembershipDecision
+	}{
+		{name: "delivery addressed to another cluster is rejected", policy: useSourceMembership, target: "cellB", wantCode: codes.FailedPrecondition},
+		// The receiver is still in the payload's cluster list, so it disagrees with the source.
+		{name: "default policy keeps the removed-peer check", target: "cellC", removedPeer: true, wantCode: codes.InvalidArgument},
+		{name: "addressed delivery follows source membership", policy: useSourceMembership, target: "cellC", removedPeer: true, wantMembership: nsreplication.UseSourceMembership},
+		{name: "unaddressed removal uses the receiver's checks", policy: useSourceMembership, removedPeer: true, wantCode: codes.InvalidArgument},
+		{name: "unaddressed delivery uses receiver admission", policy: useSourceMembership},
+		{name: "default policy admits through the admission policy", target: "cellC"},
+		{name: "policy rejects an otherwise valid removal", policy: rejectAll, target: "cellC", removedPeer: true, excludeReceiver: true, wantCode: codes.InvalidArgument, wantPolicyError: true},
+		{name: "policy rejects before the removed-peer check", policy: rejectAll, target: "cellC", removedPeer: true, wantCode: codes.InvalidArgument, wantPolicyError: true},
+		{name: "policy can reject an unaddressed delivery", policy: rejectAll, wantCode: codes.InvalidArgument, wantPolicyError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			clusters := cluster.NewMockMetadata(ctrl)
+			clusters.EXPECT().GetCurrentClusterName().Return("cellC").AnyTimes()
+			clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+			executor := nsreplication.NewMockMutationTaskExecutor(ctrl)
+			if tc.wantCode == codes.OK {
+				executor.EXPECT().ExecuteWithOutcome(gomock.Any(), gomock.Any(), nsreplication.MutationApplyOptions{
+					Admission: nsreplication.AdmissionOptions{RemovedPeer: tc.removedPeer, Membership: tc.wantMembership},
+				}).DoAndReturn(func(ctx context.Context, _ *replicationspb.NamespaceTaskAttributes, _ nsreplication.MutationApplyOptions) (nsreplication.ApplyOutcome, error) {
+					// The executor reports the apply, so its events must say how the receiver treated the delivery.
+					taskContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+					require.True(t, ok)
+					require.Equal(t, tc.removedPeer, taskContext.EventData.Details["removed_peer"])
+					wantMembershipDetail := "receiver"
+					if tc.wantMembership == nsreplication.UseSourceMembership {
+						wantMembershipDetail = "source"
+					}
+					require.Equal(t, wantMembershipDetail, taskContext.EventData.Details["membership"])
+					return nsreplication.ApplyOutcomeApplied, nil
+				})
+			}
+			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters, namespaceMutationExecutor: executor,
+				metricsHandler: metrics.NoopMetricsHandler, eventLogger: wideevents.NoopLogger(),
+				config:         &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(false)},
+				deliveryPolicy: tc.policy}
+			task := removalTestTask(true)
+			if !tc.excludeReceiver {
+				task.ReplicationConfig.Clusters = append(task.ReplicationConfig.Clusters, &replicationpb.ClusterReplicationConfig{ClusterName: "cellC"})
+			}
+			payload, err := nsreplication.MarshalNamespaceTask(task)
+			require.NoError(t, err)
+			resp, err := handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+				NamespaceTaskPayload: payload, RemovedPeer: tc.removedPeer, TargetCluster: tc.target,
+			})
+			require.Equal(t, tc.wantCode, serviceerror.ToStatus(err).Code(), "error: %v", err)
+			if tc.wantPolicyError {
+				require.ErrorIs(t, err, policyErr)
+			}
+			if tc.wantCode != codes.OK {
+				return
+			}
+			require.Equal(t, adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, resp.GetOutcome())
+		})
+	}
+}
+
+func TestDeliveryPolicyRejectionIsRecordedAsError(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	clusters := cluster.NewMockMetadata(ctrl)
+	clusters.EXPECT().GetCurrentClusterName().Return("cellC").AnyTimes()
+	clusters.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	mh := metricstest.NewCaptureHandler()
+	capture := mh.StartCapture()
+	defer mh.StopCapture(capture)
+	events := &captureRemoteClusterEventLogger{}
+	handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters,
+		namespaceMutationExecutor: nsreplication.NewMockMutationTaskExecutor(ctrl),
+		metricsHandler:            mh, eventLogger: events,
+		config: &Config{EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true)},
+		deliveryPolicy: func(context.Context, *replicationspb.NamespaceTaskAttributes) (nsreplication.MembershipDecision, error) {
+			return nsreplication.UseReceiverMembership, serviceerror.NewInvalidArgument("invalid payload data")
+		}}
+	payload, err := nsreplication.MarshalNamespaceTask(removalTestTask(false))
+	require.NoError(t, err)
+
+	_, err = handler.ApplyNamespaceMutation(t.Context(), &adminservice.ApplyNamespaceMutationRequest{
+		SourceCluster: "cellA", NamespaceTaskPayload: payload, TargetCluster: "cellC",
+	})
+	require.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+
+	recordings := capture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, nsreplication.CHASMApplyOutcomeError, recordings[0].Tags["outcome"])
+	_, details := remoteClusterEventValues(t, events.records)
+	require.Equal(t, nsreplication.CHASMApplyOutcomeError, details["outcome"])
+	require.Equal(t, err.Error(), details["error"])
+	require.Equal(t, false, details["removed_peer"])
+	require.NotContains(t, details, "membership")
+}

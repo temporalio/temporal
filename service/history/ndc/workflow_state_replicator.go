@@ -2038,17 +2038,27 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		}()
 	}
 
-	// Get the last batch node id to check if the history data is already in DB.
+	// Source branch IDs can refer to a losing history locally after conflict resolution.
+	// Only reuse existing batches if they belong to the source's version history.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
 		ctx,
 		backfillBranchToken,
 		lastEventItem.EventId,
 	))
 	var lastBatchNodeID int64
+	localHistoryMismatch := false
+LocalHistoryLoop:
 	for localHistoryIterator.HasNext() {
 		localHistoryBatch, err := localHistoryIterator.Next()
 		switch err.(type) {
 		case nil:
+			for _, event := range localHistoryBatch.GetEvents() {
+				version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, event.GetEventId())
+				if err != nil || version != event.GetVersion() {
+					localHistoryMismatch = true
+					break LocalHistoryLoop
+				}
+			}
 			if len(localHistoryBatch.GetEvents()) > 0 {
 				lastBatchNodeID = localHistoryBatch.GetEvents()[0].GetEventId()
 			}
@@ -2056,6 +2066,18 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		default:
 			return err
 		}
+	}
+	if localHistoryMismatch {
+		// Preserve the existing branch for other runs and copy the complete source
+		// history into an independent branch without source ancestors.
+		backfillBranchToken, err = r.shardContext.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+			namespaceID.String(), workflowID, runID, branchInfo.GetTreeId(), nil, nil,
+			0, 0, 0,
+		)
+		if err != nil {
+			return err
+		}
+		lastBatchNodeID = 0
 	}
 
 	remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(

@@ -10,6 +10,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
 )
@@ -257,6 +258,32 @@ func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
 		names = append(names, c.GetClusterName())
 	}
 	return names
+}
+
+// legacyReplicationRoute describes a write the legacy path replicates, or
+// returns nil when it does not replicate the write. In CHASM mode the legacy
+// path handles only writes CHASM does not replicate.
+func legacyReplicationRoute(
+	mode namespaceReplicationTransportMode,
+	replicates bool,
+) *wideevents.NamespaceReplicationRoute {
+	if !replicates {
+		return nil
+	}
+	transport := namespaceReplicationTransportLegacy
+	if mode == namespaceReplicationTransportShadow {
+		transport = namespaceReplicationTransportShadow
+	}
+	return &wideevents.NamespaceReplicationRoute{Transport: transport.String()}
+}
+
+// chasmReplicationRoute describes a write sent through a CHASM mutation.
+func chasmReplicationRoute(mutation *namespacereplicationpb.NamespaceMutation) *wideevents.NamespaceReplicationRoute {
+	return &wideevents.NamespaceReplicationRoute{
+		Transport:    namespaceReplicationTransportCHASM.String(),
+		PeerCells:    mutation.GetPeerCells(),
+		RemovedPeers: mutation.GetRemovedPeers().GetCells(),
+	}
 }
 
 func (d *namespaceHandler) emitNamespaceRegistered(in wideevents.NamespaceRegisteredInput) {

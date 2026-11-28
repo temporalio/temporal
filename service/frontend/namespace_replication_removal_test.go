@@ -121,7 +121,7 @@ func TestAuthoritativeRemovalConvergesUnderReorderingAndContention(t *testing.T)
 				admitter = rejectRemovalAdmitter{}
 			}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: clusters,
-				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellC", metadata, nsreplication.NewNoopDataMerger(), admitter, log.NewNoopLogger(), testhooks.TestHooks{}),
+				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellC", metadata, nsreplication.NewDefaultMutationDataMerger(nsreplication.NewNoopDataMerger()), admitter, log.NewNoopLogger(), testhooks.TestHooks{}),
 			}
 			for _, removed := range []bool{tc.removalFirst, !tc.removalFirst} {
 				payload, err := nsreplication.MarshalNamespaceTask(removalTestTask(removed))
