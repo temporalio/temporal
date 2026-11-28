@@ -31,6 +31,7 @@ import (
 
 const (
 	upsertMembershipRecordExpiryDefault = time.Hour * 48
+	upsertMembershipTimeout             = 5 * time.Second
 
 	// 10 second base reporting frequency + 5 second jitter + 5 second acceptable time skew
 	healthyHostLastHeartbeatCutoff = time.Second * 20
@@ -288,6 +289,8 @@ func (rpo *monitor) upsertMyMembership(
 	ctx context.Context,
 	request *persistence.UpsertClusterMembershipRequest,
 ) error {
+	ctx, cancel := context.WithTimeout(ctx, upsertMembershipTimeout)
+	defer cancel()
 	err := rpo.metadataManager.UpsertClusterMembership(ctx, request)
 
 	if err == nil {
