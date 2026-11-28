@@ -114,6 +114,7 @@ type (
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
 		streamReceiverMonitor            replication.StreamReceiverMonitor
 		replicationServerRateLimiter     replication.ServerSchedulerRateLimiter
+		streamSenderFactory              replication.StreamSenderFactory
 	}
 
 	NewHandlerArgs struct {
@@ -153,6 +154,7 @@ type (
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
 		ReplicationServerRateLimiter    replication.ServerSchedulerRateLimiter
+		StreamSenderFactory             replication.StreamSenderFactory
 	}
 )
 
@@ -1929,7 +1931,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return h.convertError(err)
 	}
-	streamSender := replication.NewStreamSender(
+	streamSender := h.streamSenderFactory.NewStreamSender(
 		server,
 		shardContext,
 		engine,
