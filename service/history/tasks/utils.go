@@ -152,6 +152,8 @@ func GetTimerTaskEventID(
 		// time skipping timer tasks supports both for workflow and chasm executions,
 		// and it doesn't depend on eventID, so it uses the dummy chasm task eventID here.
 		return getChasmTaskEventID()
+	case *DeferredChildCompletionTimerTask:
+		eventID = task.InitiatedEventID
 	case *ChasmTaskPure:
 		return getChasmTaskEventID()
 	case *ChasmTask:

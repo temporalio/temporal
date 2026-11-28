@@ -823,6 +823,10 @@ message ChildExecutionInfo {
   string namespace_id = 14;
   VersionedTransition last_update_versioned_transition = 15;
   temporal.api.common.v1.Priority priority = 16;
+  // The child's terminal history event, held until the parent's own earlier
+  // timers and timeouts have been delivered. Cleared when that completion is
+  // written to the parent's history.
+  temporal.api.history.v1.HistoryEvent deferred_completion_event = 17;
 }
 
 // request_cancel_map column

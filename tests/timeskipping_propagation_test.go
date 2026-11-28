@@ -20,6 +20,11 @@
 //     - TestTSPInChildWf_ThreeGenerations
 //     - TestTSPInChildWf_AdmissionTimestampsShifted
 //     - TestTSPInChildWf_PropagationDisabled
+//     - TestTSPInChildWf_ParentRunTimeoutBeforeChild
+//     - TestTSPInChildWf_ParentTimerBeforeChild
+//     - TestTSPInChildWf_ChildBeforeParentTimer
+//     - TestTSPInChildWf_ActivityInFlightDoesNotSkip
+//     - TestTSPInChildWf_SiblingSignalDoesNotDeadlock
 package tests
 
 import (
@@ -43,6 +48,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -82,11 +88,12 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //     = true (cloned verbatim from parent's Config).
 //   - Child issues StartTimer(tc, 3h). Child is idle → server skips 3h.
 //     After skip: child.AccumulatedSkippedDuration = 1h + 3h = 4h.
-//   - tc fires. Child completes.
-//   - Parent receives ChildWorkflowExecutionCompleted. Parent is now only waiting
-//     on t2 → idle → server skips 1h to fire t2.
-//     After skip: parent.AccumulatedSkippedDuration = 2h.
-//   - t2 fires. Parent completes.
+//   - tc fires. The child's virtual close is 3h after the parent started it.
+//     The parent's t2 is due 1h after that same moment, so t2 is delivered
+//     before the child completion is written. The parent completes on t2.
+//     After that skip: parent.AccumulatedSkippedDuration = 2h.
+//     Real time does the same: the shorter parent timer fires while the child
+//     is still running. The child completion is not in the parent's history.
 //
 // End-state assertions:
 //   - parent.AccumulatedSkippedDuration == 2h, within its own 3h FastForward budget.
@@ -185,7 +192,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	s.Equal(3*time.Hour, parentTSI.GetConfig().GetFastForwardConfig().GetDuration().AsDuration(),
 		"parent keeps its own MaxElapsedDuration; child propagation must not mutate it")
 	s.approxDuration(2*time.Hour, parentTSI.GetAccumulatedSkippedDuration().AsDuration(),
-		"parent should accumulate 1h (t1) + 1h (t2 after child) = 2h")
+		"parent should accumulate 1h (t1) + 1h (t2, due before the child finishes) = 2h")
+	s.True(s.timerFiredBeforeChildCompletion(ctx, env, parentWFID, parentRunID, "t2"),
+		"t2 fires before the child completion is recorded; the parent closes on t2")
 
 	// ---- Child ----
 	childMS := s.getMutableStateByID(ctx, env, childWFID)
@@ -338,18 +347,19 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_InheritsBudgetFreshC
 //     and have their AccumulatedSkippedDuration seeded to the parent's accumulated
 //     skip at child-start time (via InitialSkippedDuration on the initiated event,
 //     which applyTimeSkippingConfig converts into AccumulatedSkippedDuration).
-//   - The parent is blocked from skipping while ANY child is pending, and resumes
-//     skipping only after all children complete (idle-only invariant).
+//   - The parent does not skip while a child is still running. Once a child has
+//     finished, its completion is held if the parent has an earlier timer, and
+//     that timer fires before the completion is written.
 //
 // Scenario:
 //   - Parent TSC enabled. Parent issues StartTimer(t1, 1h) → skips 1h.
 //   - Parent issues [StartChild(c1), StartChild(c2), StartTimer(t2, 1h)].
 //     Each child's MS is seeded with AccumulatedSkippedDuration = 1h
 //     (inherited from the parent's accumulated at command time).
-//   - c1 issues StartTimer(tc1, 2h) → idle → skips 2h → completes.
-//   - c2 issues StartTimer(tc2, 2h) → idle → skips 2h → completes.
-//   - Only after BOTH c1 and c2 complete does parent become idle on t2 → skips 1h → t2 fires.
-//   - Parent completes.
+//   - Each child issues StartTimer(tc, 2h) → idle → skips 2h → completes.
+//   - Both children close 2h after the parent started them. t2 is due in 1h,
+//     so the parent fires t2 and completes without recording the child completions.
+//   - Parent accumulated skip is still 1h (t1) + 1h (t2) = 2h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
@@ -433,7 +443,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 	parentMS := s.getMutableState(env, parentWFID, parentRunID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, parentMS.State.ExecutionState.State)
 	s.approxDuration(2*time.Hour, parentMS.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration(),
-		"parent skip: 1h (t1) + 1h (t2 after BOTH children complete) = 2h")
+		"parent skip: 1h (t1) + 1h (t2, due before either child finishes) = 2h")
 
 	// ---- Each child inherits identically ----
 	for _, id := range []string{child1WFID, child2WFID} {
@@ -478,8 +488,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 //     InitialSkippedDuration=3h (P's full accumulated at command time, which already
 //     includes G's 1h). C's MS: AccumulatedSkippedDuration seeded to 3h.
 //   - C: StartTimer(ct, 1h) → skips 1h → C.accum = 3h + 1h = 4h → completes.
-//   - P: idle on pt2 → skips 1h → P.accum = 3h + 1h = 4h. pt2 fires. P completes.
-//   - G: idle on gt2 → skips 1h → G.accum = 1h + 1h = 2h. gt2 fires. G completes.
+//   - P's pt2 is due at that same virtual time, so P fires pt2 and completes.
+//     P.accum = 3h + 1h = 4h.
+//   - G's gt2 was due 1h after P started, before P's close, so G fires gt2 and
+//     completes. G.accum = 1h + 1h = 2h.
 //
 // Final state: C.accum == 4h (3h inherited + 1h own); P.accum == 4h; G.accum == 2h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
@@ -586,7 +598,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	gMS := s.getMutableState(env, gWFID, gRunID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, gMS.State.ExecutionState.State)
 	s.approxDuration(2*time.Hour, gMS.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration(),
-		"G: 1h (gt1) + 1h (gt2 after P completes) = 2h")
+		"G: 1h (gt1) + 1h (gt2, due before P finishes) = 2h")
 
 	// ---- Parent ----
 	pMS := s.getMutableStateByID(ctx, env, pWFID)
@@ -960,6 +972,21 @@ func firedTimers(task *workflowservice.PollWorkflowTaskQueueResponse) map[string
 	return out
 }
 
+// childTerminalInTask reports a child terminal event in the events new to this workflow task.
+func childTerminalInTask(task *workflowservice.PollWorkflowTaskQueueResponse) bool {
+	events := task.History.Events
+	from := int(task.PreviousStartedEventId)
+	if from < 0 || from > len(events) {
+		from = 0
+	}
+	for _, event := range events[from:] {
+		if isChildTerminalEvent(event.GetEventType()) {
+			return true
+		}
+	}
+	return false
+}
+
 // timerCmd builds a StartTimerCommand with the given id and StartToFireTimeout.
 func timerCmd(id string, d time.Duration) *commandpb.Command {
 	return &commandpb.Command{
@@ -976,6 +1003,10 @@ func timerCmd(id string, d time.Duration) *commandpb.Command {
 // childCmd builds a StartChildWorkflowExecutionCommand with ABANDON parent-close policy
 // and generous (virtual-time) run/task timeouts appropriate for time-skipping tests.
 func childCmd(ns, wfID string, wfType *commonpb.WorkflowType, tq *taskqueuepb.TaskQueue) *commandpb.Command {
+	return childCmdWithRunTimeout(ns, wfID, wfType, tq, 24*time.Hour)
+}
+
+func childCmdWithRunTimeout(ns, wfID string, wfType *commonpb.WorkflowType, tq *taskqueuepb.TaskQueue, runTimeout time.Duration) *commandpb.Command {
 	return &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
@@ -984,7 +1015,7 @@ func childCmd(ns, wfID string, wfType *commonpb.WorkflowType, tq *taskqueuepb.Ta
 				WorkflowId:          wfID,
 				WorkflowType:        wfType,
 				TaskQueue:           tq,
-				WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+				WorkflowRunTimeout:  durationpb.New(runTimeout),
 				WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 				ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_ABANDON,
 			},
@@ -1035,6 +1066,84 @@ func continueAsNewCmd(wfType *commonpb.WorkflowType, tq *taskqueuepb.TaskQueue) 
 // cmdsResponse wraps a list of commands in a RespondWorkflowTaskCompletedRequest.
 func cmdsResponse(cmds ...*commandpb.Command) *workflowservice.RespondWorkflowTaskCompletedRequest {
 	return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}
+}
+
+// activityCmd schedules an activity whose timeouts are short enough that skipping
+// an hour past it would time the activity out.
+func activityCmd(tv *testvars.TestVars, timeout time.Duration) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+			ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             tv.ActivityID(),
+				ActivityType:           tv.ActivityType(),
+				TaskQueue:              tv.TaskQueue(),
+				ScheduleToCloseTimeout: durationpb.New(timeout),
+				ScheduleToStartTimeout: durationpb.New(timeout),
+				StartToCloseTimeout:    durationpb.New(timeout),
+			},
+		},
+	}
+}
+
+// signalExternalCmd signals another workflow in the same namespace by workflow ID.
+func signalExternalCmd(ns, wfID, signalName string) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
+			SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+				Namespace:  ns, //nolint:staticcheck // SA1019: the signal command still addresses its target with Namespace.
+				Execution:  &commonpb.WorkflowExecution{WorkflowId: wfID},
+				SignalName: signalName,
+			},
+		},
+	}
+}
+
+// completedChildWorkflowIDs returns workflow IDs of child terminal events new to this task.
+func completedChildWorkflowIDs(task *workflowservice.PollWorkflowTaskQueueResponse) map[string]bool {
+	out := map[string]bool{}
+	events := task.History.Events
+	from := int(task.PreviousStartedEventId)
+	if from < 0 || from > len(events) {
+		from = 0
+	}
+	for _, event := range events[from:] {
+		var execution *commonpb.WorkflowExecution
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+			execution = event.GetChildWorkflowExecutionCompletedEventAttributes().GetWorkflowExecution()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+			execution = event.GetChildWorkflowExecutionFailedEventAttributes().GetWorkflowExecution()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+			execution = event.GetChildWorkflowExecutionCanceledEventAttributes().GetWorkflowExecution()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			execution = event.GetChildWorkflowExecutionTerminatedEventAttributes().GetWorkflowExecution()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+			execution = event.GetChildWorkflowExecutionTimedOutEventAttributes().GetWorkflowExecution()
+		default:
+		}
+		if execution != nil {
+			out[execution.GetWorkflowId()] = true
+		}
+	}
+	return out
+}
+
+// hasSignal reports whether this task delivered a workflow signal of the given name.
+func hasSignal(task *workflowservice.PollWorkflowTaskQueueResponse, name string) bool {
+	events := task.History.Events
+	from := int(task.PreviousStartedEventId)
+	if from < 0 || from > len(events) {
+		from = 0
+	}
+	for _, event := range events[from:] {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED &&
+			event.GetWorkflowExecutionSignaledEventAttributes().GetSignalName() == name {
+			return true
+		}
+	}
+	return false
 }
 
 // firstWorkflowTaskCompletedEventID returns the event ID of the first
@@ -2031,4 +2140,532 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_PropagationDisabled(
 	s.Nil(initAttrs.GetTimeSkippingConfig(), "initiated event carries no TimeSkippingConfig when propagation is disabled")
 	s.approxDuration(time.Hour, initAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"initiated event InitialSkippedDuration == parent's AccumulatedSkippedDuration at command time (1h)")
+}
+
+// TestTSPInChildWf_ParentRunTimeoutBeforeChild is the run-timeout case: the parent
+// run timeout is 1h and the child sleeps 2h. Real time times the parent out at 1h.
+// The child completion must not be recorded first.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ParentRunTimeoutBeforeChild() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childWFID := parentWFID + "-child"
+
+	startWall := time.Now()
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               parentWFID,
+		WorkflowType:             parentWFType,
+		TaskQueue:                tv.TaskQueue(),
+		WorkflowRunTimeout:       durationpb.New(time.Hour),
+		WorkflowExecutionTimeout: durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		TimeSkippingConfig:       &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+
+	parentStarted := false
+	parentHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		if !parentStarted {
+			parentStarted = true
+			return cmdsResponse(childCmdWithRunTimeout(env.Namespace().String(), childWFID, childWFType, tv.TaskQueue(), 3*time.Hour)), nil
+		}
+		// ChildWorkflowExecutionStarted is not a completion. Completing here would
+		// close the parent before its run timeout. A child terminal event means
+		// the timeout lost the race, so close and let the status assertion fail.
+		if childTerminalInTask(task) {
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	childStarted, childDone := false, false
+	childHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		if !childStarted {
+			childStarted = true
+			return cmdsResponse(timerCmd("sleep", 2*time.Hour)), nil
+		}
+		if fired["sleep"] && !childDone {
+			childDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+	s.drivePollsUntilRunNotRunning(ctx, env, tv, dispatch, parentWFID, parentRunID, 20)
+
+	elapsed := time.Since(startWall)
+	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than the 1h run timeout", elapsed)
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: parentWFID, RunId: parentRunID},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, desc.WorkflowExecutionInfo.Status)
+	s.False(s.historyHasEvent(ctx, env, parentWFID, parentRunID, enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED),
+		"the parent times out before the child completion is recorded")
+}
+
+// TestTSPInChildWf_ParentTimerBeforeChild is the timer race: the parent's 30m timer
+// and a child that sleeps 1h are started together. The timer fires first.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ParentTimerBeforeChild() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childWFID := parentWFID + "-child"
+
+	startWall := time.Now()
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          parentWFID,
+		WorkflowType:        parentWFType,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+
+	parentStarted, parentDone := false, false
+	parentHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		if !parentStarted {
+			parentStarted = true
+			return cmdsResponse(
+				timerCmd("parent", 30*time.Minute),
+				childCmd(env.Namespace().String(), childWFID, childWFType, tv.TaskQueue()),
+			), nil
+		}
+		if !parentDone && (fired["parent"] || childTerminalInTask(task)) {
+			parentDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	childStarted, childDone := false, false
+	childHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		if !childStarted {
+			childStarted = true
+			return cmdsResponse(timerCmd("sleep", time.Hour)), nil
+		}
+		if fired["sleep"] && !childDone {
+			childDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+	s.drivePollsUntilClosed(ctx, env, tv, dispatch, parentWFID, parentRunID, 20)
+
+	elapsed := time.Since(startWall)
+	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than 1h of virtual time", elapsed)
+	s.True(s.timerFiredBeforeChildCompletion(ctx, env, parentWFID, parentRunID, "parent"),
+		"the 30m timer fires before the child that sleeps 1h completes")
+}
+
+// TestTSPInChildWf_ChildBeforeParentTimer keeps the opposite order: a child that
+// finishes before the parent's timer is recorded first, and the timer does not fire.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ChildBeforeParentTimer() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childWFID := parentWFID + "-child"
+
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          parentWFID,
+		WorkflowType:        parentWFType,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+
+	parentStarted, parentDone := false, false
+	parentHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		if !parentStarted {
+			parentStarted = true
+			return cmdsResponse(
+				timerCmd("parent", 30*time.Minute),
+				childCmd(env.Namespace().String(), childWFID, childWFType, tv.TaskQueue()),
+			), nil
+		}
+		if !parentDone && (childTerminalInTask(task) || fired["parent"]) {
+			parentDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	childStarted, childDone := false, false
+	childHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		if !childStarted {
+			childStarted = true
+			return cmdsResponse(timerCmd("sleep", 10*time.Minute)), nil
+		}
+		if fired["sleep"] && !childDone {
+			childDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+	s.drivePollsUntilClosed(ctx, env, tv, dispatch, parentWFID, parentRunID, 20)
+
+	s.True(s.childCompletionBeforeTimer(ctx, env, parentWFID, parentRunID, "parent"),
+		"the child that sleeps 10m is recorded before the parent's 30m timer fires")
+}
+
+// TestTSPInChildWf_ActivityInFlightDoesNotSkip is the running-activity case. The
+// child finishes an hour ahead of the parent while an activity is still pending.
+// The parent must not skip to the child's close time until that activity is done.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ActivityInFlightDoesNotSkip() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childWFID := parentWFID + "-child"
+
+	startWall := time.Now()
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          parentWFID,
+		WorkflowType:        parentWFType,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+
+	verifiedBlocked := false
+	parentStarted, parentDone := false, false
+	parentHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		if !parentStarted {
+			parentStarted = true
+			return cmdsResponse(
+				activityCmd(tv, 2*time.Minute),
+				childCmd(env.Namespace().String(), childWFID, childWFType, tv.TaskQueue()),
+			), nil
+		}
+		if verifiedBlocked && childTerminalInTask(task) && !parentDone {
+			parentDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	childStarted, childDone := false, false
+	childHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		if !childStarted {
+			childStarted = true
+			return cmdsResponse(timerCmd("sleep", time.Hour)), nil
+		}
+		if fired["sleep"] && !childDone {
+			childDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+
+	blocked := false
+	for i := 0; i < 30 && !blocked; i++ {
+		_, pollErr := env.TaskPoller().PollAndHandleWorkflowTask(tv, dispatch, taskpoller.WithTimeout(5*time.Second))
+		if pollErr != nil {
+			s.T().Logf("iter %d: poll error (likely timeout): %v", i, pollErr)
+		}
+		childDesc, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: childWFID},
+		})
+		if descErr != nil || childDesc.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+			continue
+		}
+		parentMS := s.getMutableState(env, parentWFID, parentRunID)
+		accumulated := parentMS.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+		if len(parentMS.State.ActivityInfos) > 0 &&
+			accumulated < time.Minute &&
+			!s.historyHasEvent(ctx, env, parentWFID, parentRunID, enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED) &&
+			!s.historyHasEvent(ctx, env, parentWFID, parentRunID, enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT) {
+			blocked = true
+		}
+	}
+	s.True(blocked, "the parent keeps the activity and does not skip to the child's close time while it is in flight")
+
+	verifiedBlocked = true
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, func(_ *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	s.NoError(err)
+
+	for i := 0; i < 20 && !parentDone; i++ {
+		_, pollErr := env.TaskPoller().PollAndHandleWorkflowTask(tv, dispatch, taskpoller.WithTimeout(10*time.Second))
+		if pollErr != nil {
+			s.T().Logf("after activity: iter %d: poll error (likely timeout): %v", i, pollErr)
+		}
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: parentWFID, RunId: parentRunID},
+		})
+		s.NoError(descErr)
+		if desc.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+			parentDone = true
+		}
+	}
+
+	s.Less(time.Since(startWall), 2*time.Minute, "wall clock should stay far below the child's 1h virtual sleep")
+	s.True(parentDone, "the parent completes after the activity, once the child completion is delivered")
+	s.True(s.historyHasEvent(ctx, env, parentWFID, parentRunID, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED),
+		"the activity completes on its own, rather than being skipped")
+	s.True(s.historyHasEvent(ctx, env, parentWFID, parentRunID, enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED))
+	parentMS := s.getMutableState(env, parentWFID, parentRunID)
+	accumulated := parentMS.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	s.Greater(accumulated, 30*time.Minute, "once the activity is done the parent skips toward the child's close time")
+	s.Less(accumulated, time.Hour+time.Minute)
+}
+
+// TestTSPInChildWf_SiblingSignalDoesNotDeadlock is the case where holding the
+// child completion until the parent is skippable deadlocks. Child A finishes
+// ahead of the parent. Child B waits for a signal the parent sends only after A
+// is recorded. B stays in flight, so the parent cannot skip, but A's completion
+// is still delivered when the parent's clock reaches A's close time.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_SiblingSignalDoesNotDeadlock() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childAWFID := parentWFID + "-child-a"
+	childBWFID := parentWFID + "-child-b"
+	ns := env.Namespace().String()
+	tq := tv.TaskQueue()
+
+	startWall := time.Now()
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           ns,
+		WorkflowId:          parentWFID,
+		WorkflowType:        parentWFType,
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+
+	parentStarted, signaled, parentDone := false, false, false
+	parentHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		if !parentStarted {
+			parentStarted = true
+			return cmdsResponse(
+				childCmd(ns, childAWFID, childWFType, tq),
+				childCmd(ns, childBWFID, childWFType, tq),
+			), nil
+		}
+		completed := completedChildWorkflowIDs(task)
+		if completed[childAWFID] && !signaled {
+			signaled = true
+			return cmdsResponse(signalExternalCmd(ns, childBWFID, "go")), nil
+		}
+		if completed[childBWFID] && !parentDone {
+			parentDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	childAStarted, childADone := false, false
+	childBStarted, childBDone := false, false
+	childHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch task.WorkflowExecution.GetWorkflowId() {
+		case childAWFID:
+			if !childAStarted {
+				childAStarted = true
+				return cmdsResponse(timerCmd("sleep", 10*time.Second)), nil
+			}
+			if fired["sleep"] && !childADone {
+				childADone = true
+				return cmdsResponse(completeCmd()), nil
+			}
+		case childBWFID:
+			// An in-flight activity keeps B from skipping to its own run timeout while it
+			// waits. B stays a running child, so the parent cannot skip either.
+			if !childBStarted {
+				childBStarted = true
+				return cmdsResponse(activityCmd(tv, 10*time.Minute)), nil
+			}
+			if hasSignal(task, "go") && !childBDone {
+				childBDone = true
+				return cmdsResponse(completeCmd()), nil
+			}
+		default:
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+
+	for i := 0; i < 12 && !parentDone; i++ {
+		_, pollErr := env.TaskPoller().PollAndHandleWorkflowTask(tv, dispatch, taskpoller.WithTimeout(15*time.Second))
+		if pollErr != nil {
+			s.T().Logf("iter %d: poll error (likely timeout): %v", i, pollErr)
+		}
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: parentWFID, RunId: parentRunID},
+		})
+		s.NoError(descErr)
+		if desc.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+			parentDone = true
+		}
+	}
+
+	s.True(parentDone, "the sibling waiting on a signal must not deadlock the parent")
+	s.Less(time.Since(startWall), time.Minute, "delivery waits for the parent's clock, not for an hour of virtual time")
+	s.True(signaled, "the parent signals the sibling after the first child is recorded")
+	s.True(s.historyHasEvent(ctx, env, childBWFID, "", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED))
+	childB := s.getMutableStateByID(ctx, env, childBWFID)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, childB.State.ExecutionState.State)
+}
+
+func (s *TimeSkippingPropagationTestSuite) historyEvents(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	workflowID, runID string,
+) []*historypb.HistoryEvent {
+	var events []*historypb.HistoryEvent
+	var token []byte
+	for {
+		resp, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       env.Namespace().String(),
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			MaximumPageSize: 1000,
+			NextPageToken:   token,
+		})
+		s.NoError(err)
+		events = append(events, resp.GetHistory().GetEvents()...)
+		token = resp.GetNextPageToken()
+		if len(token) == 0 {
+			return events
+		}
+	}
+}
+
+func (s *TimeSkippingPropagationTestSuite) historyHasEvent(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	workflowID, runID string,
+	eventType enumspb.EventType,
+) bool {
+	for _, event := range s.historyEvents(ctx, env, workflowID, runID) {
+		if event.GetEventType() == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *TimeSkippingPropagationTestSuite) timerFiredBeforeChildCompletion(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	workflowID, runID, timerID string,
+) bool {
+	timerIdx, childIdx := -1, -1
+	for i, event := range s.historyEvents(ctx, env, workflowID, runID) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED &&
+			event.GetTimerFiredEventAttributes().GetTimerId() == timerID {
+			timerIdx = i
+		}
+		if isChildTerminalEvent(event.GetEventType()) && childIdx < 0 {
+			childIdx = i
+		}
+	}
+	if timerIdx < 0 {
+		return false
+	}
+	return childIdx < 0 || timerIdx < childIdx
+}
+
+func (s *TimeSkippingPropagationTestSuite) childCompletionBeforeTimer(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	workflowID, runID, timerID string,
+) bool {
+	timerIdx, childIdx := -1, -1
+	for i, event := range s.historyEvents(ctx, env, workflowID, runID) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED &&
+			event.GetTimerFiredEventAttributes().GetTimerId() == timerID && timerIdx < 0 {
+			timerIdx = i
+		}
+		if isChildTerminalEvent(event.GetEventType()) && childIdx < 0 {
+			childIdx = i
+		}
+	}
+	if childIdx < 0 {
+		return false
+	}
+	return timerIdx < 0 || childIdx < timerIdx
+}
+
+func isChildTerminalEvent(eventType enumspb.EventType) bool {
+	switch eventType {
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+		return true
+	default:
+		return false
+	}
 }

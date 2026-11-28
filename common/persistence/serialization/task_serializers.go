@@ -141,6 +141,8 @@ func serializeTimerTask(
 		timerTask = timerChasmPureTaskToProto(task)
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		timerTask = timeSkippingTimerTaskToProto(task)
+	case *tasks.DeferredChildCompletionTimerTask:
+		timerTask = deferredChildCompletionTimerTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
 	}
@@ -161,6 +163,31 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingFastForwardTimerTask) 
 				ArchetypeId: task.ArchetypeID,
 			},
 		},
+	}
+}
+
+func deferredChildCompletionTimerTaskToProto(task *tasks.DeferredChildCompletionTimerTask) *persistencespb.TimerTaskInfo {
+	return &persistencespb.TimerTaskInfo{
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskType:       enumsspb.TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER,
+		EventId:        task.InitiatedEventID,
+	}
+}
+
+func deferredChildCompletionTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.DeferredChildCompletionTimerTask {
+	return &tasks.DeferredChildCompletionTimerTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			info.NamespaceId,
+			info.WorkflowId,
+			info.RunId,
+		),
+		VisibilityTimestamp: info.VisibilityTime.AsTime(),
+		TaskID:              info.TaskId,
+		InitiatedEventID:    info.EventId,
 	}
 }
 
@@ -242,6 +269,8 @@ func deserializeTimerTask(
 		timer = timerChasmPureTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_TIMESKIPPING_TIMER:
 		timer = timeSkippingTimerTaskFromProto(timerTask)
+	case enumsspb.TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER:
+		timer = deferredChildCompletionTimerTaskFromProto(timerTask)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", timerTask.TaskType)
 	}

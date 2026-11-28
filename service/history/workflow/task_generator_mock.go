@@ -274,6 +274,20 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateStartWorkflowTaskTasks(workflow
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateStartWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateStartWorkflowTaskTasks), workflowTaskScheduledEventID)
 }
 
+// GenerateDeferredChildCompletionTimerTasks mocks base method.
+func (m *MockTaskGenerator) GenerateDeferredChildCompletionTimerTasks() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateDeferredChildCompletionTimerTasks")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateDeferredChildCompletionTimerTasks indicates an expected call of GenerateDeferredChildCompletionTimerTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateDeferredChildCompletionTimerTasks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeferredChildCompletionTimerTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeferredChildCompletionTimerTasks))
+}
+
 // GenerateTimeSkippingFastForwardTimerTask mocks base method.
 func (m *MockTaskGenerator) GenerateTimeSkippingFastForwardTimerTask() error {
 	m.ctrl.T.Helper()

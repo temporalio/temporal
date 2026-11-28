@@ -1653,6 +1653,197 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	})
 }
 
+func (s *mutableStateSuite) TestDeferredChildCompletion() {
+	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	enable := func() {
+		s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+		ts := clock.NewEventTimeSource()
+		ts.Update(base)
+		s.mutableState.timeSource = ts
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+		s.mutableState.executionInfo.TaskQueue = "test-tq"
+	}
+	addDeferredChild := func(closeAt time.Time) {
+		s.mutableState.pendingChildExecutionInfoIDs[10] = &persistencespb.ChildExecutionInfo{
+			InitiatedEventId:  10,
+			StartedEventId:    11,
+			StartedWorkflowId: "child-wf",
+			StartedRunId:      "child-run",
+			WorkflowTypeName:  "child",
+			DeferredCompletionEvent: &historypb.HistoryEvent{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+				EventTime: timestamppb.New(closeAt),
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{},
+				},
+			},
+		}
+	}
+
+	s.Run("InFlightChild_NotSkippable", func() {
+		enable()
+		s.mutableState.pendingChildExecutionInfoIDs[10] = &persistencespb.ChildExecutionInfo{InitiatedEventId: 10}
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	s.Run("DeferredChild_DoesNotBlockEarlierTimer", func() {
+		enable()
+		addDeferredChild(base.Add(2 * time.Hour))
+		s.mutableState.pendingTimerInfoIDs["t"] = &persistencespb.TimerInfo{
+			TimerId:    "t",
+			ExpiryTime: timestamppb.New(base.Add(time.Hour)),
+		}
+		s.True(s.mutableState.isWorkflowSkippable())
+		tr := s.mutableState.findNextSkipTarget()
+		s.Require().NotNil(tr)
+		s.Equal(base.Add(time.Hour), tr.GetTargetTime())
+	})
+
+	s.Run("DeferredChild_BlocksSkipPastClose", func() {
+		enable()
+		addDeferredChild(base.Add(2 * time.Hour))
+		s.mutableState.pendingTimerInfoIDs["t"] = &persistencespb.TimerInfo{
+			TimerId:    "t",
+			ExpiryTime: timestamppb.New(base.Add(3 * time.Hour)),
+		}
+		s.True(s.mutableState.isWorkflowSkippable())
+		s.Nil(s.mutableState.findNextSkipTarget())
+	})
+
+	s.Run("RunTimeout_BeforeDeferredChild", func() {
+		enable()
+		s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = 1
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(base.Add(30 * time.Minute))
+		addDeferredChild(base.Add(2 * time.Hour))
+		tr := s.mutableState.findNextSkipTarget()
+		s.Require().NotNil(tr)
+		s.Equal(base.Add(30*time.Minute), tr.GetTargetTime())
+	})
+
+	s.Run("DeferFutureClose", func() {
+		enable()
+		s.mutableState.pendingChildExecutionInfoIDs[10] = &persistencespb.ChildExecutionInfo{
+			InitiatedEventId: 10,
+			StartedEventId:   11,
+		}
+		event := &historypb.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			EventTime: timestamppb.New(base.Add(time.Hour)),
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+				WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
+					Result: &commonpb.Payloads{},
+				},
+			},
+		}
+		deferred, err := s.mutableState.DeferOutrunningChildCompletion(10, event)
+		s.NoError(err)
+		s.True(deferred)
+		s.Equal(base.Add(time.Hour), s.mutableState.pendingChildExecutionInfoIDs[10].GetDeferredCompletionEvent().GetEventTime().AsTime())
+
+		// A retry of the same completion keeps the stashed event.
+		again, err := s.mutableState.DeferOutrunningChildCompletion(10, &historypb.HistoryEvent{
+			EventTime: timestamppb.New(base.Add(2 * time.Hour)),
+		})
+		s.NoError(err)
+		s.True(again)
+		s.Equal(base.Add(time.Hour), s.mutableState.pendingChildExecutionInfoIDs[10].GetDeferredCompletionEvent().GetEventTime().AsTime())
+
+		var timerTask *tasks.DeferredChildCompletionTimerTask
+		for _, task := range s.mutableState.InsertTasks[tasks.CategoryTimer] {
+			if timer, ok := task.(*tasks.DeferredChildCompletionTimerTask); ok {
+				timerTask = timer
+			}
+		}
+		s.NotNil(timerTask)
+		s.Equal(int64(10), timerTask.InitiatedEventID)
+		s.Equal(base.Add(time.Hour), timerTask.VisibilityTimestamp)
+	})
+
+	s.Run("DeferWhenCloseIsNotAhead", func() {
+		enable()
+		s.mutableState.pendingChildExecutionInfoIDs[10] = &persistencespb.ChildExecutionInfo{InitiatedEventId: 10}
+		deferred, err := s.mutableState.DeferOutrunningChildCompletion(10, &historypb.HistoryEvent{
+			EventTime: timestamppb.New(base),
+		})
+		s.NoError(err)
+		s.False(deferred)
+		s.Nil(s.mutableState.pendingChildExecutionInfoIDs[10].GetDeferredCompletionEvent())
+	})
+
+	s.Run("DeferWhenFeatureDisabled", func() {
+		enable()
+		s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
+		s.mutableState.pendingChildExecutionInfoIDs[10] = &persistencespb.ChildExecutionInfo{InitiatedEventId: 10}
+		deferred, err := s.mutableState.DeferOutrunningChildCompletion(10, &historypb.HistoryEvent{
+			EventTime: timestamppb.New(base.Add(time.Hour)),
+		})
+		s.NoError(err)
+		s.False(deferred)
+	})
+
+	s.Run("FlushAdvancesToChildClose", func() {
+		enable()
+		addDeferredChild(base.Add(2 * time.Hour))
+		advanced, err := s.mutableState.closeTransactionFlushDeferredChildCompletions(context.Background(), historyi.TransactionPolicyActive)
+		s.NoError(err)
+		s.True(advanced)
+		s.Equal(2*time.Hour, s.mutableState.accumulatedSkippedDuration())
+		_, ok := s.mutableState.GetChildExecutionInfo(10)
+		s.False(ok)
+		s.True(s.mutableState.HasPendingWorkflowTask())
+	})
+
+	s.Run("FlushWaitsForEarlierTimer", func() {
+		enable()
+		addDeferredChild(base.Add(2 * time.Hour))
+		s.mutableState.pendingTimerInfoIDs["t"] = &persistencespb.TimerInfo{
+			TimerId:    "t",
+			ExpiryTime: timestamppb.New(base.Add(time.Hour)),
+		}
+		s.True(s.mutableState.closeTransactionHandleWorkflowTimeSkipping(context.Background(), historyi.TransactionPolicyActive))
+		s.Equal(time.Hour, s.mutableState.accumulatedSkippedDuration())
+		advanced, err := s.mutableState.closeTransactionFlushDeferredChildCompletions(context.Background(), historyi.TransactionPolicyActive)
+		s.NoError(err)
+		s.False(advanced)
+		_, ok := s.mutableState.GetChildExecutionInfo(10)
+		s.True(ok, "the timer is due before the child closes and is delivered first")
+	})
+
+	s.Run("FlushDoesNotAdvanceWhileActivityInFlight", func() {
+		enable()
+		addDeferredChild(base.Add(2 * time.Hour))
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{ScheduledEventId: 1}
+		s.False(s.mutableState.isWorkflowSkippable())
+
+		advanced, err := s.mutableState.closeTransactionFlushDeferredChildCompletions(context.Background(), historyi.TransactionPolicyActive)
+		s.NoError(err)
+		s.False(advanced)
+		s.Zero(s.mutableState.accumulatedSkippedDuration())
+		_, ok := s.mutableState.GetChildExecutionInfo(10)
+		s.True(ok, "the completion stays deferred until the parent clock reaches the child close time")
+		s.False(s.mutableState.HasPendingWorkflowTask())
+	})
+
+	s.Run("FlushDeliversWhenClockHasReachedCloseWhileActivityInFlight", func() {
+		enable()
+		addDeferredChild(base)
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{ScheduledEventId: 1}
+		s.False(s.mutableState.isWorkflowSkippable())
+
+		advanced, err := s.mutableState.closeTransactionFlushDeferredChildCompletions(context.Background(), historyi.TransactionPolicyActive)
+		s.NoError(err)
+		s.False(advanced)
+		s.Zero(s.mutableState.accumulatedSkippedDuration())
+		_, ok := s.mutableState.GetChildExecutionInfo(10)
+		s.False(ok, "the completion is written once the parent clock has reached the child close time")
+		s.True(s.mutableState.HasPendingWorkflowTask())
+	})
+}
+
 func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 

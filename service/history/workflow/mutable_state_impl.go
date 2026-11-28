@@ -8066,6 +8066,21 @@ func (ms *MutableStateImpl) closeTransaction(
 	if isStateDirty {
 		regenTimerTasksForWorkflowTimeSkipping = ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
 	}
+	// A deferred child completion is recorded once the parent's clock reaches the
+	// child's close time and every earlier deadline has been delivered. The clock
+	// advances to that close time only when the parent is skippable. Flush runs
+	// even when this transaction already skipped, because that skip may have been
+	// the last deadline.
+	flushedRegen, err := ms.closeTransactionFlushDeferredChildCompletions(ctx, transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
+	if flushedRegen {
+		regenTimerTasksForWorkflowTimeSkipping = true
+	}
+	if ms.isStateDirty() {
+		isStateDirty = true
+	}
 
 	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
 	// the latter might fail the workflow task and buffered events must be flushed afterwards.

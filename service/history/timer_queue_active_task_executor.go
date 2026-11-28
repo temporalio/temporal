@@ -130,6 +130,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
+	case *tasks.DeferredChildCompletionTimerTask:
+		err = t.executeDeferredChildCompletionTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -1006,6 +1008,53 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		ctx, time.Time{}, true)
 	if err != nil {
 		return err
+	}
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+}
+
+// executeDeferredChildCompletionTimerTask runs when the parent's clock reaches a
+// deferred child's close time. closeTransaction writes the completion without
+// advancing the clock when the parent is not skippable. A task that fires early
+// is replaced with one at the close time.
+func (t *timerQueueActiveTaskExecutor) executeDeferredChildCompletionTimerTask(
+	ctx context.Context,
+	task *tasks.DeferredChildCompletionTimerTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil {
+		release(nil)
+		return consts.ErrWorkflowExecutionNotFound
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil)
+		return consts.ErrWorkflowCompleted
+	}
+
+	ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
+	event := ci.GetDeferredCompletionEvent()
+	if !ok || event.GetEventTime() == nil {
+		release(nil)
+		return errNoTimerFired
+	}
+	closeTime := event.GetEventTime().AsTime()
+	if mutableState.Now().Before(closeTime) {
+		mutableState.AddTasks(&tasks.DeferredChildCompletionTimerTask{
+			WorkflowKey:         mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: closeTime,
+			InitiatedEventID:    task.InitiatedEventID,
+		})
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
 }

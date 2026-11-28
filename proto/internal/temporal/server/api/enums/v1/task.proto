@@ -71,6 +71,10 @@ enum TaskType {
 
   // A transfer task that releases flow-control limiters held by a completed task attempt.
   TASK_TYPE_TRANSFER_RELEASE_LIMITER = 37;
+
+  // A timer task that delivers a deferred child completion once the parent's clock
+  // reaches the child's close time.
+  TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER = 38;
 }
 
 // TaskPriority is only used for replication task as of May 2024
