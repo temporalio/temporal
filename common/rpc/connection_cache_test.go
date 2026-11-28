@@ -95,6 +95,7 @@ func TestInternodeConnCache_CleanupRemovesShutdownConns(t *testing.T) {
 
 func TestInternodeConnCache_EvictsOnMembershipRemoval(t *testing.T) {
 	f := newCacheTestFactory()
+	defer f.Close()
 	conn := f.CreateHistoryGRPCConnection(hostA)
 	require.NotNil(t, conn)
 

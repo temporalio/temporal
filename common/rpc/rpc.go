@@ -77,6 +77,7 @@ type RPCFactory struct {
 	internodeConnCleanupTicker     *time.Ticker
 	stopCh                         chan struct{}
 	stopOnce                       sync.Once
+	watchersWg                     sync.WaitGroup
 	membershipEvictionDelay        time.Duration
 	membershipEvictionTickInterval time.Duration
 	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
@@ -432,11 +433,13 @@ func (d *RPCFactory) StartMembershipEviction() {
 			d.logger.Debug("Skipping membership eviction for service", tag.Service(svc), tag.Error(err))
 			continue
 		}
+		d.watchersWg.Add(1)
 		go d.watchMembership(resolver, svc)
 	}
 }
 
 func (d *RPCFactory) watchMembership(resolver membership.ServiceResolver, svc primitives.ServiceName) {
+	defer d.watchersWg.Done()
 	listenerName := fmt.Sprintf("rpcfactory-eviction-%s-%p", svc, d)
 	ch := make(chan *membership.ChangedEvent, 1)
 	if err := resolver.AddListener(listenerName, ch); err != nil {
@@ -509,6 +512,7 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 // Close shuts down all cached connections. Later requests return closed connections.
 func (d *RPCFactory) Close() {
 	d.stopOnce.Do(func() { close(d.stopCh) })
+	d.watchersWg.Wait()
 	d.internodeConnCleanupTicker.Stop()
 	_ = d.localFrontendGRPCConn().Close()
 
