@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	dc "go.temporal.io/server/common/dynamicconfig"
 )
 
 func TestValidateWorkerSessionOptions(t *testing.T) {
@@ -28,7 +29,8 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		options     *sessionpb.WorkerSessionOptions
 		instanceKey string
 		versioned   bool // the worker polls with worker versioning
-		buildIDs    bool // the worker polls with old build-ID versioning
+		buildIDs    bool // the worker sets the old use_versioning bit: build-ID versioning, unless versioned is also set
+		series      bool // the worker polls with old deployment-series versioning
 		invalid     bool
 	}{
 		{name: "regular poll"},
@@ -49,6 +51,10 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 		{name: "single session on a versioned worker", sticky: "S", options: singleSession("S"), instanceKey: "key", versioned: true},
 		{name: "multi session on a build-ID versioned worker", options: multiSession, instanceKey: "key", buildIDs: true, invalid: true},
 		{name: "single session on a build-ID versioned worker", sticky: "S", options: singleSession("S"), instanceKey: "key", buildIDs: true, invalid: true},
+		{name: "single session on a deployment-series worker", sticky: "S", options: singleSession("S"), instanceKey: "key", series: true, invalid: true},
+		// Go SDK workers using Worker Deployment versioning also set the old use_versioning bit.
+		{name: "multi session on a Go SDK versioned worker", options: multiSession, instanceKey: "key", versioned: true, buildIDs: true, invalid: true},
+		{name: "single session on a Go SDK versioned worker", sticky: "S", options: singleSession("S"), instanceKey: "key", versioned: true, buildIDs: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -66,7 +72,14 @@ func TestValidateWorkerSessionOptions(t *testing.T) {
 			if tc.buildIDs {
 				versionCapabilities = &commonpb.WorkerVersionCapabilities{BuildId: "build", UseVersioning: true}
 			}
-			err := validateWorkerSessionOptions(tc.options, taskQueue, tc.instanceKey, deploymentOptions, versionCapabilities)
+			if tc.series {
+				versionCapabilities = &commonpb.WorkerVersionCapabilities{BuildId: "build", UseVersioning: true, DeploymentSeriesName: "series"}
+			}
+			config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+			config.EnableSingleSessionWorkers = dc.GetBoolPropertyFnFilteredByNamespace(true)
+			config.EnableMultiSessionWorkers = dc.GetBoolPropertyFnFilteredByNamespace(true)
+			wh := &WorkflowHandler{config: config}
+			err := wh.validateWorkerSessionOptions("namespace", tc.options, taskQueue, tc.instanceKey, deploymentOptions, versionCapabilities)
 			if tc.invalid {
 				require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 			} else {

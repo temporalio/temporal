@@ -961,6 +961,20 @@ func (c *metricClient) TerminateWorkflowExecution(
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) UnbindWorkflowFromSessionWorker(
+	ctx context.Context,
+	request *historyservice.UnbindWorkflowFromSessionWorkerRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.UnbindWorkflowFromSessionWorkerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientUnbindWorkflowFromSessionWorker")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnbindWorkflowFromSessionWorker(ctx, request, opts...)
+}
+
 func (c *metricClient) UnpauseActivity(
 	ctx context.Context,
 	request *historyservice.UnpauseActivityRequest,

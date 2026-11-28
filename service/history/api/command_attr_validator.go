@@ -130,9 +130,6 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	}
 
 	if attributes.GetSessionOptions().GetWorkflowSession() != nil {
-		if !v.config.EnableStickyActivityExecution(namespaceEntry.Name().String()) {
-			return failedCause, serviceerror.NewInvalidArgument("Workflow-session activities are not enabled for this namespace")
-		}
 		if attributes.GetTaskQueue().GetName() != workflowTaskQueue {
 			return failedCause, serviceerror.NewInvalidArgument("Workflow-session activities must use the workflow task queue")
 		}

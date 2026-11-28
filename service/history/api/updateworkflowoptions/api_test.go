@@ -359,6 +359,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 
 	// mock a mutable state with an existing versioning override
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
+	s.currentMutableState.EXPECT().SessionWorkerQueue().Return("").AnyTimes()
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,
 		VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{
@@ -578,6 +579,7 @@ func TestMergeAndApply(t *testing.T) {
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: tc.initialConfig},
 			}).AnyTimes()
+			ms.EXPECT().SessionWorkerQueue().Return("").AnyTimes()
 
 			if tc.expectChanges {
 				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
@@ -608,44 +610,74 @@ func TestMergeAndApply(t *testing.T) {
 	}
 }
 
-// TestMergeAndApplyRejectsVersioningOverrideForSessionBinding tests that the versioning override of a workflow bound to
-// a worker servicing sessions cannot be set or unset, while its other options can still be updated.
+// TestMergeAndApplyRejectsVersioningOverrideForSessionBinding tests that a workflow bound to a worker servicing
+// sessions accepts a versioning override only when its effective version and behavior stay the same, while its other
+// options can still be updated.
 func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
-	pinned := &workflowpb.VersioningOverride{
-		Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+	pinnedTo := func(buildID string) *workflowpb.VersioningOverride {
+		return &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-			Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "d", BuildId: "b"},
-		}},
+			Version:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "d", BuildId: buildID},
+		}}}
 	}
+	autoUpgrade := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}}
+	// The worker declared the workflow pinned to build b1.
+	pinnedOnB1 := &workflowpb.WorkflowExecutionVersioningInfo{
+		Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "d", BuildId: "b1"},
+	}
+	single := &persistencespb.SessionState{ExclusiveWorker: true}
+	multi := &persistencespb.SessionState{}
 	priority := &commonpb.Priority{PriorityKey: 2}
 	versioningMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
 
 	tcs := []struct {
 		name         string
 		sessionState *persistencespb.SessionState
+		current      *workflowpb.WorkflowExecutionVersioningInfo
 		options      *workflowpb.WorkflowExecutionOptions
 		mask         *fieldmaskpb.FieldMask
 		rejected     bool
+		noChange     bool
 	}{
-		{name: "single-session binding, set override", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
-			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask, rejected: true},
-		{name: "multi-session binding, set override", sessionState: &persistencespb.SessionState{},
-			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask, rejected: true},
-		{name: "multi-session binding, unset override", sessionState: &persistencespb.SessionState{},
+		{name: "pin to the current version", sessionState: single, current: pinnedOnB1,
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedTo("b1")}, mask: versioningMask},
+		{name: "pin to another version", sessionState: single, current: pinnedOnB1,
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedTo("b2")}, mask: versioningMask, rejected: true},
+		{name: "auto-upgrade override on a pinned workflow", sessionState: single, current: pinnedOnB1,
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: autoUpgrade}, mask: versioningMask, rejected: true},
+		{name: "remove a pinned override matching the worker", sessionState: single,
+			current: &workflowpb.WorkflowExecutionVersioningInfo{
+				Behavior: pinnedOnB1.GetBehavior(), DeploymentVersion: pinnedOnB1.GetDeploymentVersion(), VersioningOverride: pinnedTo("b1"),
+			},
+			options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask},
+		{name: "remove a pinned override that differs from the worker", sessionState: single,
+			current: &workflowpb.WorkflowExecutionVersioningInfo{
+				Behavior: pinnedOnB1.GetBehavior(), DeploymentVersion: pinnedOnB1.GetDeploymentVersion(), VersioningOverride: pinnedTo("b2"),
+			},
 			options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask, rejected: true},
-		{name: "binding, override mixed with priority", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
-			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned, Priority: priority},
-			mask:    &fieldmaskpb.FieldMask{Paths: []string{"versioning_override", "priority"}}, rejected: true},
-		{name: "binding, priority only", sessionState: &persistencespb.SessionState{ExclusiveWorker: true},
+		{name: "unversioned multi-session binding, pin", sessionState: multi,
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedTo("b1")}, mask: versioningMask, rejected: true},
+		{name: "unversioned multi-session binding, remove a missing override", sessionState: multi,
+			options: &workflowpb.WorkflowExecutionOptions{}, mask: versioningMask, noChange: true},
+		{name: "binding, priority only", sessionState: single, current: pinnedOnB1,
 			options: &workflowpb.WorkflowExecutionOptions{Priority: priority}, mask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}}},
-		{name: "not bound, set override",
-			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinned}, mask: versioningMask},
+		{name: "not bound, pin to another version", current: pinnedOnB1,
+			options: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedTo("b2")}, mask: versioningMask},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			ms := historyi.NewMockMutableState(gomock.NewController(t))
-			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{SessionState: tc.sessionState}).AnyTimes()
-			if !tc.rejected {
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				SessionState:   tc.sessionState,
+				VersioningInfo: tc.current,
+			}).AnyTimes()
+			workerQueue := ""
+			if tc.sessionState != nil {
+				workerQueue = "worker-queue"
+			}
+			ms.EXPECT().SessionWorkerQueue().Return(workerQueue).AnyTimes()
+			if !tc.rejected && !tc.noChange {
 				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 					gomock.Any(), gomock.Any(), gomock.Any(),

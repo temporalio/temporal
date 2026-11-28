@@ -116,7 +116,8 @@ var (
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 	errOldWorkerVersioningPollerNotAllowed    = serviceerror.NewPermissionDenied("Deprecated worker versioning pollers are disabled on this namespace.", "")
 
-	errExclusiveWorkerSessionsDisabled = serviceerror.NewFailedPrecondition("Exclusive-worker sessions are disabled for this namespace.")
+	errSingleSessionWorkersDisabled = serviceerror.NewFailedPrecondition("Single-session workers are disabled for this namespace.")
+	errMultiSessionWorkersDisabled  = serviceerror.NewFailedPrecondition("Multi-session workers are disabled for this namespace.")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 

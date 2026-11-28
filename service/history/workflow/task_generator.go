@@ -458,9 +458,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternalf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID)
 	}
 
-	// Bound tasks wait for a replacement worker on the same queue, so an S2S timer would only recreate them which is
-	// why this timer is created only for non-exclusive workflow tasks.
-	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.HasExclusiveBinding() {
+	// A bound workflow's task waits for its worker or the queue's drain, so only ordinary sticky tasks get an S2S timer.
+	if r.mutableState.IsStickyTaskQueueSet() && r.mutableState.SessionWorkerQueue() == "" {
 		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
 		scheduleToStartTimeout := timeout.AsDuration()
 		wttt := &tasks.WorkflowTaskTimeoutTask{
@@ -502,11 +501,11 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 ) error {
 
 	var scheduleToStartTimeout time.Duration
-	if r.mutableState.IsStickyTaskQueueSet() && !r.mutableState.HasExclusiveBinding() {
+	if r.mutableState.IsStickyTaskQueueSet() && r.mutableState.SessionWorkerQueue() == "" {
 		_, timeout := r.mutableState.TaskQueueScheduleToStartTimeout(workflowTask.TaskQueue.GetName())
 		scheduleToStartTimeout = timeout.AsDuration()
 	} else {
-		// Speculative WT needs a finite recovery timeout even on normal and single-session queues.
+		// Speculative WT needs a finite recovery timeout even on normal and session queues.
 		// Normally WT should be added to matching right after being created
 		// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
 		// there is no good way to handle the error.

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -163,6 +164,52 @@ func TestRecordWorkflowTaskStartedSingleSessionRejection(t *testing.T) {
 			require.Nil(t, resp)
 			var obsolete *serviceerrors.ObsoleteMatchingTask
 			require.ErrorAs(t, err, &obsolete)
+		})
+	}
+}
+
+/*
+TestRecordWorkflowTaskStartedRefusesUnsupportedOverride tests that a session worker cannot take a workflow whose
+versioning override sessions do not support:
+ 1. Give the unbound workflow a pinned or auto-upgrade versioning override.
+ 2. Start its workflow task from a single-session or multi-session worker.
+ 3. Refuse with FailedPrecondition, so Matching keeps the task, unless the override is pinned and the worker is
+    single-session.
+*/
+func TestRecordWorkflowTaskStartedRefusesUnsupportedOverride(t *testing.T) {
+	pinned := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+		Pinned: &workflowpb.VersioningOverride_PinnedOverride{Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED},
+	}}
+	autoUpgrade := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}}
+	singleSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_SingleSession{
+		SingleSession: &sessionpb.SingleSessionOptions{StableIdentity: "S"},
+	}}
+	multiSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
+		MultiSession: &sessionpb.MultiSessionOptions{},
+	}}
+	for _, tc := range []struct {
+		name     string
+		override *workflowpb.VersioningOverride
+		options  *sessionpb.WorkerSessionOptions
+	}{
+		{name: "auto-upgrade override on a single-session worker", override: autoUpgrade, options: singleSession},
+		{name: "pinned override on a multi-session worker", override: pinned, options: multiSession},
+		{name: "auto-upgrade override on a multi-session worker", override: autoUpgrade, options: multiSession},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := invoke(t, func(ms *historyi.MockMutableState) {
+				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+					VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: tc.override},
+				}).AnyTimes()
+				ms.EXPECT().HasExclusiveBinding().Return(false).AnyTimes()
+				ms.EXPECT().SessionWorkerQueue().Return("").AnyTimes()
+				ms.EXPECT().GetWorkflowTaskByID(gomock.Any()).Return(&historyi.WorkflowTaskInfo{ScheduledEventID: 42}).AnyTimes()
+			}, func(req *historyservice.RecordWorkflowTaskStartedRequest) {
+				req.PollRequest.SessionOptions = tc.options
+			})()
+			require.Nil(t, resp)
+			var failedPrecondition *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPrecondition)
 		})
 	}
 }

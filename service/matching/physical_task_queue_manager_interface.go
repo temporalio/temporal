@@ -61,6 +61,9 @@ type (
 		NonNegligibleBacklogPriority() priorityKey
 		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
+		// StartSessionWorkerQueueDrain drains this dead multi-session worker's queue in the background; done reports
+		// whether it emptied.
+		StartSessionWorkerQueueDrain(done func(drained bool))
 		QueueKey() *PhysicalTaskQueueKey
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.

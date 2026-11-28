@@ -9,12 +9,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -847,6 +849,30 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
+}
+
+func (c *physicalTaskQueueManagerImpl) StartSessionWorkerQueueDrain(done func(drained bool)) {
+	backlogDrained := func() bool {
+		for _, status := range c.backlogMgr.InternalStatus() {
+			if !status.GetBacklogDrained() {
+				return false
+			}
+		}
+		return true
+	}
+	go c.matcher.drainSessionWorkerQueue(c.unbindWorkflowFromSessionWorker, backlogDrained, done)
+}
+
+// unbindWorkflowFromSessionWorker asks History to unbind the task's workflow from this queue's worker.
+func (c *physicalTaskQueueManagerImpl) unbindWorkflowFromSessionWorker(ctx context.Context, task *persistencespb.AllocatedTaskInfo) error {
+	ctx, cancel := context.WithTimeout(ctx, ioTimeout)
+	defer cancel()
+	_, err := c.partitionMgr.engine.historyClient.UnbindWorkflowFromSessionWorker(ctx, &historyservice.UnbindWorkflowFromSessionWorkerRequest{
+		NamespaceId: task.GetData().GetNamespaceId(),
+		Execution:   &commonpb.WorkflowExecution{WorkflowId: task.GetData().GetWorkflowId(), RunId: task.GetData().GetRunId()},
+		WorkerQueue: c.queue.Partition().RpcName(),
+	})
+	return err
 }
 
 func (c *physicalTaskQueueManagerImpl) counterFactory() counter.Counter {

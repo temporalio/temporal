@@ -2214,14 +2214,16 @@ TestSingleSessionWorkflowTaskTimers tests ordinary and speculative workflow-task
 func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name       string
-		bound      bool
-		runTimeout *durationpb.Duration
+		name         string
+		bound        bool
+		nonExclusive bool
+		runTimeout   *durationpb.Duration
 	}{
 		{name: "ordinary", runTimeout: durationpb.New(time.Hour)},
 		{name: "single session with run timeout", bound: true, runTimeout: durationpb.New(time.Hour)},
 		{name: "single session without run timeout", bound: true},
 		{name: "single session with zero run timeout", bound: true, runTimeout: durationpb.New(0)},
+		{name: "multi-session binding", bound: true, nonExclusive: true, runTimeout: durationpb.New(time.Hour)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -2233,10 +2235,10 @@ func TestSingleSessionWorkflowTaskTimers(t *testing.T) {
 				WorkflowRunTimeout:           tc.runTimeout,
 			}
 			if tc.bound {
-				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: true}
+				info.SessionState = &persistencespb.SessionState{ExclusiveWorker: !tc.nonExclusive}
 				info.StickyTaskQueue = "S"
 			}
-			ms.EXPECT().HasExclusiveBinding().Return(tc.bound).AnyTimes()
+			ms.EXPECT().SessionWorkerQueue().Return(info.GetStickyTaskQueue()).AnyTimes()
 			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 			ms.EXPECT().IsStickyTaskQueueSet().Return(true).AnyTimes()
 			ms.EXPECT().GetWorkflowKey().Return(key).AnyTimes()

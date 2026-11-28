@@ -19,6 +19,8 @@ type (
 		Stop(unloadCause)
 		Namespace() *namespace.Namespace
 		WaitUntilInitialized(context.Context) error
+		// StartSessionWorkerQueueDrain drains this dead multi-session worker's queue unless a drain is running.
+		StartSessionWorkerQueueDrain()
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller

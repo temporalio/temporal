@@ -258,6 +258,7 @@ const (
 	loadCauseOtherRead  // any other read-only rpc
 	loadCauseOtherWrite // any other mutating rpc
 	loadCauseForce      // root partition loaded, force load to ensure matching with back logged partitions
+	loadCauseSessionWorkerQueueDrain
 )
 
 const (
@@ -271,6 +272,7 @@ const (
 	unloadCauseConfigChange
 	unloadCauseOtherError
 	unloadCauseNamespaceStateChange
+	unloadCauseSessionWorkerQueueDrained
 )
 
 // NewConfig returns new service config with default values

@@ -8,6 +8,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -22,7 +23,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/unbindworkflowfromsessionworker"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -95,21 +97,46 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-// addActivityTask pushes an activity task to Matching. When Matching reports the sticky queue unavailable (its worker
-// is dead, or old build-ID versioning must assign the task), the task is sent to the activity's normal queue instead.
-// The workflow's binding is left as it is: the worker that starts the activity moves it.
+// addActivityTask pushes an activity task to Matching. When Matching reports the sticky queue's worker unavailable:
+//   - a single-session workflow never leaves its worker; Matching only reports it unavailable on a versioning mismatch,
+//     which is not handled yet (MTC-934), so the error is returned and the task retried rather than sent elsewhere.
+//   - a workflow bound to a multi-session worker is unbound on the active cluster, and its session activities wait for a
+//     session worker; a standby cluster cannot change the workflow, so it returns the error.
+//   - any other task goes to the activity's normal queue.
 func addActivityTask(
 	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowCache wcache.Cache,
 	matchingClient resource.MatchingRawClient,
 	request *matchingservice.AddActivityTaskRequest,
+	transactionPolicy historyi.TransactionPolicy,
 ) (*matchingservice.AddActivityTaskResponse, error) {
 	resp, err := matchingClient.AddActivityTask(ctx, request)
-	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); !ok {
+	if !common.IsStickyWorkerUnavailable(err) {
 		return resp, err
 	}
-	request.TaskQueue = &taskqueuepb.TaskQueue{Name: request.GetTaskQueue().GetNormalName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	request.SessionDirective = nil
-	return matchingClient.AddActivityTask(ctx, request)
+	directive := request.GetSessionDirective()
+	switch {
+	case workflow.IsSingleSessionDirective(directive):
+		// tasks bound to a single-session worker are not re-directed to the normal queue and are retried on the queue
+		return nil, err
+	case workflow.IsMultiSessionDirective(directive):
+		if transactionPolicy == historyi.TransactionPolicyPassive {
+			// A standby cluster cannot change the workflow.
+			return nil, err
+		}
+		return &matchingservice.AddActivityTaskResponse{}, unbindworkflowfromsessionworker.UnbindFromDeadWorker(ctx,
+			&historyservice.UnbindWorkflowFromSessionWorkerRequest{
+				NamespaceId: request.GetNamespaceId(),
+				Execution:   request.GetExecution(),
+				WorkerQueue: request.GetTaskQueue().GetName(),
+			}, shardContext, api.NewWorkflowConsistencyChecker(shardContext, workflowCache))
+	default:
+		// non-session based sticky tasks are redirected to the normal queue
+		request.TaskQueue = &taskqueuepb.TaskQueue{Name: request.GetTaskQueue().GetNormalName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		request.SessionDirective = nil
+		return matchingClient.AddActivityTask(ctx, request)
+	}
 }
 
 func (t *transferQueueTaskExecutorBase) pushActivity(
@@ -122,7 +149,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
-	resp, err := addActivityTask(ctx, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
+	resp, err := addActivityTask(ctx, t.shardContext, t.cache, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -136,7 +163,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
 		Priority:               priority,
-	})
+	}, transactionPolicy)
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here

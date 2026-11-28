@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -1311,13 +1312,11 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ms := historyi.NewMockMutableState(ctrl)
 	registry := namespace.NewMockRegistry(ctrl)
-	logger := log.NewNoopLogger()
-	client := dynamicconfig.NewMemoryClient()
-	client.OverrideSetting(dynamicconfig.EnableStickyActivityExecution, true)
-	config := configs.NewConfig(dynamicconfig.NewCollection(client, logger), 1)
+	config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue",
 	})
+	ms.EXPECT().SessionWorkerQueue().Return("")
 	registry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
 	handler := &workflowTaskCompletedHandler{
 		mutableState:  ms,
@@ -1334,4 +1333,41 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 	require.Nil(t, response)
 	require.True(t, handler.stopProcessing)
 	require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
+}
+
+// TestUpgradeOnContinueAsNewRejectedForSessionBinding tests that a workflow bound to a session worker cannot ask its
+// next run to upgrade to another version: sessions only support pinned workflows, so the workflow task fails with
+// BAD_CONTINUE_AS_NEW_ATTRIBUTES before the next run starts.
+func TestUpgradeOnContinueAsNewRejectedForSessionBinding(t *testing.T) {
+	t.Parallel()
+	for name, sessionState := range map[string]*persistencespb.SessionState{
+		"single-session": {ExclusiveWorker: true},
+		"multi-session":  {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue", SessionState: sessionState,
+				StickyTaskQueue: "worker-queue",
+			}).AnyTimes()
+			ms.EXPECT().SessionWorkerQueue().Return("worker-queue").AnyTimes()
+			config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
+			handler := &workflowTaskCompletedHandler{
+				mutableState:                   ms,
+				attrValidator:                  api.NewCommandAttrValidator(namespace.NewMockRegistry(ctrl), config, nil),
+				searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+			}
+			event, err := handler.handleCommandContinueAsNewWorkflow(t.Context(), &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+				WorkflowType:              &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:                 &taskqueuepb.TaskQueue{Name: "normal-queue"},
+				InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			})
+			require.NoError(t, err)
+			require.Nil(t, event)
+			require.True(t, handler.stopProcessing)
+			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
+		})
+	}
 }

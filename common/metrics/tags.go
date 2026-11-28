@@ -77,6 +77,8 @@ const (
 	trueValue                                      = "true"
 	errorPrefix                                    = "*"
 	ScalerShadowModeTagName                        = "scaler_shadow_mode"
+	sessionAdmissionModeTagName                    = "session_admission_mode"
+	bindingChangeTagName                           = "change"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -713,6 +715,19 @@ func HeaderCallsiteTag(kind string) Tag {
 
 func TimeoutTypeTag(timeoutType string) Tag {
 	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
+}
+
+// SessionAdmissionModeTag is the admission mode of the worker a workflow is bound to: single or multi session.
+func SessionAdmissionModeTag(exclusive bool) Tag {
+	if exclusive {
+		return Tag{Key: sessionAdmissionModeTagName, Value: "single"}
+	}
+	return Tag{Key: sessionAdmissionModeTagName, Value: "multi"}
+}
+
+// BindingChangeTag is how a workflow's binding to a multi-session worker changed: move or unbind.
+func BindingChangeTag(change string) Tag {
+	return Tag{Key: bindingChangeTagName, Value: change}
 }
 
 func ScalerShadowModeTag(enabled bool) Tag {

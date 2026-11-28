@@ -71,6 +71,7 @@ type (
 		enableWorkerConfigEvents   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableWorkerMetricsEvents  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		workerMetricsEventInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		onExpired                  func(namespace.ID, *workerpb.WorkerHeartbeat)
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
@@ -86,6 +87,8 @@ type (
 		EnableWorkerConfigEvents   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableWorkerMetricsEvents  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		WorkerMetricsEventInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		// OnExpired, if set, is called with the last heartbeat of each worker evicted because its heartbeats stopped.
+		OnExpired func(namespace.ID, *workerpb.WorkerHeartbeat)
 	}
 )
 
@@ -208,9 +211,9 @@ func (b *bucket) getWorkerHeartbeat(nsID namespace.ID, workerInstanceKey string)
 }
 
 // evictByTTL removes entries older than expireBefore from this bucket.
-// Returns the number of entries removed.
-func (b *bucket) evictByTTL(expireBefore time.Time) int {
-	removed := 0
+// Returns the removed entries.
+func (b *bucket) evictByTTL(expireBefore time.Time) []*entry {
+	var removed []*entry
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -227,7 +230,7 @@ func (b *bucket) evictByTTL(expireBefore time.Time) int {
 		if ns := b.namespaces[e.nsID]; ns != nil {
 			delete(ns.workers, e.hb.WorkerInstanceKey)
 		}
-		removed++
+		removed = append(removed, e)
 	}
 	return removed
 }
@@ -272,6 +275,7 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 		enableWorkerConfigEvents:   params.EnableWorkerConfigEvents,
 		enableWorkerMetricsEvents:  params.EnableWorkerMetricsEvents,
 		workerMetricsEventInterval: params.WorkerMetricsEventInterval,
+		onExpired:                  params.OnExpired,
 		metricsEmitter: &workerMetricsEmitter{
 			handler:     params.MetricsHandler,
 			config:      params.MetricsConfig,
@@ -398,13 +402,20 @@ func (m *registryImpl) evictLoop() {
 func (m *registryImpl) evictByTTL() {
 	ttl := m.ttlFn()
 	expireBefore := time.Now().Add(-ttl)
-	var removed int64
+	var expired []*entry
 	for _, b := range m.buckets {
-		removed += int64(b.evictByTTL(expireBefore))
+		expired = append(expired, b.evictByTTL(expireBefore)...)
 	}
-	if removed > 0 {
+	if removed := int64(len(expired)); removed > 0 {
 		m.total.Add(-removed)
 		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
+	}
+	if m.onExpired != nil && len(expired) > 0 {
+		go func() {
+			for _, e := range expired {
+				m.onExpired(e.nsID, e.hb)
+			}
+		}()
 	}
 }
 

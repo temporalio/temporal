@@ -28,6 +28,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueuePartition":          1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue":                   1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition":            1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/DrainSessionWorkerQueue":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData":             1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation":      1,

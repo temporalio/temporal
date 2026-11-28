@@ -1166,32 +1166,33 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 }
 
 /*
-TestRecordActivityTaskStartedMovesSessionBinding tests a session activity start leading a session move:
+TestRecordActivityTaskStartedKeepsSessionBinding tests that an activity start never changes a workflow's binding:
  1. The workflow is bound to worker X and has a pending workflow task and a second pending session activity.
- 2. A worker starts the first session activity; a multi-session worker moves the binding to itself, and a worker
-    without session options unbinds the workflow.
- 3. A move reschedules the pending workflow task and the other session activity; the started activity is not
-    reissued. A non-session activity, or the bound worker itself, leaves everything as it was.
+ 2. A worker starts the first activity from some queue.
+ 3. A session activity starts only from X's sticky queue; started anywhere else it is rejected as obsolete, so
+    Matching drops that copy. Either way the binding stays on X and nothing is rescheduled.
 */
-func (s *engine2Suite) TestRecordActivityTaskStartedMovesSessionBinding() {
+func (s *engine2Suite) TestRecordActivityTaskStartedKeepsSessionBinding() {
 	multiSession := &sessionpb.WorkerSessionOptions{Admission: &sessionpb.WorkerSessionOptions_MultiSession{
 		MultiSession: &sessionpb.MultiSessionOptions{},
 	}}
 	for _, tc := range []struct {
 		name            string
 		sessionActivity bool
+		pollQueue       string
 		options         *sessionpb.WorkerSessionOptions
 		instanceKey     string
-		wantWorkerQueue string
-		wantRescheduled bool
+		wantRejected    bool
 	}{
-		{name: "multi-session worker moves the session", sessionActivity: true, options: multiSession, instanceKey: "worker-y-sticky",
-			wantWorkerQueue: "worker-y-sticky", wantRescheduled: true},
-		{name: "worker without session options unbinds", sessionActivity: true, wantRescheduled: true},
-		{name: "bound worker keeps the session", sessionActivity: true, options: multiSession, instanceKey: "worker-x-sticky",
-			wantWorkerQueue: "worker-x-sticky"},
-		{name: "non-session activity leaves the binding", options: multiSession, instanceKey: "worker-y-sticky",
-			wantWorkerQueue: "worker-x-sticky"},
+		{name: "bound worker starts it from its sticky queue", sessionActivity: true, pollQueue: "worker-x-sticky",
+			options: multiSession, instanceKey: "worker-x-sticky"},
+		// Backstop: only an older server version puts a session activity on the normal queue.
+		{name: "copy on the normal queue is rejected for a multi-session worker", sessionActivity: true, pollQueue: "testTaskQueue",
+			options: multiSession, instanceKey: "worker-y-sticky", wantRejected: true},
+		{name: "copy on the normal queue is rejected for a worker without session options", sessionActivity: true, pollQueue: "testTaskQueue",
+			wantRejected: true},
+		{name: "non-session activity starts anywhere", pollQueue: "testTaskQueue", options: multiSession,
+			instanceKey: "worker-y-sticky"},
 	} {
 		s.Run(tc.name, func() {
 			we := &commonpb.WorkflowExecution{WorkflowId: "wId-" + tc.name, RunId: tests.RunID}
@@ -1207,17 +1208,19 @@ func (s *engine2Suite) TestRecordActivityTaskStartedMovesSessionBinding() {
 			pending.SessionState = inSession
 			ms.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			ms.GetExecutionInfo().StickyTaskQueue = "worker-x-sticky"
-			wt := addWorkflowTaskScheduledEvent(ms)
+			addWorkflowTaskScheduledEvent(ms)
 
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
-			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(scheduledEvent, nil)
+			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(scheduledEvent, nil).AnyTimes()
 			var mutation *persistence.WorkflowMutation
-			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-					mutation = &request.UpdateWorkflowMutation
-					return tests.UpdateWorkflowExecutionResponse, nil
-				})
+			if !tc.wantRejected {
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						mutation = &request.UpdateWorkflowMutation
+						return tests.UpdateWorkflowExecutionResponse, nil
+					})
+			}
 
 			_, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
 				NamespaceId:       tests.NamespaceID.String(),
@@ -1225,29 +1228,24 @@ func (s *engine2Suite) TestRecordActivityTaskStartedMovesSessionBinding() {
 				ScheduledEventId:  scheduledEvent.GetEventId(),
 				RequestId:         "reqId",
 				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-					TaskQueue: &taskqueuepb.TaskQueue{Name: tl}, Identity: "worker", SessionOptions: tc.options, WorkerInstanceKey: tc.instanceKey,
+					TaskQueue: &taskqueuepb.TaskQueue{Name: tc.pollQueue}, Identity: "worker", SessionOptions: tc.options, WorkerInstanceKey: tc.instanceKey,
 				},
 			})
 
+			if tc.wantRejected {
+				s.Require().ErrorAs(err, new(*serviceerrors.ObsoleteMatchingTask))
+				return
+			}
 			s.Require().NoError(err)
 			s.Require().NotNil(mutation)
-			s.Equal(tc.wantWorkerQueue, mutation.ExecutionInfo.GetStickyTaskQueue())
-			var rescheduledWorkflowTask, rescheduledActivities []int64
+			s.Equal("worker-x-sticky", mutation.ExecutionInfo.GetStickyTaskQueue())
+			s.NotNil(mutation.ExecutionInfo.GetSessionState())
 			for _, task := range mutation.Tasks[tasks.CategoryTransfer] {
-				switch task := task.(type) {
-				case *tasks.WorkflowTask:
-					rescheduledWorkflowTask = append(rescheduledWorkflowTask, task.ScheduledEventID)
-				case *tasks.ActivityTask:
-					rescheduledActivities = append(rescheduledActivities, task.ScheduledEventID)
+				switch task.(type) {
+				case *tasks.WorkflowTask, *tasks.ActivityTask:
+					s.Failf("unexpected reschedule", "%T", task)
 				default:
 				}
-			}
-			if tc.wantRescheduled {
-				s.Equal([]int64{wt.ScheduledEventID}, rescheduledWorkflowTask)
-				s.Equal([]int64{pending.ScheduledEventId}, rescheduledActivities, "only the pending session activity is reissued")
-			} else {
-				s.Empty(rescheduledWorkflowTask)
-				s.Empty(rescheduledActivities)
 			}
 		})
 	}

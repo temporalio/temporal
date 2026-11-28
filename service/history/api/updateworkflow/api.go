@@ -23,9 +23,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/unbindworkflowfromsessionworker"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -380,6 +380,14 @@ func validateCallbacks(
 	})
 }
 
+func (u *Updater) addWorkflowTaskToNormalQueue(ctx context.Context) error {
+	u.taskQueue = &taskqueuepb.TaskQueue{
+		Name: u.normalTaskQueueName,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	return u.addWorkflowTaskToMatching(ctx)
+}
+
 func (u *Updater) OnSuccess(
 	ctx context.Context,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
@@ -390,13 +398,26 @@ func (u *Updater) OnSuccess(
 		//   Helper function needs to be extracted to avoid code duplication.
 		err := u.addWorkflowTaskToMatching(ctx)
 
-		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
-			// If sticky worker is unavailable, switch to original normal task queue.
-			u.taskQueue = &taskqueuepb.TaskQueue{
-				Name: u.normalTaskQueueName,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		if common.IsStickyWorkerUnavailable(err) {
+			switch sessionDirective := workflow.TaskSessionDirective(u.sessionState, u.taskQueue); {
+			case workflow.IsSingleSessionDirective(sessionDirective):
+				// A single-session workflow never leaves its worker: the task's schedule-to-start timeout reschedules it
+				// there (see the error handling below).
+			case workflow.IsMultiSessionDirective(sessionDirective):
+				// The bound multi-session worker is dead: unbind now, as for any other task. That write turns this
+				// speculative task into a normal one, so it stays in history even if the update is rejected; it then
+				// goes to the normal queue, where a session worker binds the workflow.
+				if err = unbindworkflowfromsessionworker.UnbindFromDeadWorker(ctx, &historyservice.UnbindWorkflowFromSessionWorkerRequest{
+					NamespaceId: u.wfKey.NamespaceID,
+					Execution:   &commonpb.WorkflowExecution{WorkflowId: u.wfKey.WorkflowID, RunId: u.wfKey.RunID},
+					WorkerQueue: u.taskQueue.GetName(),
+				}, u.shardCtx, u.workflowConsistencyChecker); err == nil {
+					err = u.addWorkflowTaskToNormalQueue(ctx)
+				}
+			default:
+				// If sticky worker is unavailable, switch to original normal task queue.
+				err = u.addWorkflowTaskToNormalQueue(ctx)
 			}
-			err = u.addWorkflowTaskToMatching(ctx)
 		}
 
 		if err != nil {

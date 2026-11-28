@@ -3152,6 +3152,20 @@ func (mr *MockMutableStateMockRecorder) HasParentExecution() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasParentExecution", reflect.TypeOf((*MockMutableState)(nil).HasParentExecution))
 }
 
+// HasPendingSessionActivities mocks base method.
+func (m *MockMutableState) HasPendingSessionActivities() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasPendingSessionActivities")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasPendingSessionActivities indicates an expected call of HasPendingSessionActivities.
+func (mr *MockMutableStateMockRecorder) HasPendingSessionActivities() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingSessionActivities", reflect.TypeOf((*MockMutableState)(nil).HasPendingSessionActivities))
+}
+
 // HasPendingWorkflowTask mocks base method.
 func (m *MockMutableState) HasPendingWorkflowTask() bool {
 	m.ctrl.T.Helper()

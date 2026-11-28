@@ -273,6 +273,36 @@ func TestIsSystemWorker(t *testing.T) {
 	})
 }
 
+// TestEvictByTTLReportsExpiredWorkers tests that only workers whose heartbeats stopped are reported, not workers
+// removed because the registry is full.
+func TestEvictByTTLReportsExpiredWorkers(t *testing.T) {
+	expired := make(chan *workerpb.WorkerHeartbeat, 2)
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Second),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(1),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   metrics.NoopMetricsHandler,
+		OnExpired: func(nsID namespace.ID, hb *workerpb.WorkerHeartbeat) {
+			require.Equal(t, namespace.ID("ns"), nsID)
+			expired <- hb
+		},
+	})
+	defer m.Stop()
+
+	stale := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "stale"}
+	m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{stale})
+	m.getBucket("ns").namespaces["ns"].workers[stale.WorkerInstanceKey].lastSeen = time.Now().Add(-2 * time.Second)
+	m.evictByTTL()
+	require.Equal(t, "stale", (<-expired).GetWorkerInstanceKey())
+
+	m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{WorkerInstanceKey: "a"}, {WorkerInstanceKey: "b"}})
+	m.evictByCapacity()
+	require.Len(t, m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue), 1)
+	require.Empty(t, expired)
+}
+
 func TestEvictByTTL(t *testing.T) {
 	// Use capture handler to verify metrics
 	captureHandler := metricstest.NewCaptureHandler()

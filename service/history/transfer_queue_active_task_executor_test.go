@@ -29,7 +29,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
@@ -253,17 +252,16 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 	for _, tc := range []struct {
-		name           string
-		session        bool
-		droppedSession bool
-		bound          bool
-		workerGone     bool
+		name       string
+		session    bool
+		bound      bool
+		workerGone bool
 	}{
 		{name: "regular activity with sticky workflow"},
 		{name: "workflow-session activity", session: true},
 		{name: "single-session activity", session: true, bound: true},
-		{name: "workflow-session activity after the session was dropped", session: true, droppedSession: true},
 		{name: "workflow-session activity whose bound worker is gone", session: true, workerGone: true},
+		{name: "single-session activity reported unavailable is retried, not redirected", session: true, bound: true, workerGone: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -308,8 +306,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			switch {
 			case tc.bound:
 				mutableState.BindExclusiveWorker("sticky-worker")
-			case tc.droppedSession:
-				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 			case tc.session:
 				mutableState.GetExecutionInfo().SessionState = &persistencespb.SessionState{}
 				mutableState.GetExecutionInfo().StickyTaskQueue = "sticky-worker"
@@ -334,28 +330,38 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			request := s.createAddActivityTaskRequest(transferTask, ai)
-			if tc.session && !tc.droppedSession {
+			if tc.session {
 				request.TaskQueue = &taskqueuepb.TaskQueue{Name: "sticky-worker", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: taskQueueName}
-			}
-			if tc.session && !tc.droppedSession {
 				request.SessionDirective = &taskqueuespb.TaskSessionDirective{IsExclusiveWorkerAssigned: tc.bound}
 			}
-			if tc.workerGone {
-				normalRequest := common.CloneProto(request)
-				normalRequest.TaskQueue = &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-				normalRequest.SessionDirective = nil
-				gomock.InOrder(
-					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(common.CloneProto(request)), gomock.Any()).
-						Return(nil, &serviceerrors.StickyWorkerUnavailable{}),
-					s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(normalRequest), gomock.Any()).
-						Return(&matchingservice.AddActivityTaskResponse{}, nil),
-				)
+			var mutation *persistence.WorkflowMutation
+			if tc.workerGone && tc.bound {
+				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).
+					Return(nil, &serviceerrors.StickyWorkerUnavailable{})
+			} else if tc.workerGone {
+				// The dead worker is reported, so the workflow is unbound in place instead of redirecting the activity.
+				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).
+					Return(nil, &serviceerrors.StickyWorkerUnavailable{})
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						mutation = &request.UpdateWorkflowMutation
+						return tests.UpdateWorkflowExecutionResponse, nil
+					})
 			} else {
 				s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), protomock.Eq(request), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 			}
 
 			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+			if tc.workerGone && tc.bound {
+				s.ErrorAs(resp.ExecutionErr, new(*serviceerrors.StickyWorkerUnavailable))
+				return
+			}
 			s.Require().NoError(resp.ExecutionErr)
+			if tc.workerGone {
+				s.Require().NotNil(mutation)
+				s.Nil(mutation.ExecutionInfo.GetSessionState())
+				s.Empty(mutation.ExecutionInfo.GetStickyTaskQueue())
+			}
 		})
 	}
 }
@@ -554,6 +560,64 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Paused() 
 	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_WaitsForSessionBinding() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	taskID := s.mustGenerateTaskID()
+	activityID := "activity-1"
+	activityType := "some random activity type"
+	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
+
+	// A session activity of an unbound workflow waits for a session worker to bind the workflow.
+	ai.SessionState = &persistencespb.ActivitySessionState{Placement: &persistencespb.ActivitySessionState_WorkflowSession{WorkflowSession: &emptypb.Empty{}}}
+
+	transferTask := &tasks.ActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              taskID,
+		TaskQueue:           taskQueueName,
+		ScheduledEventID:    event.GetEventId(),
+		VisibilityTimestamp: time.Now().UTC(),
+		Stamp:               ai.Stamp, // Ensure stamp matches
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWorkflowTask() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -665,12 +729,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstW
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_NonFirstWorkflowTask() {
 	for _, tc := range []struct {
-		name               string
-		bound, unavailable bool
+		name                             string
+		bound, multiSession, unavailable bool
 	}{
 		{name: "ordinary success"},
 		{name: "ordinary fallback", unavailable: true},
 		{name: "single session success", bound: true},
+		{name: "dead multi-session worker unbinds the workflow", multiSession: true, unavailable: true},
+		{name: "single session worker reported unavailable is retried, not redirected", bound: true, unavailable: true},
 	} {
 		s.Run(tc.name, func() {
 			execution := &commonpb.WorkflowExecution{
@@ -711,6 +777,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			if tc.bound {
 				executionInfo.SessionState = &persistencespb.SessionState{ExclusiveWorker: true}
 			}
+			if tc.multiSession {
+				executionInfo.SessionState = &persistencespb.SessionState{}
+			}
 			executionInfo.StickyScheduleToStartTimeout = stickyTaskQueueTimeout
 
 			// make another round of workflow task
@@ -733,8 +802,17 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 			persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			calls := 1
-			if tc.unavailable {
+			if tc.unavailable && !tc.multiSession && !tc.bound {
 				calls = 2
+			}
+			var mutation *persistence.WorkflowMutation
+			if tc.multiSession {
+				// The task is not redirected: the workflow is unbound in place and its workflow task rescheduled.
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						mutation = &request.UpdateWorkflowMutation
+						return tests.UpdateWorkflowExecutionResponse, nil
+					})
 			}
 			callCount := 0
 			s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -758,7 +836,24 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 				}).Times(calls)
 
 			resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+			if tc.bound && tc.unavailable {
+				s.ErrorAs(resp.ExecutionErr, new(*serviceerrors.StickyWorkerUnavailable))
+				return
+			}
 			s.Require().NoError(resp.ExecutionErr)
+			if tc.multiSession {
+				s.Require().NotNil(mutation)
+				s.Nil(mutation.ExecutionInfo.GetSessionState())
+				s.Empty(mutation.ExecutionInfo.GetStickyTaskQueue())
+				var workflowTasks []*tasks.WorkflowTask
+				for _, task := range mutation.Tasks[tasks.CategoryTransfer] {
+					if workflowTask, ok := task.(*tasks.WorkflowTask); ok {
+						workflowTasks = append(workflowTasks, workflowTask)
+					}
+				}
+				s.Require().Len(workflowTasks, 1)
+				s.Equal(taskQueueName, workflowTasks[0].TaskQueue, "the workflow task is rescheduled to the normal queue")
+			}
 		})
 	}
 }

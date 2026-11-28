@@ -3,6 +3,7 @@ package resetstickytaskqueue
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -32,18 +33,7 @@ func Invoke(
 			resetRequest.Execution.RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowLease.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			// TODO (Shivam): Confirm whether this API is still worth handling for workflow sessions at all, now that
-			// ShutdownWorker is preferred. Clearing stickiness here also drops a non-exclusive binding.
-			mutableState.ClearStickyTaskQueue(historyi.StickyClearForResetStickyTaskQueue)
-			return &api.UpdateWorkflowAction{
-				Noop:               true,
-				CreateWorkflowTask: false,
-			}, nil
+			return resetStickyTaskQueue(workflowLease.GetMutableState())
 		},
 		nil,
 		shardContext,
@@ -54,4 +44,20 @@ func Invoke(
 		return nil, err
 	}
 	return &historyservice.ResetStickyTaskQueueResponse{}, nil
+}
+
+func resetStickyTaskQueue(mutableState historyi.MutableState) (*api.UpdateWorkflowAction, error) {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return nil, consts.ErrWorkflowCompleted
+	}
+	if mutableState.SessionWorkerQueue() != "" {
+		// A session binding is not a cache: the workflow's tasks and session activities belong to the bound worker, so
+		// resetting stickiness must not release it.
+		return nil, serviceerror.NewFailedPrecondition("workflow is bound to a session worker; its sticky task queue cannot be reset")
+	}
+	mutableState.ClearStickyTaskQueue(historyi.StickyClearForResetStickyTaskQueue)
+	return &api.UpdateWorkflowAction{
+		Noop:               true,
+		CreateWorkflowTask: false,
+	}, nil
 }

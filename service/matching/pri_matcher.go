@@ -12,12 +12,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -136,12 +138,16 @@ func newPriTaskMatcher(
 	return tm
 }
 
-func (tm *priTaskMatcher) Start() {
+// newBacklogTaskRetrier backs off between attempts to process a backlog task, up to BacklogTaskForwardTimeout.
+func (tm *priTaskMatcher) newBacklogTaskRetrier() backoff.Retrier {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
-	validatorRetrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
-	go tm.validateTasks(validatorRetrier)
+	return backoff.NewRetrier(policy, clock.NewRealTimeSource())
+}
+
+func (tm *priTaskMatcher) Start() {
+	go tm.validateTasks(tm.newBacklogTaskRetrier())
 
 	if tm.fwdr == nil {
 		return
@@ -152,8 +158,7 @@ func (tm *priTaskMatcher) Start() {
 	// Forwarders share a synchronized per-task validation cache. Each worker owns
 	// its retrier so one worker's success cannot reset another worker's backoff.
 	for range tm.config.ForwarderMaxOutstandingTasks() {
-		retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
-		go tm.forwardTasks(lim, retrier)
+		go tm.forwardTasks(lim, tm.newBacklogTaskRetrier())
 	}
 
 	if normal, ok := tm.partition.(*tqid.NormalPartition); ok { // always true here, sticky has nil tm.fwdr
@@ -322,6 +327,74 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 		// this loop will essentially be limited to that interval.
 		_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
 	}
+}
+
+// drainSessionWorkerQueue unbinds each backlog task's workflow from this dead worker in History and drops the task. It
+// calls done(true) once the backlog is empty, or done(false) if the queue closes or History will not release a
+// workflow here (see unbindStopsDrain).
+func (tm *priTaskMatcher) drainSessionWorkerQueue(
+	unbind func(context.Context, *persistencespb.AllocatedTaskInfo) error,
+	isDrained func() bool,
+	done func(drained bool),
+) {
+	retrier := tm.newBacklogTaskRetrier()
+	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
+	for {
+		// A draining queue has no pollers and refuses new tasks, so it would otherwise be unloaded as idle.
+		tm.markAlive()
+		if lim.Wait(tm.tqCtx) != nil {
+			done(false)
+			return
+		}
+		// Wake up periodically without a task to check whether the backlog is empty.
+		waitCtx, cancel := context.WithTimeout(tm.tqCtx, time.Second)
+		res := tm.data.EnqueuePollerAndWait([]context.Context{tm.tqCtx, waitCtx}, &waitingPoller{taskForwarderType: sessionWorkerQueueDrainTaskForwarder})
+		cancel()
+		if res.ctxErr != nil {
+			if res.ctxErrIdx == 0 {
+				done(false)
+				return
+			}
+			if isDrained() {
+				done(true)
+				return
+			}
+			continue
+		}
+
+		task := res.task
+		err := unbind(tm.tqCtx, task.event.AllocatedTaskInfo)
+		switch {
+		case unbindDropsTask(err):
+			task.finish(dropReasonSessionWorkerQueueDraining)
+			retrier.Reset()
+		case unbindStopsDrain(err):
+			// Retrying would not change History's answer, and the drain keeps the partition loaded, so it would retry
+			// indefinitely. Keep the task and stop; the queue takes tasks again.
+			task.finish(err)
+			done(false)
+			return
+		default:
+			// The task reader retries transient errors in memory and re-spools the task on other errors.
+			task.finish(err)
+			_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(err))
+		}
+	}
+}
+
+// unbindDropsTask reports whether a drained task can be dropped after History's answer: History moved the workflow's
+// tasks to the normal queue, or the workflow or its namespace is gone.
+func unbindDropsTask(err error) bool {
+	_, namespaceGone := errors.AsType[*serviceerror.NamespaceNotFound](err)
+	return err == nil || common.IsNotFoundError(err) || namespaceGone
+}
+
+// unbindStopsDrain reports whether History will not release the task's workflow here: it is bound to a single-session
+// worker, whose queue is never drained, or this cluster is standby for it.
+func unbindStopsDrain(err error) bool {
+	_, singleSessionBinding := errors.AsType[*serviceerror.FailedPrecondition](err)
+	_, notActive := errors.AsType[*serviceerror.NamespaceNotActive](err)
+	return singleSessionBinding || notActive
 }
 
 func (tm *priTaskMatcher) forwardPolls(
@@ -618,15 +691,20 @@ func (tm *priTaskMatcher) pollForSingleSessionWorker(ctx context.Context, pollMe
 		return nil, err
 	}
 	if err := tm.assignExclusiveWorker(); err != nil {
-		return nil, err
+		// The workflow is acquired, but persisting this queue's exclusive assignment failed. Returning the error would
+		// drop a task History already started for this worker, so the task is returned and the failure is logged:
+		// until the next metadata write succeeds, the assignment exists only in memory, and losing this partition
+		// before then would let the stable identity acquire a second workflow.
+		tm.logger.Warn("Failed to persist the exclusive worker assignment; it is held in memory until the next metadata write",
+			tag.Error(err))
 	}
 	return task, nil
 }
 
 func (tm *priTaskMatcher) beginSingleSessionAcquisition(ctx context.Context, noWait bool) (bool, error) {
 	// The main idea here is to have a sequential allowance of pollers that are polling with the
-	// same stable identity so that we do not have multiple pollers for the same identity acquiring tasks
-	// from multiple workflows at the same time
+	// same stable identity so that we do not have multiple pollers with the same identity acquiring tasks
+	// from different workflows at the same time.
 	tm.singleSessionAcquisitionMutex.Lock()
 	defer tm.singleSessionAcquisitionMutex.Unlock()
 

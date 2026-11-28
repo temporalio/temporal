@@ -500,11 +500,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, err
 	}
 
-	// Only a workflow bound to a worker servicing sessions may schedule workflow-session activities. Core enforces this
-	// in the SDK; the server mirrors it for other clients. If the workflow was unbound while the task ran, the task fails
-	// and is retried from the normal queue.
-	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetSessionState() == nil {
-		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to be bound to a worker servicing sessions")
+	// Only a workflow bound to a worker servicing sessions may schedule workflow-session activities. Core enforces the
+	// equivalent in the SDK (the worker must have session options); the server checks the binding, which a worker
+	// servicing sessions sets when it starts the task. If the workflow was unbound while the task ran, the task fails and
+	// is retried from the normal queue, where a worker servicing sessions binds it again.
+	if attr.GetSessionOptions().GetWorkflowSession() != nil && handler.mutableState.SessionWorkerQueue() == "" {
+		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to be bound to a worker servicing sessions, and it is not bound now")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
 
@@ -957,10 +958,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
-	// starts unbound.
-	sessionInfo := handler.mutableState.SessionInfo()
-
 	// Always add workflow completed event to this one
 	event, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
@@ -969,7 +966,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 
 	// Check if this workflow has a cron schedule
 	if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID, sessionInfo)
+		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID)
 	}
 
 	return event, nil
@@ -1023,8 +1020,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
-	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit; a cron run
-	// starts unbound.
+	// Closing the run clears a non-exclusive binding in place, so read it first for a retry to inherit.
 	sessionInfo := handler.mutableState.SessionInfo()
 
 	// Always add workflow failed event
@@ -1042,7 +1038,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 	if retryBackoff != backoff.NoBackoff {
 		return event, handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID, sessionInfo)
 	} else if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID, sessionInfo)
+		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
 	}
 
 	// No retry or cron
@@ -1206,6 +1202,14 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
+	}
+
+	// Sessions only support pinned workflows within a single run: a bound workflow cannot ask its next run to upgrade to
+	// another version.
+	if attr.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED &&
+		handler.mutableState.SessionWorkerQueue() != "" {
+		err := serviceerror.NewInvalidArgument("upgrade on continue-as-new is not supported for a workflow bound to a worker servicing sessions")
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
@@ -1630,7 +1634,6 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	newRunID string,
-	previousSessionInfo *sessionpb.SessionInfo,
 ) error {
 	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -1660,7 +1663,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		ctx,
 		handler.mutableState,
 		newMutableState,
-		previousSessionInfo,
+		nil, // a cron run starts unbound
 		newRunID,
 		startAttr,
 		startEvent.Links,

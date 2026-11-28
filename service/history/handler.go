@@ -1368,6 +1368,31 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 	return resp, nil
 }
 
+// UnbindWorkflowFromSessionWorker unbinds a workflow from a dead multi-session worker whose queue Matching is draining.
+func (h *Handler) UnbindWorkflowFromSessionWorker(ctx context.Context, request *historyservice.UnbindWorkflowFromSessionWorkerRequest) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetExecution().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.UnbindWorkflowFromSessionWorker(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return resp, nil
+}
+
 // ReplicateEventsV2 is called by processor to replicate history events for passive namespaces
 func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) (*historyservice.ReplicateEventsV2Response, error) {
 	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {

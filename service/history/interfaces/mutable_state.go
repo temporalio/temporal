@@ -57,20 +57,24 @@ const (
 	// part of the workflow's state and is kept.
 	StickyClearForStateRebuild
 	// StickyClearForStartedOffStickyQueue means a worker started the task from a queue other than the sticky queue, so
-	// the sticky worker did not take it. A workflow bound to a multi-session worker is unbound here and bound again by
-	// UpdateNonExclusiveWorkerBinding for the starting worker.
+	// the sticky worker did not take it. This should not happen for a workflow bound to a session worker, since a dead
+	// bound worker unbinds the workflow first; if it does, a multi-session binding is released here and
+	// UpdateNonExclusiveWorkerBinding binds the starting worker.
 	StickyClearForStartedOffStickyQueue
 	// StickyClearForBoundWorkerLost means the workflow's bound multi-session worker no longer serves it: a worker
-	// without sessions started one of its tasks. The binding is released; the caller reschedules the pending work.
+	// without sessions started one of its tasks, or the bound worker is gone. The binding is released; the caller
+	// reschedules the pending work.
 	StickyClearForBoundWorkerLost
 	// StickyClearForVersioning means the workflow moves to another deployment version or build ID; the bound worker may
 	// be on the old one, so the binding is released.
 	// TODO (Shivam): Multi-session workers do not support worker versioning yet; revisit how a versioning change
 	// releases and reschedules a multi-session binding in public preview (MTC-934).
 	StickyClearForVersioning
-	// StickyClearForResetStickyTaskQueue means the ResetStickyTaskQueue API was called.
+	// StickyClearForResetStickyTaskQueue means the ResetStickyTaskQueue API was called. The API refuses a workflow bound
+	// to a session worker, so this clear only touches ordinary stickiness.
 	StickyClearForResetStickyTaskQueue
-	// StickyClearForWorkflowClose means the workflow closed, so the binding is released.
+	// StickyClearForWorkflowClose means the workflow closed. A multi-session binding is released; a single-session binding
+	// is kept, so queries still reach its worker.
 	StickyClearForWorkflowClose
 )
 
@@ -280,17 +284,14 @@ type (
 		ClearStickyTaskQueue(reason StickyClearReason) bool
 		IsStickyTaskQueueSet() bool
 		SessionWorkerQueue() string
+		// HasPendingSessionActivities reports whether any pending activity follows the workflow's session.
+		HasPendingSessionActivities() bool
 		// HasExclusiveBinding reports whether the workflow is bound to a single-session worker.
 		HasExclusiveBinding() bool
 		// SessionInfo returns the workflow's binding in the shape recorded on history events, or nil if it is not bound.
 		SessionInfo() *sessionpb.SessionInfo
 		// ApplySessionInfo sets the workflow's binding from a replayed history event.
 		ApplySessionInfo(info *sessionpb.SessionInfo)
-		// UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that just started one of its tasks.
-		// previousWorkerStickyQueue must be read before this start changed stickiness (a binding move or a deployment
-		// transition clears the binding); passing the current value misreads a move as a restore. Call it after the task's
-		// started event is recorded; for workflow tasks, after the response is built, so a worker coming from the normal
-		// queue gets full history.
 		UpdateNonExclusiveWorkerBinding(options *sessionpb.WorkerSessionOptions, workerInstanceKey string, previousWorkerStickyQueue string) (bool, error)
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 

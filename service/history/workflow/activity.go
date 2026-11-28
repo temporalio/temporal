@@ -37,11 +37,17 @@ func ActivityTaskQueue(ms historyi.MutableState, ai *persistencespb.ActivityInfo
 	}
 	workerQueue := ms.SessionWorkerQueue()
 	if workerQueue == "" {
-		// The activity was scheduled with the intent of binding to a worker where the workflow was bound. However,
-		// at this instant, the workflow is not bound to a single worker. Thus, we dispatch the activity to the normal queue.
+		// Not dispatched while unbound (see WaitsForSessionBinding); kept as a safe default.
 		return normalQueue
 	}
 	return &taskqueuepb.TaskQueue{Name: workerQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: ai.TaskQueue}
+}
+
+// WaitsForSessionBinding reports whether the activity follows the workflow's session while the workflow is not bound
+// to a worker. Such an activity is not dispatched: a session worker starting a workflow task binds the workflow and
+// reissues it.
+func WaitsForSessionBinding(ms historyi.MutableState, ai *persistencespb.ActivityInfo) bool {
+	return ai.GetSessionState().GetWorkflowSession() != nil && ms.SessionWorkerQueue() == ""
 }
 
 func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivityState {

@@ -92,10 +92,6 @@ const (
 
 	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
 	minRetainedActivityFailureSize = 128
-
-	// defaultSessionStickyScheduleToStartTimeout is the schedule-to-start timeout of a sticky task of a workflow bound to
-	// a multi-session worker: a bound workflow stores no sticky timeout, and a missing or 0 timeout would loop.
-	defaultSessionStickyScheduleToStartTimeout = 5 * time.Second
 )
 
 // Scheduled tasks with timestamp after this will not be created.
@@ -1504,7 +1500,31 @@ func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 
 // BindExclusiveWorker binds the workflow to a single-session worker, whose sticky queue is its stable identity.
 func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string) {
+	if !ms.HasExclusiveBinding() {
+		ms.recordSessionBound(true)
+	}
 	ms.setStickyTaskQueueAndBinding(stableIdentity, nil, &persistencespb.SessionState{ExclusiveWorker: true})
+}
+
+// recordSessionBound counts a workflow that starts using sessions; each workflow is counted once.
+func (ms *MutableStateImpl) recordSessionBound(exclusive bool) {
+	metrics.WorkflowBoundToSessionWorkerCounter.With(ms.metricsHandler).Record(1,
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.SessionAdmissionModeTag(exclusive),
+	)
+}
+
+const (
+	bindingChangeMove   = "move"
+	bindingChangeUnbind = "unbind"
+)
+
+// recordBindingChange counts a change of a workflow's binding to a multi-session worker after its first bind.
+func (ms *MutableStateImpl) recordBindingChange(change string) {
+	metrics.WorkflowBindingChangeCounter.With(ms.metricsHandler).Record(1,
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.BindingChangeTag(change),
+	)
 }
 
 // setStickyTaskQueueAndBinding is the only writer of the sticky queue and the session binding. For a workflow bound
@@ -1592,6 +1612,16 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 	return ms.executionInfo.StickyTaskQueue != ""
 }
 
+// HasPendingSessionActivities reports whether any pending activity follows the workflow's session.
+func (ms *MutableStateImpl) HasPendingSessionActivities() bool {
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.GetSessionState().GetWorkflowSession() != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // SessionWorkerQueue returns the sticky queue of the worker the workflow is bound to, or "" if it is not bound.
 func (ms *MutableStateImpl) SessionWorkerQueue() string {
 	if ms.executionInfo.GetSessionState() == nil {
@@ -1601,9 +1631,17 @@ func (ms *MutableStateImpl) SessionWorkerQueue() string {
 }
 
 // UpdateNonExclusiveWorkerBinding makes the workflow follow the worker that services it: a multi-session worker
-// starting one of its tasks becomes its bound worker, and nil options (a worker without sessions started a task)
-// unbind it. It reports whether the binding changed, and reschedules the pending workflow task and session activities
-// when it did. previousWorkerStickyQueue is the bound worker's sticky queue, read before the start cleared stickiness.
+// starting one of its tasks becomes its bound worker, and a worker that can't service sessions unbinds it (nil options:
+// such a worker started a task, or the bound worker was reported dead). The outcomes are:
+//   - non-session: no binding before or after, nothing to do;
+//   - no change: the bound worker started the task from its own sticky queue;
+//   - unbind: a worker that can't service sessions took over, or the bound worker was reported dead;
+//   - restore: the bound worker started the task from the normal queue, because Matching briefly saw it as dead or
+//     after a failover, and that start released the binding;
+//   - bind or move: a multi-session worker binds an unbound workflow or takes it over from another worker.
+//
+// It returns whether the binding changed. On unbind, bind or move it also reschedules the pending workflow task and
+// session activities. previousWorkerStickyQueue is the binding from before this task started.
 func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	options *sessionpb.WorkerSessionOptions,
 	workerInstanceKey string,
@@ -1615,29 +1653,34 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 	}
 	var newWorkerStickyQueue string
 	if options.GetMultiSession() == nil {
-		newWorkerStickyQueue = "" // a worker without sessions: unbind
+		newWorkerStickyQueue = "" // a worker that can't service sessions: unbind
 	} else {
 		newWorkerStickyQueue = workerInstanceKey // a multi-session worker's sticky queue is named after its instance key
 	}
 	switch {
 	case newWorkerStickyQueue == "" && previousWorkerStickyQueue == "":
-		// A worker without sessions, and no binding to drop: an ordinary or already-unbound workflow.
+		// Non-session: a worker that can't service sessions, and no binding to drop.
+		return false, nil
+	case newWorkerStickyQueue == previousWorkerStickyQueue && newWorkerStickyQueue == ms.SessionWorkerQueue():
+		// No change: the bound worker started the task from its own sticky queue.
 		return false, nil
 	case newWorkerStickyQueue == "":
-		// Unbind: a worker without sessions took over.
+		// Unbind: a worker that can't service sessions took over, or the bound worker was reported dead.
+		ms.recordBindingChange(bindingChangeUnbind)
 		ms.ClearStickyTaskQueue(historyi.StickyClearForBoundWorkerLost)
 	case newWorkerStickyQueue == previousWorkerStickyQueue:
-		if ms.SessionWorkerQueue() == newWorkerStickyQueue {
-			// The bound worker started the task from its own sticky queue: nothing changed.
-			return false, nil
-		}
-		// Restore: the bound worker started the task from the normal queue, for example after it looked dead for a
-		// moment and came back, and the start cleared stickiness. Its session activities are already queued for it,
-		// so nothing is rescheduled.
+		// Restore: the bound worker started the task from the normal queue (Matching briefly saw it as dead, or after a
+		// failover). The start released the binding so the task is answered with full history; this binds the workflow
+		// back to the same worker, so the binding did not change. Its session activities are still queued for it.
 		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
-		return true, nil
+		return false, nil
 	default:
-		// First bind, rebind after an unbind, or move to another worker.
+		// Bind or move: first bind, rebind after an unbind, or move to another worker.
+		if previousWorkerStickyQueue == "" && !ms.HasCompletedAnyWorkflowTask() {
+			ms.recordSessionBound(false)
+		} else {
+			ms.recordBindingChange(bindingChangeMove)
+		}
 		ms.setStickyTaskQueueAndBinding(newWorkerStickyQueue, nil, &persistencespb.SessionState{})
 	}
 	// A workflow task start leaves nothing to reschedule here: its own task is already started. An activity start
@@ -1662,9 +1705,9 @@ func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(tqName string) (*tas
 	isStickyTq := ms.executionInfo.StickyTaskQueue == tqName
 	if isStickyTq {
 		stickyTimeout := ms.executionInfo.StickyScheduleToStartTimeout
-		// A bound workflow's timed-out task is re-offered to the same worker, so a missing or 0 timeout would loop.
-		if ms.SessionWorkerQueue() != "" && stickyTimeout.AsDuration() <= 0 {
-			stickyTimeout = durationpb.New(defaultSessionStickyScheduleToStartTimeout)
+		// A bound workflow's task waits for its worker or the queue's drain, so it has no schedule-to-start timeout.
+		if ms.SessionWorkerQueue() != "" {
+			stickyTimeout = ms.executionInfo.WorkflowRunTimeout
 		}
 		return &taskqueuepb.TaskQueue{
 			Name:       ms.executionInfo.StickyTaskQueue,
@@ -10454,6 +10497,10 @@ func (ms *MutableStateImpl) reschedulePendingActivities(reason activityReschedul
 		})
 		if err != nil {
 			return err
+		}
+		if reason == activityRescheduleForSessionMove && WaitsForSessionBinding(ms, ai) {
+			// Unbound: the new stamp only invalidates the queued copies; the next binding reissues the activity.
+			continue
 		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
 		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)

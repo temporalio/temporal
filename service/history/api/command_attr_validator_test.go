@@ -916,15 +916,13 @@ func TestValidateActivitySessionOptions(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name          string
-		enabled       bool
 		useSession    bool
 		activityQueue string
 		wantError     string
 	}{
-		{name: "session enabled", enabled: true, useSession: true, activityQueue: "workflow-queue"},
-		{name: "missing task queue", enabled: true, useSession: true, wantError: "missing task queue name"},
-		{name: "session disabled", useSession: true, activityQueue: "workflow-queue", wantError: "not enabled"},
-		{name: "cross queue", enabled: true, useSession: true, activityQueue: "other-queue", wantError: "must use the workflow task queue"},
+		{name: "session", useSession: true, activityQueue: "workflow-queue"},
+		{name: "missing task queue", useSession: true, wantError: "missing task queue name"},
+		{name: "cross queue", useSession: true, activityQueue: "other-queue", wantError: "must use the workflow task queue"},
 		{name: "regular cross queue", activityQueue: "other-queue"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -932,9 +930,7 @@ func TestValidateActivitySessionOptions(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			registry := namespace.NewMockRegistry(ctrl)
 			registry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
-			client := dynamicconfig.NewMemoryClient()
-			client.OverrideSetting(dynamicconfig.EnableStickyActivityExecution, tc.enabled)
-			config := configs.NewConfig(dynamicconfig.NewCollection(client, log.NewNoopLogger()), 1)
+			config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
 			validator := NewCommandAttrValidator(registry, config, nil)
 			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
 				ActivityId: "activity", ActivityType: &commonpb.ActivityType{Name: "activity"},

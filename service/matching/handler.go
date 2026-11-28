@@ -486,6 +486,14 @@ func (h *Handler) ForceUnloadTaskQueuePartition(
 	return h.engine.ForceUnloadTaskQueuePartition(ctx, request)
 }
 
+func (h *Handler) DrainSessionWorkerQueue(
+	ctx context.Context,
+	request *matchingservice.DrainSessionWorkerQueueRequest,
+) (_ *matchingservice.DrainSessionWorkerQueueResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DrainSessionWorkerQueue(ctx, request)
+}
+
 func (h *Handler) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

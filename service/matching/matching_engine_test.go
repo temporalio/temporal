@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
@@ -7657,6 +7659,195 @@ func (s *matchingEngineSuite) TestDescribeStickyTaskQueueStats() {
 		require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 		require.ErrorContains(t, err, "root partition or a sticky task queue")
 	})
+}
+
+// TestDrainExpiredSessionWorker tests that only a multi-session worker's expiry drains its workflow and activity queues.
+func TestDrainExpiredSessionWorker(t *testing.T) {
+	t.Parallel()
+	client := matchingservicemock.NewMockMatchingServiceClient(gomock.NewController(t))
+	drain := drainExpiredSessionWorker(client, log.NewNoopLogger())
+
+	drain("ns", &workerpb.WorkerHeartbeat{TaskQueue: "tq"})
+	// A single-session worker's queue is exclusively assigned, so its tasks wait for its replacement.
+	drain("ns", &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker-queue", TaskQueue: "tq", SessionOptions: &sessionpb.WorkerSessionOptions{
+		Admission: &sessionpb.WorkerSessionOptions_SingleSession{SingleSession: &sessionpb.SingleSessionOptions{}},
+	}})
+
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		client.EXPECT().DrainSessionWorkerQueue(gomock.Any(), protomock.Eq(&matchingservice.DrainSessionWorkerQueueRequest{
+			NamespaceId: "ns",
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue: "tq", TaskQueueType: taskType,
+				PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: "worker-queue"},
+			},
+		})).Return(&matchingservice.DrainSessionWorkerQueueResponse{}, nil)
+	}
+	drain("ns", &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker-queue", TaskQueue: "tq", SessionOptions: &sessionpb.WorkerSessionOptions{
+		Admission: &sessionpb.WorkerSessionOptions_MultiSession{MultiSession: &sessionpb.MultiSessionOptions{}},
+	}})
+}
+
+/*
+TestDrainSessionWorkerQueue tests draining a dead multi-session worker's sticky queue. The task-type cases add tasks
+with the exclusive directive only to skip the bound-worker liveness check; their queue is not exclusively assigned.
+ 1. A task queued on the worker's sticky queue is handed to History to unbind its workflow, then dropped, and the
+    partition unloads once nothing is left.
+ 2. While the drain runs, new tasks are refused with StickyWorkerUnavailable.
+ 3. A queue that was never persisted is not loaded.
+ 4. When History will not release a task's workflow (it is bound to a single-session worker, or this cluster is
+    standby), the drain stops: the task stays queued and new tasks are admitted again.
+ 5. An exclusively assigned queue is left alone: its tasks wait for the single-session worker's replacement, so nothing
+    is unbound or dropped and new tasks are still admitted.
+*/
+func (s *matchingEngineSuite) TestDrainSessionWorkerQueue() {
+	addTask := func(ctx context.Context, tv *testvars.TestVars, taskType enumspb.TaskQueueType) error {
+		// The exclusive directive skips the bound-worker liveness check; it assigns nothing in persistence.
+		sessionDirective := &taskqueuespb.TaskSessionDirective{
+			IsExclusiveWorkerAssigned: true,
+		}
+		var err error
+		if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+				ScheduledEventId: 7, SessionDirective: sessionDirective,
+			})
+		} else {
+			_, _, err = s.matchingEngine.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueue: tv.StickyTaskQueue(), Execution: tv.WorkflowExecution(),
+				ScheduledEventId: 7, SessionDirective: sessionDirective,
+			})
+		}
+		return err
+	}
+	stickyPartition := func(tv *testvars.TestVars, taskType enumspb.TaskQueueType) *taskqueuespb.TaskQueuePartition {
+		return &taskqueuespb.TaskQueuePartition{
+			TaskQueue: tv.TaskQueue().GetName(), TaskQueueType: taskType,
+			PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: tv.StickyTaskQueue().GetName()},
+		}
+	}
+	loaded := func(ctx context.Context, tv *testvars.TestVars, taskType enumspb.TaskQueueType) taskQueuePartitionManager {
+		partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+		pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, false, loadCauseUnspecified)
+		s.Require().NoError(err)
+		return pm
+	}
+
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		s.Run(taskType.String(), func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			// The engine reads its metrics handler from background goroutines, so a capturing engine is built
+			// before it starts rather than swapped in.
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.matchingEngine.Stop()
+			s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
+			s.matchingEngine.metricsHandler = metricsHandler
+			s.matchingEngine.Start()
+			require.NoError(t, addTask(ctx, tv, taskType))
+
+			release := make(chan struct{})
+			s.mockHistoryClient.EXPECT().UnbindWorkflowFromSessionWorker(gomock.Any(), protomock.Eq(&historyservice.UnbindWorkflowFromSessionWorkerRequest{
+				NamespaceId: tv.NamespaceID().String(), Execution: tv.WorkflowExecution(), WorkerQueue: tv.StickyTaskQueue().GetName(),
+			})).DoAndReturn(func(context.Context, *historyservice.UnbindWorkflowFromSessionWorkerRequest, ...grpc.CallOption) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+				<-release
+				return &historyservice.UnbindWorkflowFromSessionWorkerResponse{}, nil
+			})
+
+			_, err := s.matchingEngine.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, taskType),
+			})
+			require.NoError(t, err)
+
+			err = addTask(ctx, tv, taskType)
+			require.ErrorAs(t, err, new(*serviceerrors.StickyWorkerUnavailable))
+
+			close(release)
+			await.RequireTrue(t, func() bool { return loaded(ctx, tv, taskType) == nil }, 10*time.Second, 50*time.Millisecond)
+			recordings := capture.SnapshotMetric(metrics.SessionWorkerQueueDrainCounter.Name())
+			require.Len(t, recordings, 1, "a completed drain is counted once")
+			require.Equal(t, sessionWorkerQueueDrainCompleted, recordings[0].Tags["outcome"])
+			require.Equal(t, s.ns.Name().String(), recordings[0].Tags["namespace"])
+		})
+	}
+
+	s.Run("never persisted", func() {
+		t := s.T()
+		tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+		_, err := s.matchingEngine.DrainSessionWorkerQueue(t.Context(), &matchingservice.DrainSessionWorkerQueueRequest{
+			NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		})
+		require.NoError(t, err)
+		require.Nil(t, loaded(t.Context(), tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+	})
+
+	for _, tc := range []struct {
+		name      string
+		unbindErr error
+	}{
+		{name: "single-session binding stops the drain", unbindErr: serviceerror.NewFailedPrecondition("single-session")},
+		{name: "standby cluster stops the drain", unbindErr: serviceerror.NewNamespaceNotActive("ns", "standby", "active")},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.matchingEngine.Stop()
+			s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
+			s.matchingEngine.metricsHandler = metricsHandler
+			s.matchingEngine.Start()
+			require.NoError(t, addTask(ctx, tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+			s.mockHistoryClient.EXPECT().UnbindWorkflowFromSessionWorker(gomock.Any(), gomock.Any()).Return(nil, tc.unbindErr)
+
+			_, err := s.matchingEngine.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+			})
+			require.NoError(t, err)
+
+			await.RequireTrue(t, func() bool {
+				return len(capture.SnapshotMetric(metrics.SessionWorkerQueueDrainCounter.Name())) > 0
+			}, 10*time.Second, 50*time.Millisecond)
+			recordings := capture.SnapshotMetric(metrics.SessionWorkerQueueDrainCounter.Name())
+			require.Len(t, recordings, 1)
+			require.Equal(t, sessionWorkerQueueDrainStopped, recordings[0].Tags["outcome"])
+			// A stopped drain keeps the task queued, and the queue takes tasks again.
+			pm := loaded(ctx, tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+			require.NotNil(t, pm)
+			queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+			require.NoError(t, addTask(ctx, tv, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+			require.Equal(t, 2, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
+		})
+	}
+
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		s.Run("exclusive assignment/"+taskType.String(), func() {
+			t := s.T()
+			ctx := t.Context()
+			tv := testvars.New(t).WithNamespaceID(s.ns.ID())
+			partition := newTestTaskQueue(tv.NamespaceID().String(), tv.TaskQueue().GetName(), taskType).StickyPartition(tv.StickyTaskQueue().GetName())
+			pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUnspecified)
+			require.NoError(t, err)
+			require.NoError(t, pm.WaitUntilInitialized(ctx))
+			queue := pm.(*taskQueuePartitionManagerImpl).defaultQueue().(*physicalTaskQueueManagerImpl)
+			require.NoError(t, queue.AssignExclusiveWorker())
+			require.NoError(t, addTask(ctx, tv, taskType))
+			s.mockHistoryClient.EXPECT().UnbindWorkflowFromSessionWorker(gomock.Any(), gomock.Any()).Times(0)
+
+			_, err = s.matchingEngine.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: tv.NamespaceID().String(), TaskQueuePartition: stickyPartition(tv, taskType),
+			})
+			require.NoError(t, err)
+
+			require.NoError(t, addTask(ctx, tv, taskType))
+			require.Equal(t, 2, s.v1TaskManager.getTaskCount(queue.queue)+s.fairTaskManager.getTaskCount(queue.queue))
+			require.Same(t, pm, loaded(ctx, tv, taskType))
+		})
+	}
 }
 
 // TestQueryWorkflowStickyWithoutExclusiveDirective tests that a sticky query for a workflow without an exclusive binding

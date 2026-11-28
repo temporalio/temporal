@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sessionpb "go.temporal.io/api/session/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -924,6 +925,23 @@ func (e *matchingEngineImpl) AddActivityTask(
 		forwardInfo:      addRequest.ForwardInfo,
 		sessionDirective: addRequest.GetSessionDirective(),
 	})
+}
+
+// persistedTaskQueueInfo reads the partition's metadata from persistence without loading it, or nil if it has none.
+func (e *matchingEngineImpl) persistedTaskQueueInfo(ctx context.Context, partition tqid.Partition) (*persistencespb.TaskQueueInfo, error) {
+	queue := UnversionedQueueKey(partition)
+	response, err := e.taskManager.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: queue.NamespaceId(),
+		TaskQueue:   queue.PersistenceName(),
+		TaskType:    queue.TaskType(),
+	})
+	if _, notFound := errors.AsType[*serviceerror.NotFound](err); notFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return response.TaskQueueInfo, nil
 }
 
 func (e *matchingEngineImpl) GrantEagerDispatch(
@@ -2963,6 +2981,85 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 	return &matchingservice.ForceUnloadTaskQueuePartitionResponse{WasLoaded: wasLoaded}, nil
 }
 
+// drainExpiredSessionWorker drains the queue of a multi-session worker whose heartbeats stopped.
+func drainExpiredSessionWorker(
+	client matchingservice.MatchingServiceClient,
+	logger log.Logger,
+) func(namespace.ID, *workerpb.WorkerHeartbeat) {
+	return func(nsID namespace.ID, hb *workerpb.WorkerHeartbeat) {
+		// A multi-session worker's queue is named after its instance key.
+		workerQueue := hb.GetWorkerInstanceKey()
+		if hb.GetSessionOptions().GetMultiSession() == nil || workerQueue == "" {
+			return
+		}
+		for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+			_, err := client.DrainSessionWorkerQueue(ctx, &matchingservice.DrainSessionWorkerQueueRequest{
+				NamespaceId: nsID.String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue: hb.GetTaskQueue(), TaskQueueType: taskType,
+					PartitionId: &taskqueuespb.TaskQueuePartition_StickyName{StickyName: workerQueue},
+				},
+			})
+			cancel()
+			// Known limitation: a failed drain is not retried, so tasks already queued for this worker wait until their
+			// workflow's run timeout. To be addressed in public preview.
+			if err != nil {
+				logger.Warn("Failed to drain the queue of an expired multi-session worker",
+					tag.WorkflowNamespaceID(nsID.String()), tag.TaskQueueName(workerQueue), tag.Error(err))
+			}
+		}
+	}
+}
+
+func (e *matchingEngineImpl) DrainSessionWorkerQueue(
+	ctx context.Context,
+	req *matchingservice.DrainSessionWorkerQueueRequest,
+) (*matchingservice.DrainSessionWorkerQueueResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
+	if partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		return nil, serviceerror.NewInvalidArgument("only a sticky task queue partition can be drained")
+	}
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	//nolint:forbidigo // a worker's queue holds tasks of many workflows, so this is a namespace-level check
+	if !ns.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
+	}
+	// No metadata means nothing was ever queued, and an exclusive worker's tasks wait for its replacement.
+	info, err := e.persistedTaskQueueInfo(ctx, partition)
+	if err != nil {
+		recordSessionWorkerQueueDrain(e.metricsHandler, ns.Name().String(), sessionWorkerQueueDrainStartFailed)
+		return nil, err
+	}
+	if info == nil || info.GetExclusiveWorkerAssignment() != nil {
+		return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
+	}
+	// An unload at any point stops the drain part-way; the drain is best effort.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseSessionWorkerQueueDrain)
+	if err != nil {
+		recordSessionWorkerQueueDrain(e.metricsHandler, ns.Name().String(), sessionWorkerQueueDrainStartFailed)
+		return nil, err
+	}
+	pm.StartSessionWorkerQueueDrain()
+	return &matchingservice.DrainSessionWorkerQueueResponse{}, nil
+}
+
+// Outcomes of a session worker queue drain, recorded on SessionWorkerQueueDrainCounter.
+const (
+	sessionWorkerQueueDrainCompleted   = "completed"
+	sessionWorkerQueueDrainStopped     = "stopped"
+	sessionWorkerQueueDrainStartFailed = "start_failed"
+)
+
+// recordSessionWorkerQueueDrain counts a drain's outcome. Only the namespace is tagged: a worker's queue name is
+// unbounded.
+func recordSessionWorkerQueueDrain(handler metrics.Handler, namespaceName string, outcome string) {
+	metrics.SessionWorkerQueueDrainCounter.With(handler).Record(1, metrics.NamespaceTag(namespaceName), metrics.OutcomeTag(outcome))
+}
+
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 	namespaceId := namespace.ID(request.NamespaceId)
 	var applied, conflicting bool
@@ -4044,6 +4141,8 @@ func (e *matchingEngineImpl) checkBoundWorker(
 }
 
 // boundWorkerAvailable reports whether the worker that owns this sticky queue is alive according to its heartbeats.
+// The main reason why this method is consulted is to understand if a workflow, bound to a worker servicing multiple
+// sessions, should be moved to the normal queue.
 // It is only consulted for non-exclusive bindings with no recent poller: exclusive bindings never fall back to the
 // normal queue, so their tasks wait for their worker instead.
 func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQueuePartitionManager) (bool, error) {
@@ -4061,7 +4160,7 @@ func (e *matchingEngineImpl) boundWorkerAvailable(ctx context.Context, pm taskQu
 			WorkerInstanceKey: workerInstanceKey,
 		},
 	})
-	// A missing registry namespace means no heartbeat observations, not a deleted Temporal namespace.
+	// A missing registry namespace means no heartbeat observations.
 	// Treat it as an unavailable worker so History can fall back to the normal queue.
 	_, namespaceMissing := errors.AsType[*serviceerror.NamespaceNotFound](err)
 	if err != nil && !common.IsNotFoundError(err) && !namespaceMissing {

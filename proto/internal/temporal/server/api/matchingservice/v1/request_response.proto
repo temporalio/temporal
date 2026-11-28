@@ -254,8 +254,9 @@ message QueryWorkflowRequest {
   temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
   temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
   temporal.api.common.v1.Priority priority = 7;
-  // Session placement associated with this query, if any. History sets it only for queries to a bound
-  // single-session sticky queue, so Matching can report the session and its pinned version to task-add hooks.
+  // Session placement associated with this query, if any. History sets it for every query to the sticky queue of a
+  // workflow bound to a worker servicing sessions. Matching waits for an exclusive worker and reports the session to
+  // task-add hooks; for a non-exclusive binding it treats the query like any other sticky query.
   // Unset means no session (or an older History), and hooks see no session.
   temporal.server.api.taskqueue.v1.TaskSessionDirective session_directive = 8;
 }
@@ -588,6 +589,14 @@ message ForceUnloadTaskQueuePartitionRequest {
 message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
 }
+
+message DrainSessionWorkerQueueRequest {
+  string namespace_id = 1;
+  // The sticky partition of the dead worker's queue, with its normal task queue name.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message DrainSessionWorkerQueueResponse {}
 
 // (-- api-linter: core::0134::request-mask-required=disabled
 //     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest doesn't follow Google API format --)

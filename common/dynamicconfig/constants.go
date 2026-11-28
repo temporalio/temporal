@@ -215,11 +215,6 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		true,
 		`EnableStickyQuery indicates if sticky query should be enabled per namespace`,
 	)
-	EnableStickyActivityExecution = NewNamespaceBoolSetting(
-		"system.enableStickyActivityExecution",
-		false,
-		`EnableStickyActivityExecution allows scheduling activities in the workflow session.`,
-	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
 		true,
@@ -1255,10 +1250,15 @@ Links embedded in completion callbacks are not included; they count toward callb
 to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
-	EnableExclusiveWorkerSessions = NewNamespaceBoolSetting(
-		"frontend.enableExclusiveWorkerSessions",
+	EnableSingleSessionWorkers = NewNamespaceBoolSetting(
+		"frontend.enableSingleSessionWorkers",
 		false,
-		`EnableExclusiveWorkerSessions allows workflow and activity polls with single-session worker options.`,
+		`EnableSingleSessionWorkers allows workflow and activity polls with single-session worker options.`,
+	)
+	EnableMultiSessionWorkers = NewNamespaceBoolSetting(
+		"frontend.enableMultiSessionWorkers",
+		false,
+		`EnableMultiSessionWorkers allows workflow and activity polls with multi-session worker options.`,
 	)
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
 		"frontend.workerVersioningDataAPIs",

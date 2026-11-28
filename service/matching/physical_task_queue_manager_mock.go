@@ -355,6 +355,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) StartScaleManager(arg0 any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartScaleManager", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).StartScaleManager), arg0)
 }
 
+// StartSessionWorkerQueueDrain mocks base method.
+func (m *MockphysicalTaskQueueManager) StartSessionWorkerQueueDrain(done func(bool)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartSessionWorkerQueueDrain", done)
+}
+
+// StartSessionWorkerQueueDrain indicates an expected call of StartSessionWorkerQueueDrain.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) StartSessionWorkerQueueDrain(done any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartSessionWorkerQueueDrain", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).StartSessionWorkerQueueDrain), done)
+}
+
 // Stop mocks base method.
 func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 	m.ctrl.T.Helper()

@@ -24,6 +24,7 @@ const (
 	HistoryService_GetMutableState_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/GetMutableState"
 	HistoryService_PollMutableState_FullMethodName                       = "/temporal.server.api.historyservice.v1.HistoryService/PollMutableState"
 	HistoryService_ResetStickyTaskQueue_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/ResetStickyTaskQueue"
+	HistoryService_UnbindWorkflowFromSessionWorker_FullMethodName        = "/temporal.server.api.historyservice.v1.HistoryService/UnbindWorkflowFromSessionWorker"
 	HistoryService_RecordWorkflowTaskStarted_FullMethodName              = "/temporal.server.api.historyservice.v1.HistoryService/RecordWorkflowTaskStarted"
 	HistoryService_RecordActivityTaskStarted_FullMethodName              = "/temporal.server.api.historyservice.v1.HistoryService/RecordActivityTaskStarted"
 	HistoryService_RespondWorkflowTaskCompleted_FullMethodName           = "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted"
@@ -122,6 +123,9 @@ type HistoryServiceClient interface {
 	// 1. StickyTaskQueue
 	// 2. StickyScheduleToStartTimeout
 	ResetStickyTaskQueue(ctx context.Context, in *ResetStickyTaskQueueRequest, opts ...grpc.CallOption) (*ResetStickyTaskQueueResponse, error)
+	// UnbindWorkflowFromSessionWorker unbinds a workflow from a dead multi-session worker, moving its pending tasks to the
+	// normal task queue.
+	UnbindWorkflowFromSessionWorker(ctx context.Context, in *UnbindWorkflowFromSessionWorkerRequest, opts ...grpc.CallOption) (*UnbindWorkflowFromSessionWorkerResponse, error)
 	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
 	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
@@ -424,6 +428,15 @@ func (c *historyServiceClient) PollMutableState(ctx context.Context, in *PollMut
 func (c *historyServiceClient) ResetStickyTaskQueue(ctx context.Context, in *ResetStickyTaskQueueRequest, opts ...grpc.CallOption) (*ResetStickyTaskQueueResponse, error) {
 	out := new(ResetStickyTaskQueueResponse)
 	err := c.cc.Invoke(ctx, HistoryService_ResetStickyTaskQueue_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UnbindWorkflowFromSessionWorker(ctx context.Context, in *UnbindWorkflowFromSessionWorkerRequest, opts ...grpc.CallOption) (*UnbindWorkflowFromSessionWorkerResponse, error) {
+	out := new(UnbindWorkflowFromSessionWorkerResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UnbindWorkflowFromSessionWorker_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1140,6 +1153,9 @@ type HistoryServiceServer interface {
 	// 1. StickyTaskQueue
 	// 2. StickyScheduleToStartTimeout
 	ResetStickyTaskQueue(context.Context, *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error)
+	// UnbindWorkflowFromSessionWorker unbinds a workflow from a dead multi-session worker, moving its pending tasks to the
+	// normal task queue.
+	UnbindWorkflowFromSessionWorker(context.Context, *UnbindWorkflowFromSessionWorkerRequest) (*UnbindWorkflowFromSessionWorkerResponse, error)
 	// RecordWorkflowTaskStarted is called by the Matchingservice before it hands a workflow task to the application worker in response to
 	// a PollWorkflowTaskQueue call. It records in the history the event that the workflow task has started. It will return 'TaskAlreadyStartedError',
 	// if the workflow's execution history already includes a record of the event starting.
@@ -1420,6 +1436,9 @@ func (UnimplementedHistoryServiceServer) PollMutableState(context.Context, *Poll
 }
 func (UnimplementedHistoryServiceServer) ResetStickyTaskQueue(context.Context, *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetStickyTaskQueue not implemented")
+}
+func (UnimplementedHistoryServiceServer) UnbindWorkflowFromSessionWorker(context.Context, *UnbindWorkflowFromSessionWorkerRequest) (*UnbindWorkflowFromSessionWorkerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnbindWorkflowFromSessionWorker not implemented")
 }
 func (UnimplementedHistoryServiceServer) RecordWorkflowTaskStarted(context.Context, *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RecordWorkflowTaskStarted not implemented")
@@ -1724,6 +1743,24 @@ func _HistoryService_ResetStickyTaskQueue_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).ResetStickyTaskQueue(ctx, req.(*ResetStickyTaskQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UnbindWorkflowFromSessionWorker_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnbindWorkflowFromSessionWorkerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UnbindWorkflowFromSessionWorker(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UnbindWorkflowFromSessionWorker_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UnbindWorkflowFromSessionWorker(ctx, req.(*UnbindWorkflowFromSessionWorkerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3090,6 +3127,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetStickyTaskQueue",
 			Handler:    _HistoryService_ResetStickyTaskQueue_Handler,
+		},
+		{
+			MethodName: "UnbindWorkflowFromSessionWorker",
+			Handler:    _HistoryService_UnbindWorkflowFromSessionWorker_Handler,
 		},
 		{
 			MethodName: "RecordWorkflowTaskStarted",

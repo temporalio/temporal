@@ -79,6 +79,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/unbindworkflowfromsessionworker"
 	"go.temporal.io/server/service/history/api/unpauseactivity"
 	"go.temporal.io/server/service/history/api/unpauseworkflow"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
@@ -563,6 +564,13 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 	resetRequest *historyservice.ResetStickyTaskQueueRequest,
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	return resetstickytaskqueue.Invoke(ctx, resetRequest, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) UnbindWorkflowFromSessionWorker(
+	ctx context.Context,
+	request *historyservice.UnbindWorkflowFromSessionWorkerRequest,
+) (*historyservice.UnbindWorkflowFromSessionWorkerResponse, error) {
+	return unbindworkflowfromsessionworker.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.

@@ -201,6 +201,12 @@ service MatchingService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // DrainSessionWorkerQueue moves a dead multi-session worker's queued tasks to the normal task queue by unbinding their
+  // sessions in History.
+  rpc DrainSessionWorkerQueue(DrainSessionWorkerQueueRequest) returns (DrainSessionWorkerQueueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // Update task queue user data in owning node for all updates in namespace.
   // All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
   // API.

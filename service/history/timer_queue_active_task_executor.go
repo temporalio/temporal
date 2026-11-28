@@ -602,7 +602,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	// task can be paused as the result of processing activity workflow rules, so we need to check again
-	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused || workflow.WaitsForSessionBinding(mutableState, activityInfo) {
 		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrActivityTaskNotFound
@@ -618,7 +618,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	resp, err := addActivityTask(ctx, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
+	resp, err := addActivityTask(ctx, t.shardContext, t.cache, t.matchingRawClient, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.GetNamespaceID(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),
@@ -632,7 +632,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
 		Priority:               priority,
-	})
+	}, historyi.TransactionPolicyActive)
 	if err != nil {
 		return err
 	}

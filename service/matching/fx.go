@@ -231,8 +231,11 @@ func WorkersRegistryProvider(
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 	eventLogger otellog.Logger,
+	matchingClient resource.MatchingRawClient,
+	logger log.Logger,
 ) workers.Registry {
 	return workers.NewRegistry(lc, workers.RegistryParams{
+		OnExpired:                  drainExpiredSessionWorker(matchingClient, logger),
 		NumBuckets:                 serviceConfig.WorkerRegistryNumBuckets,
 		TTL:                        serviceConfig.WorkerRegistryEntryTTL,
 		MinEvictAge:                serviceConfig.WorkerRegistryMinEvictAge,

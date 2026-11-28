@@ -49,6 +49,7 @@ const (
 	MatchingService_ForceLoadTaskQueuePartition_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition"
 	MatchingService_ForceUnloadTaskQueue_FullMethodName                   = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue"
 	MatchingService_ForceUnloadTaskQueuePartition_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueuePartition"
+	MatchingService_DrainSessionWorkerQueue_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/DrainSessionWorkerQueue"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
 	MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName      = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation"
@@ -171,6 +172,9 @@ type MatchingServiceClient interface {
 	ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error)
 	// Force unloading a task queue partition.
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
+	// DrainSessionWorkerQueue moves a dead multi-session worker's queued tasks to the normal task queue by unbinding their
+	// sessions in History.
+	DrainSessionWorkerQueue(ctx context.Context, in *DrainSessionWorkerQueueRequest, opts ...grpc.CallOption) (*DrainSessionWorkerQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
 	// API.
@@ -508,6 +512,15 @@ func (c *matchingServiceClient) ForceUnloadTaskQueuePartition(ctx context.Contex
 	return out, nil
 }
 
+func (c *matchingServiceClient) DrainSessionWorkerQueue(ctx context.Context, in *DrainSessionWorkerQueueRequest, opts ...grpc.CallOption) (*DrainSessionWorkerQueueResponse, error) {
+	out := new(DrainSessionWorkerQueueResponse)
+	err := c.cc.Invoke(ctx, MatchingService_DrainSessionWorkerQueue_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error) {
 	out := new(UpdateTaskQueueUserDataResponse)
 	err := c.cc.Invoke(ctx, MatchingService_UpdateTaskQueueUserData_FullMethodName, in, out, opts...)
@@ -741,6 +754,9 @@ type MatchingServiceServer interface {
 	ForceUnloadTaskQueue(context.Context, *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error)
 	// Force unloading a task queue partition.
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
+	// DrainSessionWorkerQueue moves a dead multi-session worker's queued tasks to the normal task queue by unbinding their
+	// sessions in History.
+	DrainSessionWorkerQueue(context.Context, *DrainSessionWorkerQueueRequest) (*DrainSessionWorkerQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
 	// API.
@@ -900,6 +916,9 @@ func (UnimplementedMatchingServiceServer) ForceUnloadTaskQueue(context.Context, 
 }
 func (UnimplementedMatchingServiceServer) ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueuePartition not implemented")
+}
+func (UnimplementedMatchingServiceServer) DrainSessionWorkerQueue(context.Context, *DrainSessionWorkerQueueRequest) (*DrainSessionWorkerQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DrainSessionWorkerQueue not implemented")
 }
 func (UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueUserData not implemented")
@@ -1478,6 +1497,24 @@ func _MatchingService_ForceUnloadTaskQueuePartition_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_DrainSessionWorkerQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DrainSessionWorkerQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).DrainSessionWorkerQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_DrainSessionWorkerQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).DrainSessionWorkerQueue(ctx, req.(*DrainSessionWorkerQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_UpdateTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateTaskQueueUserDataRequest)
 	if err := dec(in); err != nil {
@@ -1852,6 +1889,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForceUnloadTaskQueuePartition",
 			Handler:    _MatchingService_ForceUnloadTaskQueuePartition_Handler,
+		},
+		{
+			MethodName: "DrainSessionWorkerQueue",
+			Handler:    _MatchingService_DrainSessionWorkerQueue_Handler,
 		},
 		{
 			MethodName: "UpdateTaskQueueUserData",

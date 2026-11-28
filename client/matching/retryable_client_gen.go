@@ -251,6 +251,21 @@ func (c *retryableClient) DispatchNexusTask(
 	return resp, err
 }
 
+func (c *retryableClient) DrainSessionWorkerQueue(
+	ctx context.Context,
+	request *matchingservice.DrainSessionWorkerQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DrainSessionWorkerQueueResponse, error) {
+	var resp *matchingservice.DrainSessionWorkerQueueResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DrainSessionWorkerQueue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

@@ -189,7 +189,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 
 	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
-		expiryTTL := taskQueueMetadataTTL(request.ExpiryTime, time.Now())
+		expiryTTL := stickyTaskQueueMetadataTTL(request.ExpiryTime, time.Now())
 		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version),
@@ -249,7 +249,10 @@ func (d *taskQueueStore) UpdateTaskQueue(
 	return &p.UpdateTaskQueueResponse{}, nil
 }
 
-func taskQueueMetadataTTL(expiryTime *timestamppb.Timestamp, now time.Time) int64 {
+// stickyTaskQueueMetadataTTL returns the Cassandra TTL of a sticky queue's metadata row. A nil expiry means no TTL: a
+// single-session worker's queue keeps its metadata, which records its exclusive worker assignment, so reloading the
+// queue cannot let the same stable identity acquire another workflow.
+func stickyTaskQueueMetadataTTL(expiryTime *timestamppb.Timestamp, now time.Time) int64 {
 	if expiryTime == nil {
 		return 0
 	}
