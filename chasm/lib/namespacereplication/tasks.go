@@ -934,6 +934,7 @@ func (h *applyPeerTaskHandler) Execute(
 		Detail                  *persistencespb.NamespaceDetail
 		Shadow                  bool
 		ShadowLegacyTaskPayload []byte
+		RemovedPeers            *namespacereplicationpb.RemovedPeers
 	}
 	loaded, readErr := chasm.ReadComponent(
 		ctx,
@@ -945,6 +946,7 @@ func (h *applyPeerTaskHandler) Execute(
 				Detail:                  common.CloneProto(m.GetNamespaceDetail()),
 				Shadow:                  m.GetShadow(),
 				ShadowLegacyTaskPayload: bytes.Clone(m.GetShadowLegacyTaskPayload()),
+				RemovedPeers:            common.CloneProto(m.GetRemovedPeers()),
 			}, nil
 		},
 		nil,
@@ -973,7 +975,7 @@ func (h *applyPeerTaskHandler) Execute(
 		// Targets are the union of previous and new membership. A target absent
 		// from the new list must retain the removal snapshot to fence older adds.
 		RemovedPeer: !loaded.Shadow && loaded.Operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
-			!slices.Contains(loaded.Detail.GetReplicationConfig().GetClusters(), task.GetTargetCell()),
+			removedPeer(loaded.RemovedPeers, loaded.Detail, task.GetTargetCell()),
 		ShadowLegacyTaskPayload: loaded.ShadowLegacyTaskPayload,
 	}
 	result, applyErr := h.peerApplier.Apply(callCtx, request)
@@ -1010,6 +1012,20 @@ func (h *applyPeerTaskHandler) Execute(
 		return record(classifyPeerErr(resultErr), resultErr)
 	}
 	return record(outcome, nil)
+}
+
+// removedPeer uses the removed set the source recorded with the mutation. A
+// mutation created before the source recorded it keeps the rule it was created
+// with: a target absent from ReplicationConfig.Clusters is removed.
+func removedPeer(
+	recorded *namespacereplicationpb.RemovedPeers,
+	detail *persistencespb.NamespaceDetail,
+	target string,
+) bool {
+	if recorded != nil {
+		return slices.Contains(recorded.GetCells(), target)
+	}
+	return !slices.Contains(detail.GetReplicationConfig().GetClusters(), target)
 }
 
 // peerOutcomeFromResult maps a transport-neutral PeerApplyResult onto the

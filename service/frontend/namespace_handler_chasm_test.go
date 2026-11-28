@@ -254,6 +254,7 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 		detail,
 		legacyDetail,
 		7,
+		detail.GetReplicationConfig().GetClusters(),
 		[]string{"cell-a", "cell-c"},
 		true,
 		true,
@@ -300,7 +301,7 @@ func TestInvokeShadowNamespaceMutationSkipsWhenLegacyWouldNotReplicate(t *testin
 			if tc.deleted {
 				detail.Info.State = enumspb.NAMESPACE_STATE_DELETED
 			}
-			handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 0, nil, tc.global, false)
+			handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE, detail, detail, 0, detail.GetReplicationConfig().GetClusters(), nil, tc.global, false)
 			select {
 			case <-client.requests:
 				t.Fatal("unexpected shadow dispatch")
@@ -367,6 +368,7 @@ func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {
 			detail,
 			detail,
 			7,
+			detail.GetReplicationConfig().GetClusters(),
 			nil,
 			true,
 			true,
@@ -409,7 +411,7 @@ func TestInvokeShadowNamespaceMutationReferencePreparationFailure(t *testing.T) 
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
 	}
 	handler.invokeShadowNamespaceMutation(t.Context(), enumsspb.NAMESPACE_OPERATION_UPDATE,
-		detail, detail, 7, nil, true, false)
+		detail, detail, 7, detail.GetReplicationConfig().GetClusters(), nil, true, false)
 	select {
 	case <-client.requests:
 		t.Fatal("shadow dispatch started without a valid legacy reference")
@@ -506,7 +508,7 @@ func (c failingNamespaceReplicationClient) TriggerNamespaceMutation(
 
 func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
 	t.Parallel()
-	const message = "namespace replication authoritative trigger RPC did not complete"
+	const message = "namespace replication authoritative trigger returned an error"
 	for _, shadow := range []bool{false, true} {
 		name := "authoritative"
 		if shadow {
@@ -520,7 +522,7 @@ func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
 			handler := &namespaceHandler{logger: logger, chasmNsReplClient: failingNamespaceReplicationClient{err: triggerErr}}
 			err := handler.triggerNamespaceMutation(t.Context(), "namespace-id:mutation-id", &namespacereplicationpb.NamespaceMutation{
 				Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
-				NamespaceDetail:   &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id"}},
+				NamespaceDetail:   &persistencespb.NamespaceDetail{Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "my-namespace"}},
 				IsGlobalNamespace: true,
 				Shadow:            shadow,
 			})
@@ -537,6 +539,7 @@ func TestTriggerNamespaceMutationLogsAuthoritativeFailure(t *testing.T) {
 				Message: message,
 				Tags: map[string]any{
 					"wf-namespace-id": "namespace-id",
+					"wf-namespace":    "my-namespace",
 					"business_id":     "namespace-id:mutation-id",
 					"operation":       enumsspb.NAMESPACE_OPERATION_UPDATE.String(),
 				},

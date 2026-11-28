@@ -50,6 +50,8 @@ type (
 	queueState struct {
 		readerScopes                 map[int64][]Scope
 		exclusiveReaderHighWatermark tasks.Key
+		// Counts scopes, not failed lookups: one scope with several bad indexes counts once.
+		lostResolutionOnReadCount int
 	}
 
 	queueBase struct {
@@ -99,6 +101,7 @@ type (
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
 		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
+		CompactQueueState                   dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -116,10 +119,25 @@ func newQueueBase(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
+	if options.CompactQueueState == nil {
+		//nolint:forbidigo // A queue that never compacts could outgrow the shard record, so fail at construction.
+		panic("queues.Options.CompactQueueState must be set, usually from the history config's EnableQueueStateCompaction")
+	}
 	var readerScopes map[int64][]Scope
 	var exclusiveReaderHighWatermark tasks.Key
 	if persistenceState, ok := shard.GetQueueState(category); ok {
 		queueState := FromPersistenceQueueState(persistenceState)
+		if queueState.lostResolutionOnReadCount > 0 {
+			logger.DPanic(
+				"Queue state lost predicate resolution on read",
+				tag.Counter(queueState.lostResolutionOnReadCount),
+				tag.ShardID(shard.GetShardID()),
+			)
+			metrics.QueuePredicateResolutionLoss.With(metricsHandler).Record(
+				int64(queueState.lostResolutionOnReadCount),
+				metrics.ReasonTag(predicateResolutionLossUnresolvedNamespaceIndex),
+			)
+		}
 
 		readerScopes = queueState.readerScopes
 		exclusiveReaderHighWatermark = queueState.exclusiveReaderHighWatermark
@@ -405,10 +423,12 @@ func (p *queueBase) updateQueueState(
 		}
 	}
 
+	// Replication state is written through UpdateReplicationQueueReaderState, never here, so compaction
+	// cannot reach the replication code that reads persisted scopes by position.
 	err := p.shard.SetQueueState(p.category, tasksCompleted, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
-	}))
+	}, p.options.CompactQueueState()))
 	if err != nil {
 		metrics.AckLevelUpdateFailedCounter.With(p.metricsHandler).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)

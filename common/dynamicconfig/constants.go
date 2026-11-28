@@ -2264,6 +2264,14 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
 keys.`,
 	)
+	EnableQueueStateCompaction = NewGlobalBoolSetting(
+		"history.enableQueueStateCompaction",
+		false,
+		`EnableQueueStateCompaction makes the history service persist multi-cursor queue state in compact form:
+namespace IDs as 16-byte entries in a shared table, and scopes that share a predicate grouped under one copy of it.
+Applies to the transfer, timer, visibility, archival and outbound queues, and to every shard in the cluster. Every
+history host must run a version that can read the compact form before this is enabled.`,
+	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,
@@ -3521,6 +3529,25 @@ Requires service restart to take effect.`,
 		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
 This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
 hydrated ancestor components when applying child-node mutations.`,
+	)
+
+	EnableCHASMSkipCleanUpdates = NewNamespaceBoolSetting(
+		"history.enableCHASMSkipCleanUpdates",
+		false,
+		`EnableCHASMSkipCleanUpdates controls whether a CHASM UpdateComponent call skips persisting a non-workflow
+execution when the update made no durable change, e.g. because it only changed ephemeral components or didn't change
+anything.`,
+	)
+	VerifyCHASMSkipCleanUpdates = NewNamespaceBoolSetting(
+		"history.verifyCHASMSkipCleanUpdates",
+		false,
+		`VerifyCHASMSkipCleanUpdates makes a CHASM UpdateComponent call that would skip persisting a clean update persist
+it anyway, and log a failed assertion ("CHASM transaction judged clean has changes to persist") if the write changes
+anything that skipping it would have dropped. It takes precedence over history.enableCHASMSkipCleanUpdates, and costs a
+copy of the execution info and state per transaction of a non-workflow execution.
+This setting is temporary, for the rollout of history.enableCHASMSkipCleanUpdates: turn it on first, and turn on the
+skip only after it has run for a while without logging that assertion. Functional tests run with it on. It will be
+removed once the skip is enabled by default.`,
 	)
 
 	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(

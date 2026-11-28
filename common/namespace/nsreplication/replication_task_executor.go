@@ -78,7 +78,7 @@ type (
 	taskExecutorImpl struct {
 		currentCluster               string
 		metadataManager              persistence.MetadataManager
-		dataMerger                   NamespaceDataMerger
+		dataMerger                   MutationDataMerger
 		admitter                     NamespaceReplicationAdmitter
 		logger                       log.Logger
 		metricsHandler               metrics.Handler
@@ -88,6 +88,10 @@ type (
 		repairPolicy                 RepairPolicy
 	}
 )
+
+// noLocalConfigVersion is the config version a data merger sees for a namespace
+// this cluster does not have yet, lower than any real one.
+const noLocalConfigVersion int64 = -1
 
 const (
 	ApplyOutcomeUnspecified ApplyOutcome = iota
@@ -111,7 +115,7 @@ func NewTaskExecutor(
 	return newTaskExecutor(
 		currentCluster,
 		metadataManagerV2,
-		dataMerger,
+		NewDefaultMutationDataMerger(dataMerger),
 		admitter,
 		logger,
 		testHooks,
@@ -123,7 +127,7 @@ func NewTaskExecutor(
 func NewMutationTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
-	dataMerger NamespaceDataMerger,
+	dataMerger MutationDataMerger,
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
@@ -143,7 +147,7 @@ func NewMutationTaskExecutor(
 func newTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
-	dataMerger NamespaceDataMerger,
+	dataMerger MutationDataMerger,
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
@@ -301,6 +305,9 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
+		if options.Membership == UseSourceMembership {
+			return true, nil
+		}
 		return h.admitter.Admit(ctx, h.currentCluster, task, options), nil
 	default:
 		// return the original err
@@ -319,6 +326,21 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 		return ApplyOutcomeUnspecified, err
 	}
 
+	// Nothing is local yet, but the data merger still runs so a deployment can
+	// normalize the data this cluster adopts.
+	data := task.Info.GetData()
+	merged, dataMerged := h.dataMerger.MergeMutationData(
+		namespace.ID(task.GetId()),
+		namespace.Name(task.Info.GetName()),
+		nil,
+		data,
+		noLocalConfigVersion,
+		task.GetConfigVersion(),
+	)
+	if dataMerged {
+		data = merged
+	}
+
 	request := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
@@ -327,7 +349,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				State:       task.Info.GetState(),
 				Description: task.Info.GetDescription(),
 				Owner:       task.Info.GetOwnerEmail(),
-				Data:        task.Info.Data,
+				Data:        data,
 				RestoreInfo: task.GetRestoreInfo(),
 			},
 			Config: &persistencespb.NamespaceConfig{
@@ -476,7 +498,9 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	mergedData, dataMerged := h.dataMerger.MergeData(
+	mergedData, dataMerged := h.dataMerger.MergeMutationData(
+		namespace.ID(task.GetId()),
+		namespace.Name(task.GetInfo().GetName()),
 		resp.Namespace.Info.Data,
 		task.Info.Data,
 		resp.Namespace.ConfigVersion,

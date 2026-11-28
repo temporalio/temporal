@@ -180,7 +180,8 @@ mise-tool = $(or \
 		mise exec go $(2) -c 'command -v $(1)'), \
 	$(error Cannot resolve $(1); check mise.toml and run mise install))
 
-GOLANGCI_LINT = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
+GOLANGCI_LINT_BOOTSTRAP = $(call mise-tool,golangci-lint,go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint)
+GOLANGCI_LINT := $(ROOT)/.bin/golangci-lint
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI = $(call mise-tool,gci,go:github.com/daixiang0/gci)
 GOTESTSUM = $(call mise-tool,gotestsum,go:gotest.tools/gotestsum)
@@ -330,11 +331,16 @@ define lint-go
 	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
 endef
 
-lint-code:
+lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
 	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
 	@printf $(COLOR) "Linting code with temporal_minimal..."
 	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_VARIANT_DIRS))
+
+$(GOLANGCI_LINT): .github/.custom-gcl.yml \
+		common/testx/parallelsuitelint/*.go common/testx/parallelsuitelint/golangci/*.go \
+		common/testx/parallelsuitelint/go.mod common/testx/parallelsuitelint/go.sum
+	@cd .github && GOWORK=off $(GOLANGCI_LINT_BOOTSTRAP) custom
 
 lint-yaml:
 	@printf $(COLOR) "Checking YAML formatting..."
