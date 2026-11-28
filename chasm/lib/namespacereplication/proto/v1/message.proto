@@ -47,6 +47,16 @@ message NamespaceMutation {
   // Peer applies remain authoritative. This is deliberately distinct from
   // shadow, which suppresses writes in both the source and destination cells.
   bool replicate_only = 8;
+
+  // Peers this mutation removed, decided once by the source from the previous
+  // and target membership. Peer delivery marks these peers removed instead of
+  // deriving membership again. Unset for mutations created before this field.
+  RemovedPeers removed_peers = 9;
+}
+
+// RemovedPeers is a message so an empty set is distinct from an unrecorded one.
+message RemovedPeers {
+  repeated string cells = 1;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.

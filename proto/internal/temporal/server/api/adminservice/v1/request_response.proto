@@ -243,6 +243,10 @@ message ApplyNamespaceMutationRequest {
 
   // Selects direct operator-repair handling and records the repair's audit context.
   NamespaceMutationAttribution attribution = 11;
+
+  // Cluster the source addressed this delivery to. A receiver rejects a delivery
+  // whose target_cluster names another cluster. Unset by older sources.
+  string target_cluster = 12;
 }
 
 message ApplyNamespaceMutationResponse {
