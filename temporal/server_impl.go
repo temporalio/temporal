@@ -167,6 +167,7 @@ func initSystemNamespaces(
 		metricsHandler,
 		telemetry.NoopTracerProvider,
 		serializer,
+		nil, // no failpoints
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
