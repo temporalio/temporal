@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.6",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for queue_metadata",
+  "SchemaUpdateCqlFiles": [
+    "queue_metadata.sql"
+  ]
+}
