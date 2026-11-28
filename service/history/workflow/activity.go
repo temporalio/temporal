@@ -286,6 +286,9 @@ func ResetActivity(
 	resetOptions bool,
 	jitter time.Duration,
 ) error {
+	if jitter < 0 {
+		return serviceerror.NewInvalidArgument("jitter must not be negative")
+	}
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}

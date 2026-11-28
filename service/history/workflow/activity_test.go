@@ -526,6 +526,16 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	s.True(timerCreated, "activity timeout task should be recreated after unpause")
 }
 
+func (s *activitySuite) TestResetActivityRejectsNegativeJitter() {
+	ai := s.AddActivityInfo()
+	s.Require().NoError(PauseActivity(s.mutableState, ai.ActivityId, nil))
+
+	err := ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, false, false, -time.Second)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
 func (s *activitySuite) TestUnpauseActivityWithNewRun() {
 	ai := s.AddActivityInfo()
 
