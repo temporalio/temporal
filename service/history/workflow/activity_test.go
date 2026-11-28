@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -428,6 +429,16 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.False(ai.Paused, "ActivityInfo.Paused was not unpaused")
+}
+
+func (s *activitySuite) TestResetActivityRejectsNegativeJitter() {
+	ai := s.AddActivityInfo()
+	s.Require().NoError(PauseActivity(s.mutableState, ai.ActivityId, nil))
+
+	err := ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, false, false, -time.Second)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
 }
 
 func (s *activitySuite) TestUnpauseActivityWithNewRun() {
