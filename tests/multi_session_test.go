@@ -1191,11 +1191,11 @@ func resetWorkflowTo(t *testing.T, env *testcore.TestEnv, execution *commonpb.Wo
 }
 
 /*
-TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot have its
-versioning override set or removed:
+TestWorkflowSessionRejectsVersioningOverride tests that a workflow bound to a multi-session worker cannot be given a
+versioning override that changes its version:
  1. Worker A binds the session and is alive on its sticky queue.
- 2. UpdateWorkflowExecutionOptions setting a versioning override, or removing it (the workflow has none, but the mask
-    still names it), is rejected.
+ 2. UpdateWorkflowExecutionOptions setting an auto-upgrade override is rejected, since it changes the effective
+    versioning behavior; removing the override the workflow does not have succeeds, since it changes nothing.
  3. The binding is unchanged: the next workflow task is delivered on A's sticky queue, and A completes it.
 */
 func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
@@ -1207,10 +1207,8 @@ func TestWorkflowSessionRejectsVersioningOverride(t *testing.T) {
 			e.bindToAWith(time.Second)
 			e.registerStickyPoller("A")
 
-			err := updateVersioningOverride(t, e.env, e.tv.WorkflowExecution(), tc.override)
-			var invalidArgument *serviceerror.InvalidArgument
-			require.ErrorAs(t, err, &invalidArgument)
-			require.ErrorContains(t, err, "bound to a worker servicing sessions")
+			requireVersioningOverrideUpdate(t, updateVersioningOverride(t, e.env, e.tv.WorkflowExecution(), tc.override), tc.rejected)
+			protorequire.ProtoEqual(t, &sessionpb.SessionInfo{WorkerQueue: e.instanceKey("A")}, persistedBinding(t, e.env, e.tv.WorkflowExecution()))
 
 			e.signal()
 			e.completeOn("A", e.stickyQueue("A"), 5*time.Second)

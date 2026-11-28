@@ -10,6 +10,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -59,10 +60,6 @@ func Invoke(
 				// to prevent clearing and reloading mutable state while releasing the lock
 				return nil, consts.ErrWorkflowCompleted
 			}
-			if err := rejectVersioningOverrideForSessionBinding(mutableState, req.GetUpdateMask()); err != nil {
-				return nil, err
-			}
-
 			// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
 			// or error if no pinned version exists.
 			// Clone the requested options to avoid mutating the original request but only do the cloning work if needed.
@@ -148,9 +145,6 @@ func MergeAndApply(
 	updateMask *fieldmaskpb.FieldMask,
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
-	if err := rejectVersioningOverrideForSessionBinding(ms, updateMask); err != nil {
-		return nil, false, err
-	}
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
 	mergedOpts, optionsToReapply, err := mergeWorkflowExecutionOptions(
 		getOptionsFromMutableState(ms),
@@ -165,6 +159,9 @@ func MergeAndApply(
 	if !hasChanges {
 		return mergedOpts, false, nil
 	}
+	if err := rejectVersionChangeForSessionBinding(ms, mergedOpts.GetVersioningOverride()); err != nil {
+		return nil, false, err
+	}
 
 	unsetOverride := mergedOpts.GetVersioningOverride() == nil
 	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(
@@ -177,19 +174,24 @@ func MergeAndApply(
 	return mergedOpts, hasChanges, nil
 }
 
-// rejectVersioningOverrideForSessionBinding rejects setting or removing the versioning override of a workflow bound to
-// a session worker. The binding keeps sending the workflow's tasks to that worker, and either change can move the
-// workflow to another version, which sessions do not support yet.
-func rejectVersioningOverrideForSessionBinding(ms historyi.MutableState, updateMask *fieldmaskpb.FieldMask) error {
+// rejectVersionChangeForSessionBinding rejects a versioning override that would change the effective version or
+// behavior of a workflow bound to a session worker: the binding keeps sending the workflow's tasks to that worker, and
+// sessions do not support moving to another version yet. An override that leaves both unchanged is allowed.
+func rejectVersionChangeForSessionBinding(ms historyi.MutableState, mergedOverride *workflowpb.VersioningOverride) error {
 	if ms.GetExecutionInfo().GetSessionState() == nil {
 		// Not bound to a worker servicing sessions.
 		return nil
 	}
-	for path := range util.ParseFieldMask(updateMask) {
-		if path == "versioningOverride" || strings.HasPrefix(path, "versioningOverride.") {
-			// TODO (Shivam): Session bindings do not follow versioning overrides yet (MTC-934).
-			return serviceerror.NewInvalidArgument("versioning override cannot be set or removed for a workflow bound to a worker servicing sessions")
-		}
+	before := ms.GetExecutionInfo().GetVersioningInfo()
+	after := common.CloneProto(before)
+	if after == nil {
+		after = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
+	after.VersioningOverride = mergedOverride
+	if !workflow.GetEffectiveDeployment(before).Equal(workflow.GetEffectiveDeployment(after)) ||
+		workflow.GetEffectiveVersioningBehavior(before) != workflow.GetEffectiveVersioningBehavior(after) {
+		// TODO (Shivam): Session bindings do not follow versioning changes yet (MTC-934).
+		return serviceerror.NewInvalidArgument("versioning override would change the version of a workflow bound to a worker servicing sessions")
 	}
 	return nil
 }
