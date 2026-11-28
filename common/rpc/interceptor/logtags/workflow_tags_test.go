@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -31,7 +32,13 @@ func TestExtract(t *testing.T) {
 		RunId:      tv.RunID(),
 	}
 	taskTokenBytes, err := serializer.Serialize(&taskToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	nexusTaskTokenBytes, err := serializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+		NamespaceId: string(tv.NamespaceID()),
+		TaskQueue:   tv.TaskQueue().GetName(),
+		TaskId:      "nexus-task-id",
+	})
+	require.NoError(t, err)
 
 	testCases := []struct {
 		name       string
@@ -92,6 +99,13 @@ func TestExtract(t *testing.T) {
 				TaskToken: taskTokenBytes,
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted",
+		},
+		{
+			name: "Frontend PollNexusTaskQueueResponse (Nexus task_token is ignored)",
+			req: &workflowservice.PollNexusTaskQueueResponse{
+				TaskToken: nexusTaskTokenBytes,
+			},
+			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue",
 		},
 		{
 			name: "History DescribeWorkflowExecutionRequest",

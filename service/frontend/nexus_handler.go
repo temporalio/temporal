@@ -89,18 +89,6 @@ type operationContext struct {
 	cleanupFunctions              []func(map[string]string, error)
 }
 
-func (c *operationContext) annotateServerSpan(
-	ctx context.Context,
-	service, operation, requestID string,
-) {
-	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
-		Endpoint:  c.endpointName,
-		Service:   service,
-		Operation: operation,
-		RequestID: requestID,
-	})
-}
-
 // Panic handler and metrics recording function.
 // Used as a deferred statement in Nexus handler methods.
 func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
@@ -494,6 +482,7 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		return nil, err
 	}
+	nexusrpc.AnnotateServerSpanLinks(trace.SpanFromContext(ctx), options.RequestID, handlerLinks)
 	nexus.AddHandlerLinks(ctx, handlerLinks...)
 	return result, nil
 }
@@ -556,6 +545,8 @@ func (h *nexusHandler) forwardStartOperation(
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
+	nexusrpc.AnnotateServerSpanLinks(trace.SpanFromContext(ctx), options.RequestID, resp.Links)
+	nexus.AddHandlerLinks(ctx, resp.Links...)
 
 	if resp.Successful != nil {
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
