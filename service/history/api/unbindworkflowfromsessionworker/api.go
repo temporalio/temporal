@@ -44,6 +44,22 @@ func Invoke(
 	return &historyservice.UnbindWorkflowFromSessionWorkerResponse{}, nil
 }
 
+// UnbindFromDeadWorker unbinds a workflow from its multi-session worker once Matching reports that worker dead, rather
+// than waiting for another worker to start the task, so the workflow shows as unbound right away. Callers run it
+// in-process, as a query clears a dead sticky queue. A completed workflow has nothing to unbind.
+func UnbindFromDeadWorker(
+	ctx context.Context,
+	request *historyservice.UnbindWorkflowFromSessionWorkerRequest,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+) error {
+	_, err := Invoke(ctx, request, shardContext, workflowConsistencyChecker)
+	if err == consts.ErrWorkflowCompleted {
+		return nil
+	}
+	return err
+}
+
 func unbindWorkflowFromSessionWorker(mutableState historyi.MutableState, workerQueue string) (*api.UpdateWorkflowAction, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted

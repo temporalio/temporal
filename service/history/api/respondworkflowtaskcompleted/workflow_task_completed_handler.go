@@ -504,7 +504,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// equivalent in the SDK (the worker must have session options); the server checks the binding, which a worker
 	// servicing sessions sets when it starts the task. If the workflow was unbound while the task ran, the task fails and
 	// is retried from the normal queue, where a worker servicing sessions binds it again.
-	if attr.GetSessionOptions().GetWorkflowSession() != nil && executionInfo.GetSessionState() == nil {
+	if attr.GetSessionOptions().GetWorkflowSession() != nil && handler.mutableState.SessionWorkerQueue() == "" {
 		err := serviceerror.NewInvalidArgument("Workflow-session activities require the workflow to be bound to a worker servicing sessions, and it is not bound now")
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
@@ -1207,7 +1207,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	// Sessions only support pinned workflows within a single run: a bound workflow cannot ask its next run to upgrade to
 	// another version.
 	if attr.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED &&
-		handler.mutableState.GetExecutionInfo().GetSessionState() != nil {
+		handler.mutableState.SessionWorkerQueue() != "" {
 		err := serviceerror.NewInvalidArgument("upgrade on continue-as-new is not supported for a workflow bound to a worker servicing sessions")
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}

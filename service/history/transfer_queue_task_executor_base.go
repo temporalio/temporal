@@ -117,52 +117,26 @@ func addActivityTask(
 	}
 	directive := request.GetSessionDirective()
 	switch {
-	case isSingleSessionTask(directive):
+	case workflow.IsSingleSessionDirective(directive):
 		// tasks bound to a single-session worker are not re-directed to the normal queue and are retried on the queue
 		return nil, err
-	case isMultiSessionTask(directive) && transactionPolicy == historyi.TransactionPolicyPassive:
-		return nil, err
-	case isMultiSessionTask(directive):
-		return &matchingservice.AddActivityTaskResponse{}, unbindFromDeadSessionWorker(ctx, shardContext, workflowCache,
+	case workflow.IsMultiSessionDirective(directive):
+		if transactionPolicy == historyi.TransactionPolicyPassive {
+			// A standby cluster cannot change the workflow.
+			return nil, err
+		}
+		return &matchingservice.AddActivityTaskResponse{}, unbindworkflowfromsessionworker.UnbindFromDeadWorker(ctx,
 			&historyservice.UnbindWorkflowFromSessionWorkerRequest{
 				NamespaceId: request.GetNamespaceId(),
 				Execution:   request.GetExecution(),
 				WorkerQueue: request.GetTaskQueue().GetName(),
-			})
+			}, shardContext, api.NewWorkflowConsistencyChecker(shardContext, workflowCache))
 	default:
 		// non-session based sticky tasks are redirected to the normal queue
 		request.TaskQueue = &taskqueuepb.TaskQueue{Name: request.GetTaskQueue().GetNormalName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 		request.SessionDirective = nil
 		return matchingClient.AddActivityTask(ctx, request)
 	}
-}
-
-// isSingleSessionTask reports whether the task goes to the sticky queue of the single-session worker its workflow is
-// bound to.
-func isSingleSessionTask(directive *taskqueuespb.TaskSessionDirective) bool {
-	return directive.GetIsExclusiveWorkerAssigned()
-}
-
-// isMultiSessionTask reports whether the task goes to the sticky queue of the multi-session worker its workflow is bound
-// to.
-func isMultiSessionTask(directive *taskqueuespb.TaskSessionDirective) bool {
-	return directive != nil && !directive.GetIsExclusiveWorkerAssigned()
-}
-
-// unbindFromDeadSessionWorker unbinds a workflow from its multi-session worker once Matching reports that worker dead,
-// rather than waiting for another worker to start the task, so the workflow shows as unbound right away. It runs the
-// unbind API in-process.
-func unbindFromDeadSessionWorker(
-	ctx context.Context,
-	shardContext historyi.ShardContext,
-	workflowCache wcache.Cache,
-	request *historyservice.UnbindWorkflowFromSessionWorkerRequest,
-) error {
-	_, err := unbindworkflowfromsessionworker.Invoke(ctx, request, shardContext, api.NewWorkflowConsistencyChecker(shardContext, workflowCache))
-	if err == consts.ErrWorkflowCompleted {
-		return nil
-	}
-	return err
 }
 
 func (t *transferQueueTaskExecutorBase) pushActivity(

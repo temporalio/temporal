@@ -444,7 +444,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			false)
 	} else if !wtHeartbeatTimedOut && ms.SessionWorkerQueue() == "" && ms.HasPendingSessionActivities() {
 		// Session activities run only on the worker the workflow is bound to, and only a session worker starting a
-		// workflow task binds it. Until one does, a worker without sessions cannot complete the workflow's tasks; the
+		// workflow task binds it. Unlike scheduling a session activity on an unbound workflow (a bad command), this
+		// fails the completion whatever it contains, so it has its own cause. Until one does, a worker without sessions cannot complete the workflow's tasks; the
 		// task is retried until a session worker takes it, binds the workflow, and the waiting activities are sent to it.
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_SESSION_WORKER_REQUIRED,

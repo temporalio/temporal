@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/unbindworkflowfromsessionworker"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -353,19 +355,19 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return err
 	}
 	switch sessionDirective := workflow.TaskSessionDirective(sessionState, taskQueue); {
-	case isSingleSessionTask(sessionDirective):
+	case workflow.IsSingleSessionDirective(sessionDirective):
 		// A single-session workflow never leaves its worker. Matching only reports that worker unavailable when the
 		// sticky queue does not belong to the task's deployment version, which is not handled yet; retry rather than
 		// send the task elsewhere.
 		// TODO (Shivam): handle exclusive bindings on versioned task queues, for workflow tasks and session activities
 		// alike (MTC-934).
 		return err
-	case isMultiSessionTask(sessionDirective):
-		return unbindFromDeadSessionWorker(ctx, t.shardContext, t.cache, &historyservice.UnbindWorkflowFromSessionWorkerRequest{
+	case workflow.IsMultiSessionDirective(sessionDirective):
+		return unbindworkflowfromsessionworker.UnbindFromDeadWorker(ctx, &historyservice.UnbindWorkflowFromSessionWorkerRequest{
 			NamespaceId: transferTask.NamespaceID,
 			Execution:   &commonpb.WorkflowExecution{WorkflowId: transferTask.WorkflowID, RunId: transferTask.RunID},
 			WorkerQueue: taskQueue.GetName(),
-		})
+		}, t.shardContext, api.NewWorkflowConsistencyChecker(t.shardContext, t.cache))
 	default:
 		// sticky worker is unavailable, switch to original normal task queue.
 		taskQueue = &taskqueuepb.TaskQueue{

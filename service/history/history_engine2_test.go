@@ -1233,7 +1233,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedKeepsSessionBinding() {
 			})
 
 			if tc.wantRejected {
-				s.ErrorAs(err, new(*serviceerrors.ObsoleteMatchingTask))
+				s.Require().ErrorAs(err, new(*serviceerrors.ObsoleteMatchingTask))
 				return
 			}
 			s.Require().NoError(err)

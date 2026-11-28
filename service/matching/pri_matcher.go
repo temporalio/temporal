@@ -330,7 +330,8 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 }
 
 // drainSessionWorkerQueue unbinds each backlog task's workflow from this dead worker in History and drops the task. It
-// calls done(true) once the backlog is empty, or done(false) if the queue closes.
+// calls done(true) once the backlog is empty, or done(false) if the queue closes or History will not release a
+// workflow here (see unbindStopsDrain).
 func (tm *priTaskMatcher) drainSessionWorkerQueue(
 	unbind func(context.Context, *persistencespb.AllocatedTaskInfo) error,
 	isDrained func() bool,

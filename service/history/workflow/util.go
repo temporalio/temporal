@@ -40,6 +40,18 @@ func TaskSessionDirective(sessionState *persistencespb.SessionState, taskQueue *
 	}
 }
 
+// IsSingleSessionDirective reports whether the directive marks a task for the single-session worker its workflow is
+// bound to.
+func IsSingleSessionDirective(directive *taskqueuespb.TaskSessionDirective) bool {
+	return directive.GetIsExclusiveWorkerAssigned()
+}
+
+// IsMultiSessionDirective reports whether the directive marks a task for the multi-session worker its workflow is bound
+// to.
+func IsMultiSessionDirective(directive *taskqueuespb.TaskSessionDirective) bool {
+	return directive != nil && !directive.GetIsExclusiveWorkerAssigned()
+}
+
 func failWorkflowTask(
 	mutableState historyi.MutableState,
 	workflowTask *historyi.WorkflowTaskInfo,

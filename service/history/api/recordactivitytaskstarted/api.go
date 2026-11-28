@@ -187,14 +187,13 @@ func recordActivityTaskStarted(
 
 	if ai.GetSessionState().GetWorkflowSession() != nil &&
 		request.PollRequest.GetTaskQueue().GetName() != mutableState.SessionWorkerQueue() {
-		// Session activities are only dispatched to the bound worker's sticky queue, so this copy was put on another queue
-		// (the normal queue) by an older server version. Drop it: a session activity never runs off its bound worker, and
-		// the next binding reissues it.
+		// Session activities are only dispatched to the bound worker's sticky queue, so a copy on another queue is
+		// unexpected. Drop it: a session activity never runs off its bound worker, and the next binding reissues it.
 		softassert.Fail(shardContext.GetLogger(), "session activity task was on a queue other than its bound worker's sticky queue",
 			tag.WorkflowNamespaceID(request.GetNamespaceId()),
 			tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(request.GetWorkflowExecution().GetRunId()),
-			tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+			tag.WorkflowScheduledEventID(ai.GetScheduledEventId()),
 			tag.TaskQueueName(request.PollRequest.GetTaskQueue().GetName()),
 		)
 		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask("session activity started off its bound worker's sticky queue")

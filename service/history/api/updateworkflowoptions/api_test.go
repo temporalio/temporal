@@ -359,6 +359,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 
 	// mock a mutable state with an existing versioning override
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
+	s.currentMutableState.EXPECT().SessionWorkerQueue().Return("").AnyTimes()
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,
 		VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{
@@ -578,6 +579,7 @@ func TestMergeAndApply(t *testing.T) {
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: tc.initialConfig},
 			}).AnyTimes()
+			ms.EXPECT().SessionWorkerQueue().Return("").AnyTimes()
 
 			if tc.expectChanges {
 				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
@@ -670,6 +672,11 @@ func TestMergeAndApplyRejectsVersioningOverrideForSessionBinding(t *testing.T) {
 				SessionState:   tc.sessionState,
 				VersioningInfo: tc.current,
 			}).AnyTimes()
+			workerQueue := ""
+			if tc.sessionState != nil {
+				workerQueue = "worker-queue"
+			}
+			ms.EXPECT().SessionWorkerQueue().Return(workerQueue).AnyTimes()
 			if !tc.rejected && !tc.noChange {
 				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),

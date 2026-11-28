@@ -57,9 +57,9 @@ const (
 	// part of the workflow's state and is kept.
 	StickyClearForStateRebuild
 	// StickyClearForStartedOffStickyQueue means a worker started the task from a queue other than the sticky queue, so
-	// the sticky worker did not take it. A workflow bound to a multi-session worker is unbound here and bound again by
-	// UpdateNonExclusiveWorkerBinding for the starting worker. This should not happen for a workflow bound to a session
-	// worker, since a dead bound worker unbinds the workflow first.
+	// the sticky worker did not take it. This should not happen for a workflow bound to a session worker, since a dead
+	// bound worker unbinds the workflow first; if it does, a multi-session binding is released here and
+	// UpdateNonExclusiveWorkerBinding binds the starting worker.
 	StickyClearForStartedOffStickyQueue
 	// StickyClearForBoundWorkerLost means the workflow's bound multi-session worker no longer serves it: a worker
 	// without sessions started one of its tasks, or the bound worker is gone. The binding is released; the caller

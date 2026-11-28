@@ -178,7 +178,7 @@ func MergeAndApply(
 // behavior of a workflow bound to a session worker: the binding keeps sending the workflow's tasks to that worker, and
 // sessions do not support moving to another version yet. An override that leaves both unchanged is allowed.
 func rejectVersionChangeForSessionBinding(ms historyi.MutableState, mergedOverride *workflowpb.VersioningOverride) error {
-	if ms.GetExecutionInfo().GetSessionState() == nil {
+	if ms.SessionWorkerQueue() == "" {
 		// Not bound to a worker servicing sessions.
 		return nil
 	}

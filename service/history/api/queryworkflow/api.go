@@ -413,7 +413,8 @@ func queryDirectlyThroughMatching(
 			// not polled recently, so the query fails even if the worker is alive, and an idle workflow of a dead worker
 			// stays unqueryable until something else moves it. Agreed approach (MTC-919): Matching checks the worker's
 			// heartbeats for queries as it does for tasks, so a live worker's query waits until the caller's deadline;
-			// only when the worker is dead does History unbind the workflow and retry the query on the normal queue.
+			// only when the worker is dead does History unbind the workflow (unbindworkflowfromsessionworker.UnbindFromDeadWorker)
+			// and retry the query on the normal queue.
 			return nil, err
 		}
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {

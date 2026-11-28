@@ -1316,6 +1316,7 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue",
 	})
+	ms.EXPECT().SessionWorkerQueue().Return("")
 	registry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
 	handler := &workflowTaskCompletedHandler{
 		mutableState:  ms,
@@ -1339,27 +1340,34 @@ func TestSessionActivityRequiresStickyPlacement(t *testing.T) {
 // BAD_CONTINUE_AS_NEW_ATTRIBUTES before the next run starts.
 func TestUpgradeOnContinueAsNewRejectedForSessionBinding(t *testing.T) {
 	t.Parallel()
-	for _, sessionState := range []*persistencespb.SessionState{{ExclusiveWorker: true}, {}} {
-		ctrl := gomock.NewController(t)
-		ms := historyi.NewMockMutableState(ctrl)
-		ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
-		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-			NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue", SessionState: sessionState,
-		}).AnyTimes()
-		config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
-		handler := &workflowTaskCompletedHandler{
-			mutableState:                   ms,
-			attrValidator:                  api.NewCommandAttrValidator(namespace.NewMockRegistry(ctrl), config, nil),
-			searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
-		}
-		event, err := handler.handleCommandContinueAsNewWorkflow(t.Context(), &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-			WorkflowType:              &commonpb.WorkflowType{Name: "workflow"},
-			TaskQueue:                 &taskqueuepb.TaskQueue{Name: "normal-queue"},
-			InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+	for name, sessionState := range map[string]*persistencespb.SessionState{
+		"single-session": {ExclusiveWorker: true},
+		"multi-session":  {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId: tests.NamespaceID.String(), TaskQueue: "normal-queue", SessionState: sessionState,
+				StickyTaskQueue: "worker-queue",
+			}).AnyTimes()
+			ms.EXPECT().SessionWorkerQueue().Return("worker-queue").AnyTimes()
+			config := configs.NewConfig(dynamicconfig.NewNoopCollection(), 1)
+			handler := &workflowTaskCompletedHandler{
+				mutableState:                   ms,
+				attrValidator:                  api.NewCommandAttrValidator(namespace.NewMockRegistry(ctrl), config, nil),
+				searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+			}
+			event, err := handler.handleCommandContinueAsNewWorkflow(t.Context(), &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+				WorkflowType:              &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:                 &taskqueuepb.TaskQueue{Name: "normal-queue"},
+				InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			})
+			require.NoError(t, err)
+			require.Nil(t, event)
+			require.True(t, handler.stopProcessing)
+			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
 		})
-		require.NoError(t, err)
-		require.Nil(t, event)
-		require.True(t, handler.stopProcessing)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, handler.workflowTaskFailedCause.failedCause)
 	}
 }
