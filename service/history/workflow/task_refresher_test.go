@@ -1496,7 +1496,7 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 			wantRegen:              false,
 		},
 		{
-			name:                   "FullRefresh/RegeneratesFastForwardOnly",
+			name:                   "FullRefresh/RegeneratesFastForwardAndDeferredChild",
 			tsi:                    tsiAt(5),
 			minVersionedTransition: EmptyVersionedTransition,
 			wantRegen:              false,
@@ -1541,6 +1541,7 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 			}
 			s.mockTaskGenerator.EXPECT().RegenerateTimerTasksForTimeSkipping().Return(nil).Times(times)
 			s.mockTaskGenerator.EXPECT().GenerateTimeSkippingFastForwardTimerTask().Return(nil).Times(fastForwardTimes)
+			s.mockTaskGenerator.EXPECT().GenerateDeferredChildCompletionTimerTasks().Return(nil).Times(fastForwardTimes)
 
 			err = s.taskRefresher.refreshTasksForTimeSkipping(mutableState, s.mockTaskGenerator, tc.minVersionedTransition)
 			s.NoError(err)

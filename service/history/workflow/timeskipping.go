@@ -557,9 +557,10 @@ func (ms *MutableStateImpl) skipTargetPassesDeferredChild(transition *chasm.Time
 }
 
 // DeferOutrunningChildCompletion holds a child's terminal event when that child's
-// virtual close time is still ahead of the parent. The parent then delivers its own
-// earlier timers and timeouts, and advances to the child's close time, before the
-// completion is written.
+// virtual close time is still ahead of the parent. The parent delivers its own
+// earlier timers and timeouts first. A timer task at the close time writes the
+// completion once the parent's clock reaches it. The clock advances to that time
+// only when the parent is skippable.
 func (ms *MutableStateImpl) DeferOutrunningChildCompletion(
 	initiatedID int64,
 	completionEvent *historypb.HistoryEvent,
@@ -587,43 +588,102 @@ func (ms *MutableStateImpl) DeferOutrunningChildCompletion(
 	ci.DeferredCompletionEvent = common.CloneProto(completionEvent)
 	ms.updateChildExecutionInfos[initiatedID] = ci
 	ms.approximateSize += ci.Size()
+	scheduleDeferredChildCompletionTimer(ms, initiatedID, ci)
 	return true, nil
 }
 
 // closeTransactionFlushDeferredChildCompletions writes deferred child completions
-// whose close time is not after every remaining parent deadline. When a deadline
-// is still earlier, the completion stays deferred so that deadline is delivered first.
+// once the parent's clock reaches the child's close time and every earlier parent
+// deadline has been delivered. The clock advances to a future close time only when
+// the parent is skippable. A completion the clock has already reached is written
+// even when the parent is not skippable. When the close time is still ahead and
+// the parent cannot skip, the timer scheduled at deferral wakes it at that time.
 func (ms *MutableStateImpl) closeTransactionFlushDeferredChildCompletions(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (bool, error) {
-	if transactionPolicy != historyi.TransactionPolicyActive || !ms.IsWorkflow() {
-		return false, nil
-	}
-	if !ms.IsWorkflowExecutionRunning() || ms.HasPendingWorkflowTask() || ms.IsWorkflowExecutionStatusPaused() {
-		return false, nil
-	}
-	closeTime, ok := ms.earliestDeferredChildClose()
-	if !ok {
-		return false, nil
-	}
-	if ms.hasTimeSkippingDeadlineBefore(closeTime) {
+	if !ms.canFlushDeferredChildCompletions(transactionPolicy) {
 		return false, nil
 	}
 
-	advanced, err := ms.advanceVirtualTimeTo(ctx, closeTime)
-	if err != nil {
-		return false, err
-	}
-	if err := ms.recordDeferredChildCompletions(ms.Now()); err != nil {
-		return false, err
-	}
-	if ms.IsWorkflowExecutionRunning() {
-		if err := ScheduleWorkflowTask(ms); err != nil {
+	wrote := false
+	advancedAny := false
+	for {
+		closeTime, ok := ms.earliestDeferredChildClose()
+		if !ok || ms.hasTimeSkippingDeadlineBefore(closeTime) {
+			break
+		}
+		if closeTime.After(ms.Now()) {
+			advanced, recorded, err := ms.advanceToDeferredChildClose(ctx, closeTime)
+			if err != nil {
+				return false, err
+			}
+			if !recorded {
+				break
+			}
+			wrote = true
+			advancedAny = advanced
+			break
+		}
+		recorded, err := ms.recordDeferredChildCompletions(ms.Now(), false)
+		if err != nil {
 			return false, err
 		}
+		if !recorded {
+			break
+		}
+		wrote = true
 	}
-	return advanced, nil
+	if !wrote || !ms.IsWorkflowExecutionRunning() {
+		return advancedAny, nil
+	}
+	if err := ScheduleWorkflowTask(ms); err != nil {
+		return false, err
+	}
+	return advancedAny, nil
+}
+
+func (ms *MutableStateImpl) canFlushDeferredChildCompletions(transactionPolicy historyi.TransactionPolicy) bool {
+	if transactionPolicy != historyi.TransactionPolicyActive || !ms.IsWorkflow() {
+		return false
+	}
+	return ms.IsWorkflowExecutionRunning() && !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused()
+}
+
+// advanceToDeferredChildClose moves the clock to closeTime when the parent is
+// skippable, then writes completions the clock has reached. A parent that is not
+// skippable leaves the completion deferred for the timer at closeTime.
+func (ms *MutableStateImpl) advanceToDeferredChildClose(
+	ctx context.Context,
+	closeTime time.Time,
+) (advanced bool, recorded bool, err error) {
+	if !ms.isWorkflowSkippable() {
+		return false, false, nil
+	}
+	advanced, err = ms.advanceVirtualTimeTo(ctx, closeTime)
+	if err != nil {
+		return false, false, err
+	}
+	recorded, err = ms.recordDeferredChildCompletions(ms.Now(), !advanced)
+	return advanced, recorded, err
+}
+
+// scheduleDeferredChildCompletionTimer queues a timer that fires at the child's
+// close time. AddTasks converts that logical time to wall clock.
+func scheduleDeferredChildCompletionTimer(
+	ms historyi.MutableState,
+	initiatedID int64,
+	ci *persistencespb.ChildExecutionInfo,
+) {
+	closeTime := ci.GetDeferredCompletionEvent().GetEventTime().AsTime()
+	if closeTime.IsZero() || !closeTime.After(ms.Now()) {
+		return
+	}
+	ms.AddTasks(&tasks.DeferredChildCompletionTimerTask{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: closeTime,
+		InitiatedEventID:    initiatedID,
+	})
 }
 
 // hasTimeSkippingDeadlineBefore reports whether a parent timer, timeout, backoff,
@@ -725,7 +785,10 @@ func (ms *MutableStateImpl) advanceVirtualTimeTo(ctx context.Context, target tim
 	return true, nil
 }
 
-func (ms *MutableStateImpl) recordDeferredChildCompletions(until time.Time) error {
+// recordDeferredChildCompletions writes deferred completions whose close time is
+// at or before until. forceEarliest records the earliest completion when none is
+// due, which is used when a skip to that close time was rejected.
+func (ms *MutableStateImpl) recordDeferredChildCompletions(until time.Time, forceEarliest bool) (bool, error) {
 	type readyChild struct {
 		id int64
 		ci *persistencespb.ChildExecutionInfo
@@ -743,20 +806,23 @@ func (ms *MutableStateImpl) recordDeferredChildCompletions(until time.Time) erro
 		ready = append(ready, readyChild{id: id, ci: ci})
 	}
 	if len(ready) == 0 {
+		if !forceEarliest {
+			return false, nil
+		}
 		// The clock could not reach the child's close time. Record the earliest
 		// completion anyway so the parent does not wait on an event it will not skip to.
 		id, ci, ok := ms.earliestDeferredChild()
 		if !ok {
-			return nil
+			return false, nil
 		}
 		ready = append(ready, readyChild{id: id, ci: ci})
 	}
 	for _, child := range ready {
 		if err := ms.recordDeferredChildCompletion(child.id, child.ci); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (ms *MutableStateImpl) recordDeferredChildCompletion(

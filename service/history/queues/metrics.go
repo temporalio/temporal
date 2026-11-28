@@ -115,6 +115,8 @@ func GetActiveTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerActiveTaskChasmPureTask
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		return metrics.TaskTypeTimerActiveTaskTimeSkippingTimer
+	case *tasks.DeferredChildCompletionTimerTask:
+		return metrics.TaskTypeTimerActiveTaskDeferredChildCompletionTimer
 	default:
 		return prefix + task.GetType().String()
 	}
@@ -148,6 +150,8 @@ func GetStandbyTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerStandbyTaskChasmPureTask
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		return metrics.TaskTypeTimerStandbyTaskTimeSkippingTimer
+	case *tasks.DeferredChildCompletionTimerTask:
+		return metrics.TaskTypeTimerStandbyTaskDeferredChildCompletionTimer
 	default:
 		return prefix + task.GetType().String()
 	}

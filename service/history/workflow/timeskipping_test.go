@@ -1751,6 +1751,16 @@ func (s *mutableStateSuite) TestDeferredChildCompletion() {
 		s.NoError(err)
 		s.True(again)
 		s.Equal(base.Add(time.Hour), s.mutableState.pendingChildExecutionInfoIDs[10].GetDeferredCompletionEvent().GetEventTime().AsTime())
+
+		var timerTask *tasks.DeferredChildCompletionTimerTask
+		for _, task := range s.mutableState.InsertTasks[tasks.CategoryTimer] {
+			if timer, ok := task.(*tasks.DeferredChildCompletionTimerTask); ok {
+				timerTask = timer
+			}
+		}
+		s.NotNil(timerTask)
+		s.Equal(int64(10), timerTask.InitiatedEventID)
+		s.Equal(base.Add(time.Hour), timerTask.VisibilityTimestamp)
 	})
 
 	s.Run("DeferWhenCloseIsNotAhead", func() {
@@ -1801,6 +1811,36 @@ func (s *mutableStateSuite) TestDeferredChildCompletion() {
 		s.False(advanced)
 		_, ok := s.mutableState.GetChildExecutionInfo(10)
 		s.True(ok, "the timer is due before the child closes and is delivered first")
+	})
+
+	s.Run("FlushDoesNotAdvanceWhileActivityInFlight", func() {
+		enable()
+		addDeferredChild(base.Add(2 * time.Hour))
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{ScheduledEventId: 1}
+		s.False(s.mutableState.isWorkflowSkippable())
+
+		advanced, err := s.mutableState.closeTransactionFlushDeferredChildCompletions(context.Background(), historyi.TransactionPolicyActive)
+		s.NoError(err)
+		s.False(advanced)
+		s.Zero(s.mutableState.accumulatedSkippedDuration())
+		_, ok := s.mutableState.GetChildExecutionInfo(10)
+		s.True(ok, "the completion stays deferred until the parent clock reaches the child close time")
+		s.False(s.mutableState.HasPendingWorkflowTask())
+	})
+
+	s.Run("FlushDeliversWhenClockHasReachedCloseWhileActivityInFlight", func() {
+		enable()
+		addDeferredChild(base)
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{ScheduledEventId: 1}
+		s.False(s.mutableState.isWorkflowSkippable())
+
+		advanced, err := s.mutableState.closeTransactionFlushDeferredChildCompletions(context.Background(), historyi.TransactionPolicyActive)
+		s.NoError(err)
+		s.False(advanced)
+		s.Zero(s.mutableState.accumulatedSkippedDuration())
+		_, ok := s.mutableState.GetChildExecutionInfo(10)
+		s.False(ok, "the completion is written once the parent clock has reached the child close time")
+		s.True(s.mutableState.HasPendingWorkflowTask())
 	})
 }
 

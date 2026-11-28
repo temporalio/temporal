@@ -134,6 +134,9 @@ const (
 	TASK_TYPE_TIMESKIPPING_TIMER TaskType = 36
 	// A transfer task that releases flow-control limiters held by a completed task attempt.
 	TASK_TYPE_TRANSFER_RELEASE_LIMITER TaskType = 37
+	// A timer task that delivers a deferred child completion once the parent's clock
+	// reaches the child's close time.
+	TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER TaskType = 38
 )
 
 // Enum value maps for TaskType.
@@ -174,6 +177,7 @@ var (
 		35: "TASK_TYPE_WORKER_COMMANDS",
 		36: "TASK_TYPE_TIMESKIPPING_TIMER",
 		37: "TASK_TYPE_TRANSFER_RELEASE_LIMITER",
+		38: "TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER",
 	}
 	TaskType_value = map[string]int32{
 		"TASK_TYPE_UNSPECIFIED":                           0,
@@ -211,6 +215,7 @@ var (
 		"TASK_TYPE_WORKER_COMMANDS":                       35,
 		"TASK_TYPE_TIMESKIPPING_TIMER":                    36,
 		"TASK_TYPE_TRANSFER_RELEASE_LIMITER":              37,
+		"TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER":       38,
 	}
 )
 
@@ -302,6 +307,8 @@ func (x TaskType) String() string {
 		return "TimeskippingTimer"
 	case TASK_TYPE_TRANSFER_RELEASE_LIMITER:
 		return "TransferReleaseLimiter"
+	case TASK_TYPE_DEFERRED_CHILD_COMPLETION_TIMER:
+		return "DeferredChildCompletionTimer"
 	default:
 		return strconv.Itoa(int(x))
 	}

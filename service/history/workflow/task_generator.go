@@ -82,6 +82,7 @@ type (
 
 		RegenerateTimerTasksForTimeSkipping() error
 		GenerateTimeSkippingFastForwardTimerTask() error
+		GenerateDeferredChildCompletionTimerTasks() error
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
@@ -1091,7 +1092,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
 	// because time skipping pauses when there is in-flight work. Activity retry
 	// timers are the exception: an activity in retry backoff does not block skipping,
-	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
+	// so its retry timer must be re-stamped against the new accumulated skip (see (6)).
 	//
 	// NOTE: blocks (1)-(4) below construct their tasks inline rather than calling the
 	// canonical generators (GenerateUserTimerTasks, GenerateWorkflowStartTasks,
@@ -1174,7 +1175,13 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			})
 		}
 	}
-	// (5) activity retry backoff timers — no time comparison here. Regen runs after
+	// (5) deferred child-completion timers. A skip changes the physical fire time of
+	// the logical close time, so restamp every completion that is still held.
+	if err := r.GenerateDeferredChildCompletionTimerTasks(); err != nil {
+		return err
+	}
+
+	// (6) activity retry backoff timers — no time comparison here. Regen runs after
 	// the skip transaction has advanced virtual now past the next-attempt time, so any
 	// now-relative check would wrongly exclude the activity whose timer needs re-stamping.
 	// The structural check (not started, has retry policy, attempt > 1) is sufficient:
@@ -1190,6 +1197,13 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
 	// are treated as a part of in-flight nexus operation and won't be regenerated.
 	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
+	return nil
+}
+
+func (r *TaskGeneratorImpl) GenerateDeferredChildCompletionTimerTasks() error {
+	for id, ci := range r.mutableState.GetPendingChildExecutionInfos() {
+		scheduleDeferredChildCompletionTimer(r.mutableState, id, ci)
+	}
 	return nil
 }
 

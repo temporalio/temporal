@@ -112,6 +112,8 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
+	case *tasks.DeferredChildCompletionTimerTask:
+		err = t.executeDeferredChildCompletionTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -229,6 +231,36 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 		t.clusterName,
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
+	)
+}
+
+// executeDeferredChildCompletionTimerTask waits until the active cluster replicates
+// the child completion. The standby does not write it locally.
+func (t *timerQueueStandbyTaskExecutor) executeDeferredChildCompletionTimerTask(
+	ctx context.Context,
+	timerTask *tasks.DeferredChildCompletionTimerTask,
+) error {
+	actionFn := func(_ context.Context, _ historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
+		if !mutableState.IsWorkflowExecutionRunning() {
+			return nil, nil
+		}
+		ci, ok := mutableState.GetChildExecutionInfo(timerTask.InitiatedEventID)
+		if !ok || ci.GetDeferredCompletionEvent() == nil {
+			return nil, nil
+		}
+		return &struct{}{}, nil
+	}
+
+	return t.processTimer(
+		ctx,
+		timerTask,
+		actionFn,
+		getStandbyPostActionFn(
+			timerTask,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+		),
 	)
 }
 
