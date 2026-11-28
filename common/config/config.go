@@ -58,7 +58,6 @@ type (
 	}
 
 	// Failpoints let tests and tools change the behavior of server code at named points.
-	// They are installed only if Enabled is true. The server reads it once at startup.
 	Failpoints struct {
 		// Enabled installs failpoints and logs a warning at startup.
 		// It is false by default, and then nothing about failpoints is active.
