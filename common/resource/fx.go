@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -468,7 +469,16 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
-	lc.Append(fx.StopHook(factory.Close))
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			factory.StartMembershipEviction()
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			factory.Close()
+			return nil
+		},
+	})
 	return factory, nil
 }
 

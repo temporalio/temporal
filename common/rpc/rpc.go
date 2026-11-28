@@ -39,6 +39,11 @@ var _ common.RPCFactory = (*RPCFactory)(nil)
 // Minimum interval between (traffic-triggered) sweeps of shut-down connections.
 const internodeConnCleanupInterval = 30 * time.Minute
 
+const (
+	internodeEvictionCheckInterval = 30 * time.Second
+	internodeEvictionDelay         = 30 * time.Second
+)
+
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
 	config         *config.Config
@@ -69,7 +74,12 @@ type RPCFactory struct {
 	internodeGRPCConnections map[string]*grpc.ClientConn
 	remoteFrontendGRPCConns  map[string]*grpc.ClientConn
 
-	internodeConnCleanupTicker *time.Ticker
+	internodeConnCleanupTicker     *time.Ticker
+	stopCh                         chan struct{}
+	stopOnce                       sync.Once
+	watchersWg                     sync.WaitGroup
+	membershipEvictionDelay        time.Duration
+	membershipEvictionTickInterval time.Duration
 	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
 	localFrontendGRPCConn func() *grpc.ClientConn
 
@@ -124,6 +134,9 @@ func NewFactory(
 	f.internodeGRPCConnections = make(map[string]*grpc.ClientConn)
 	f.remoteFrontendGRPCConns = make(map[string]*grpc.ClientConn)
 	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
+	f.stopCh = make(chan struct{})
+	f.membershipEvictionDelay = internodeEvictionDelay
+	f.membershipEvictionTickInterval = internodeEvictionCheckInterval
 	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
@@ -396,6 +409,87 @@ func (d *RPCFactory) cleanupInternodeConns() {
 	}
 }
 
+func (d *RPCFactory) evictInternodeConn(hostName string) {
+	d.connectionsMu.Lock()
+	conn, ok := d.internodeGRPCConnections[hostName]
+	if ok {
+		delete(d.internodeGRPCConnections, hostName)
+	}
+	d.connectionsMu.Unlock()
+	if ok {
+		_ = conn.Close()
+	}
+}
+
+// StartMembershipEviction watches the history and matching membership rings
+// and evicts cached internode connections when hosts depart.
+func (d *RPCFactory) StartMembershipEviction() {
+	if d.monitor == nil {
+		return
+	}
+	for _, svc := range []primitives.ServiceName{primitives.HistoryService, primitives.MatchingService} {
+		resolver, err := d.monitor.GetResolver(svc)
+		if err != nil {
+			d.logger.Debug("Skipping membership eviction for service", tag.Service(svc), tag.Error(err))
+			continue
+		}
+		d.watchersWg.Add(1)
+		go d.watchMembership(resolver, svc)
+	}
+}
+
+func (d *RPCFactory) watchMembership(resolver membership.ServiceResolver, svc primitives.ServiceName) {
+	defer d.watchersWg.Done()
+	listenerName := fmt.Sprintf("rpcfactory-eviction-%s-%p", svc, d)
+	ch := make(chan *membership.ChangedEvent, 1)
+	if err := resolver.AddListener(listenerName, ch); err != nil {
+		d.logger.Error("Failed to subscribe RPCFactory to membership", tag.Service(svc), tag.Error(err))
+		return
+	}
+	defer func() { _ = resolver.RemoveListener(listenerName) }()
+
+	evictAt := make(map[string]time.Time)
+	ticker := time.NewTicker(d.membershipEvictionTickInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-d.stopCh:
+			return
+		case event := <-ch:
+			for _, h := range event.HostsRemoved {
+				evictAt[h.GetAddress()] = time.Now().Add(d.membershipEvictionDelay)
+			}
+			for _, h := range event.HostsAdded {
+				delete(evictAt, h.GetAddress())
+			}
+		case <-ticker.C:
+			d.reapEvictableConns(evictAt, resolver)
+		}
+	}
+}
+
+func (d *RPCFactory) reapEvictableConns(evictAt map[string]time.Time, resolver membership.ServiceResolver) {
+	if len(evictAt) == 0 {
+		return
+	}
+	members := make(map[string]struct{})
+	for _, m := range resolver.Members() {
+		members[m.GetAddress()] = struct{}{}
+	}
+	now := time.Now()
+	for addr, deadline := range evictAt {
+		if _, ok := members[addr]; ok {
+			delete(evictAt, addr)
+			continue
+		}
+		if now.Before(deadline) {
+			continue
+		}
+		d.evictInternodeConn(addr)
+		delete(evictAt, addr)
+	}
+}
+
 func (d *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	return d.createInternodeGRPCConnection(rpcAddress, primitives.HistoryService)
 }
@@ -417,6 +511,8 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 
 // Close shuts down all cached connections. Later requests return closed connections.
 func (d *RPCFactory) Close() {
+	d.stopOnce.Do(func() { close(d.stopCh) })
+	d.watchersWg.Wait()
 	d.internodeConnCleanupTicker.Stop()
 	_ = d.localFrontendGRPCConn().Close()
 
