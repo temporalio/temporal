@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -492,6 +493,89 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
 			},
 		}, []byte("token"))
+		s.Require().NoError(err)
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	s.Run("NexusOperationInRetryBackoff_Skippable", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		nextAttemptTime := s.mutableState.Now().Add(time.Minute)
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State:                   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+				NextAttemptScheduleTime: timestamppb.New(nextAttemptTime),
+			},
+		})
+		s.Require().NoError(err)
+		s.True(s.mutableState.isWorkflowSkippable())
+		s.Equal(nextAttemptTime, s.mutableState.findNextSkipTarget().GetTargetTime())
+	})
+
+	s.Run("NexusOperationWithDueRetry_EligibilityPassesButTargetSelectionBlocks", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State:                   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+				NextAttemptScheduleTime: timestamppb.New(s.mutableState.Now()),
+			},
+		})
+		s.Require().NoError(err)
+
+		s.True(s.mutableState.isWorkflowSkippable(), "eligibility only checks in-flight operation state")
+		s.Nil(s.mutableState.findNextSkipTarget(), "target selection rejects an already-due retry")
+	})
+
+	s.Run("NexusOperationTimeoutIsEarlierTarget", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		now := s.mutableState.Now()
+		timeoutTime := now.Add(time.Minute)
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State:                   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+				NextAttemptScheduleTime: timestamppb.New(now.Add(time.Hour)),
+				ScheduledTime:           timestamppb.New(now),
+				ScheduleToCloseTimeout:  durationpb.New(time.Minute),
+			},
+		})
+		s.Require().NoError(err)
+
+		s.True(s.mutableState.isWorkflowSkippable())
+		s.Equal(timeoutTime, s.mutableState.findNextSkipTarget().GetTargetTime())
+	})
+
+	s.Run("StartedNexusOperation_NotSkippable", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		_, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State: enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			},
+		})
+		s.Require().NoError(err)
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	s.Run("NexusOperationCancellation_NotSkippable", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		node, err := nexusoperations.MachineCollection(s.mutableState.HSM()).Add("op", nexusoperations.Operation{
+			NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				State:                   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+				NextAttemptScheduleTime: timestamppb.New(s.mutableState.Now().Add(time.Minute)),
+			},
+		})
+		s.Require().NoError(err)
+		operation, err := hsm.MachineData[nexusoperations.Operation](node)
+		s.Require().NoError(err)
+		_, err = operation.Cancel(node, s.mutableState.Now(), 1)
 		s.Require().NoError(err)
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
@@ -1326,6 +1410,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.mutableState.timeSource = ts
 		s.mutableState.pendingTimerInfoIDs = make(map[string]*persistencespb.TimerInfo)
 		s.mutableState.pendingActivityInfoIDs = make(map[int64]*persistencespb.ActivityInfo)
+		s.mutableState.executionInfo.StateMachineTimers = nil
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
@@ -1404,6 +1489,12 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 				ScheduledTime:    timestamppb.New(deadline),
 			}
 		}},
+		{"StateMachineTimer", "state machine timer", func(deadline time.Time) {
+			s.mutableState.executionInfo.StateMachineTimers = []*persistencespb.StateMachineTimerGroup{{
+				Deadline: timestamppb.New(deadline),
+				Infos:    []*persistencespb.StateMachineTaskInfo{{Type: "nexusoperations.Backoff"}},
+			}}
+		}},
 		{"WorkflowBackoff", "workflow backoff", func(deadline time.Time) {
 			s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = common.EmptyEventID
 			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
@@ -1444,6 +1535,25 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 			})
 		}
 	}
+
+	s.Run("StateMachineTimersUseEarliestNonEmptyGroup", func() {
+		resetMS()
+		s.mutableState.executionInfo.StateMachineTimers = []*persistencespb.StateMachineTimerGroup{
+			{Deadline: timestamppb.New(baseTime.Add(15 * time.Minute))},
+			{
+				Deadline: timestamppb.New(baseTime.Add(30 * time.Minute)),
+				Infos:    []*persistencespb.StateMachineTaskInfo{{Type: "nexusoperations.Backoff"}},
+			},
+			{
+				Deadline: timestamppb.New(baseTime.Add(time.Hour)),
+				Infos:    []*persistencespb.StateMachineTaskInfo{{Type: "nexusoperations.Timeout"}},
+			},
+		}
+
+		transition := s.mutableState.findNextSkipTarget()
+		s.Require().NotNil(transition)
+		s.Equal(baseTime.Add(30*time.Minute), transition.GetTargetTime())
+	})
 
 	s.Run("UserTimerAndEarlierFastForward_TargetIsFastForward", func() {
 		resetMS()
