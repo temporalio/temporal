@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
@@ -886,3 +887,12 @@ message NamespaceMutationAttribution {
   // Operator-provided explanation recorded in repair events.
   string reason = 3;
 }
+
+message CloseNamespaceRestoreRequest {
+  string namespace_id = 1;
+  string restore_id = 2;
+  // NAMESPACE_RESTORE_STATE_COMPLETED or NAMESPACE_RESTORE_STATE_FAILED.
+  temporal.api.enums.v1.NamespaceRestoreState state = 3;
+}
+
+message CloseNamespaceRestoreResponse {}

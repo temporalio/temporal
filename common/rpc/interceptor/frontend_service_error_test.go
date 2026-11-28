@@ -13,6 +13,7 @@ import (
 	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -106,6 +107,7 @@ func TestResourceExhaustedRetryDelaySurvivesFrontendErrorInterceptors(t *testing
 func TestFrontendServiceErrorInterceptor(t *testing.T) {
 	tests := []struct {
 		name            string
+		method          string
 		handlerErr      error
 		configureStream func(s *rpctest.MockServerTransportStream)
 		verifyFn        func(t *testing.T, err error, stream *rpctest.MockServerTransportStream)
@@ -138,6 +140,15 @@ func TestFrontendServiceErrorInterceptor(t *testing.T) {
 				var unavail *serviceerror.Unavailable
 				require.ErrorAs(t, err, &unavail)
 				assert.Equal(t, "internal history service error", unavail.Error())
+			},
+		},
+		{
+			name:       "Pass DataLoss from RefreshWorkflowTasks",
+			method:     adminservice.AdminService_RefreshWorkflowTasks_FullMethodName,
+			handlerErr: serviceerror.NewDataLoss("corrupt"),
+			verifyFn: func(t *testing.T, err error, _ *rpctest.MockServerTransportStream) {
+				var dataLoss *serviceerror.DataLoss
+				require.ErrorAs(t, err, &dataLoss)
 			},
 		},
 		{
@@ -178,7 +189,10 @@ func TestFrontendServiceErrorInterceptor(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			method := "/test/method"
+			method := tc.method
+			if method == "" {
+				method = "/test/method"
+			}
 
 			tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			if tc.expectLogErr != "" {

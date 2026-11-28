@@ -93,6 +93,20 @@ func (c *metricClient) CancelDLQJob(
 	return c.client.CancelDLQJob(ctx, request, opts...)
 }
 
+func (c *metricClient) CloseNamespaceRestore(
+	ctx context.Context,
+	request *adminservice.CloseNamespaceRestoreRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.CloseNamespaceRestoreResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientCloseNamespaceRestore")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CloseNamespaceRestore(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

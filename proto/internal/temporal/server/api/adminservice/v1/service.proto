@@ -268,4 +268,12 @@ service AdminService {
   rpc CountExecutions(CountExecutionsRequest) returns (CountExecutionsResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
+
+  // CloseNamespaceRestore moves the namespace's running restore to COMPLETED or FAILED, and
+  // replicates the change. Called by the restore job on the cluster hosting it. Returns
+  // FAILED_PRECONDITION if restore_id is not the namespace's current restore or the restore
+  // has already closed in another state. A repeated call with the same state returns OK.
+  rpc CloseNamespaceRestore(CloseNamespaceRestoreRequest) returns (CloseNamespaceRestoreResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 }

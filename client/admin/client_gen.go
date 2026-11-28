@@ -69,6 +69,16 @@ func (c *clientImpl) CancelDLQJob(
 	return c.client.CancelDLQJob(ctx, request, opts...)
 }
 
+func (c *clientImpl) CloseNamespaceRestore(
+	ctx context.Context,
+	request *adminservice.CloseNamespaceRestoreRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CloseNamespaceRestoreResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CloseNamespaceRestore(ctx, request, opts...)
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

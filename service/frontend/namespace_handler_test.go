@@ -2672,6 +2672,7 @@ func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 		newState        enumspb.NamespaceState
 		handover        bool
 		allowSoftDelete bool
+		allowRestore    bool
 		expectedErr     error
 	}{
 		{name: "soft delete", oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowSoftDelete: true},
@@ -2681,6 +2682,9 @@ func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 		{name: "system namespace", id: primitives.SystemNamespaceID, oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowSoftDelete: true, expectedErr: errSoftDeleteSystemNamespace},
 		{name: "handover", oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, handover: true, allowSoftDelete: true},
 		{name: "out of soft deleted", oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_REGISTERED, allowSoftDelete: true, expectedErr: errInvalidNamespaceStateUpdate},
+		{name: "restore", oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_REGISTERED, allowRestore: true},
+		{name: "restore can't soft delete", oldState: enumspb.NAMESPACE_STATE_REGISTERED, newState: enumspb.NAMESPACE_STATE_SOFT_DELETED, allowRestore: true, expectedErr: errInvalidNamespaceStateUpdate},
+		{name: "restore can't delete", oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_DELETED, allowRestore: true, expectedErr: errInvalidNamespaceStateUpdate},
 		{name: "soft deleted to deleted", oldState: enumspb.NAMESPACE_STATE_SOFT_DELETED, newState: enumspb.NAMESPACE_STATE_DELETED, expectedErr: errInvalidNamespaceStateUpdate},
 	}
 	for _, tc := range testCases {
@@ -2697,7 +2701,7 @@ func (s *namespaceHandlerCommonSuite) TestValidateStateUpdate_SoftDeleted() {
 				&workflowservice.UpdateNamespaceRequest{
 					UpdateInfo: &namespacepb.UpdateNamespaceInfo{State: tc.newState},
 				},
-				tc.allowSoftDelete,
+				internalUpdateOptions{allowSoftDelete: tc.allowSoftDelete, allowRestore: tc.allowRestore},
 			)
 			switch {
 			case tc.handover:

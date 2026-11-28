@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
 	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -64,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -114,6 +116,7 @@ type (
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
 		streamReceiverMonitor            replication.StreamReceiverMonitor
 		replicationServerRateLimiter     replication.ServerSchedulerRateLimiter
+		schedulerRateLimiter             queues.SchedulerRateLimiter
 	}
 
 	NewHandlerArgs struct {
@@ -153,11 +156,15 @@ type (
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
 		ReplicationServerRateLimiter    replication.ServerSchedulerRateLimiter
+		SchedulerRateLimiter            queues.SchedulerRateLimiter
 	}
 )
 
 const (
 	serviceName = "temporal.api.workflowservice.v1.HistoryService"
+
+	// restoreRefreshQuotaAPI names a restore's refresh in its task processing rate limiter request.
+	restoreRefreshQuotaAPI = "RestoreRefreshWorkflowTasks"
 )
 
 var (
@@ -1722,6 +1729,15 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+	if minConfigVersion := request.GetRequest().GetMinNamespaceConfigVersion(); minConfigVersion != 0 {
+		ns, err := h.checkRefreshNamespaceVersion(namespaceID, minConfigVersion)
+		if err != nil {
+			return nil, err
+		}
+		if err := h.admitRestoreRefresh(ns); err != nil {
+			return nil, err
+		}
+	}
 
 	err = engine.RefreshWorkflowTasks(
 		ctx,
@@ -1736,6 +1752,62 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	}
 
 	return &historyservice.RefreshWorkflowTasksResponse{}, nil
+}
+
+// checkRefreshNamespaceVersion rejects a refresh this host's namespace registry isn't ready for,
+// and returns the namespace. A restore refreshes with the namespace's restore version: tasks
+// regenerated while the registry still shows the namespace SOFT_DELETED would be discarded by the
+// task gate. The registry isn't read through, since it catches up within its refresh interval and
+// the caller retries.
+func (h *Handler) checkRefreshNamespaceVersion(namespaceID namespace.ID, minConfigVersion int64) (*namespace.Namespace, error) {
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	if ns.ConfigVersion() < minConfigVersion {
+		return nil, serviceerror.NewUnavailablef(
+			"namespace %s is at config version %d on this host, below the required %d",
+			ns.Name(), ns.ConfigVersion(), minConfigVersion,
+		)
+	}
+	if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED {
+		return nil, serviceerror.NewFailedPreconditionf(
+			"namespace %s is in state %s at config version %d",
+			ns.Name(), ns.State(), ns.ConfigVersion(),
+		)
+	}
+	return ns, nil
+}
+
+// admitRestoreRefresh takes a token for a restore's refresh from the namespace's task processing
+// rate limiter, at the lowest priority. Higher-priority tasks, including the ones earlier
+// refreshes regenerated, use up the same budget first, so a restore regenerates tasks only as fast
+// as the namespace's task processing leaves room for. The tasks pay for themselves when they run,
+// so a refresh takes one token. It follows the task scheduler's rate limiter settings: with the
+// limiter off it admits every refresh, and in shadow mode it admits every refresh too.
+func (h *Handler) admitRestoreRefresh(ns *namespace.Namespace) error {
+	if !h.config.TaskSchedulerEnableRateLimiter() {
+		return nil
+	}
+	if h.schedulerRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
+		restoreRefreshQuotaAPI,
+		1,
+		ns.Name().String(),
+		headers.CallerTypePreemptable,
+		0,
+		"",
+	)) {
+		return nil
+	}
+	metrics.NamespaceRestoreRefreshThrottledCount.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns.Name().String()))
+	if h.config.TaskSchedulerEnableRateLimiterShadowMode() {
+		return nil
+	}
+	return &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: fmt.Sprintf("namespace %s has no task processing capacity for a restore refresh", ns.Name()),
+	}
 }
 
 func (h *Handler) GenerateLastHistoryReplicationTasks(

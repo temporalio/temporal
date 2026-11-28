@@ -71,6 +71,7 @@ const (
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
 	AdminService_ListExecutions_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/ListExecutions"
 	AdminService_CountExecutions_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/CountExecutions"
+	AdminService_CloseNamespaceRestore_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/CloseNamespaceRestore"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -185,6 +186,11 @@ type AdminServiceClient interface {
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
 	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
 	CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error)
+	// CloseNamespaceRestore moves the namespace's running restore to COMPLETED or FAILED, and
+	// replicates the change. Called by the restore job on the cluster hosting it. Returns
+	// FAILED_PRECONDITION if restore_id is not the namespace's current restore or the restore
+	// has already closed in another state. A repeated call with the same state returns OK.
+	CloseNamespaceRestore(ctx context.Context, in *CloseNamespaceRestoreRequest, opts ...grpc.CallOption) (*CloseNamespaceRestoreResponse, error)
 }
 
 type adminServiceClient struct {
@@ -676,6 +682,15 @@ func (c *adminServiceClient) CountExecutions(ctx context.Context, in *CountExecu
 	return out, nil
 }
 
+func (c *adminServiceClient) CloseNamespaceRestore(ctx context.Context, in *CloseNamespaceRestoreRequest, opts ...grpc.CallOption) (*CloseNamespaceRestoreResponse, error) {
+	out := new(CloseNamespaceRestoreResponse)
+	err := c.cc.Invoke(ctx, AdminService_CloseNamespaceRestore_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -788,6 +803,11 @@ type AdminServiceServer interface {
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
 	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
 	CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error)
+	// CloseNamespaceRestore moves the namespace's running restore to COMPLETED or FAILED, and
+	// replicates the change. Called by the restore job on the cluster hosting it. Returns
+	// FAILED_PRECONDITION if restore_id is not the namespace's current restore or the restore
+	// has already closed in another state. A repeated call with the same state returns OK.
+	CloseNamespaceRestore(context.Context, *CloseNamespaceRestoreRequest) (*CloseNamespaceRestoreResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -947,6 +967,9 @@ func (UnimplementedAdminServiceServer) ListExecutions(context.Context, *ListExec
 }
 func (UnimplementedAdminServiceServer) CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CountExecutions not implemented")
+}
+func (UnimplementedAdminServiceServer) CloseNamespaceRestore(context.Context, *CloseNamespaceRestoreRequest) (*CloseNamespaceRestoreResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseNamespaceRestore not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1887,6 +1910,24 @@ func _AdminService_CountExecutions_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_CloseNamespaceRestore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseNamespaceRestoreRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).CloseNamespaceRestore(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_CloseNamespaceRestore_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).CloseNamespaceRestore(ctx, req.(*CloseNamespaceRestoreRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2093,6 +2134,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CountExecutions",
 			Handler:    _AdminService_CountExecutions_Handler,
+		},
+		{
+			MethodName: "CloseNamespaceRestore",
+			Handler:    _AdminService_CloseNamespaceRestore_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
