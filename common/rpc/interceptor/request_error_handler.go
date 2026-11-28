@@ -104,11 +104,20 @@ func recordErrorMetrics(req any, metricsHandler metrics.Handler, err error, isEx
 		if errors.Is(err, ErrNamespaceCountLimitServerBusy) {
 			limitGroup = concurrencyLimitGroup(isInternalPerNSPoll(req))
 		}
+		// Errors returned by another service are rebuilt from the gRPC status, so they never match the
+		// limiter sentinels of this service.
+		originTag := metrics.ResourceExhaustedOriginDownstreamTag
+		if errors.Is(err, RateLimitServerBusy) ||
+			errors.Is(err, ErrNamespaceRateLimitServerBusy) ||
+			errors.Is(err, ErrNamespaceCountLimitServerBusy) {
+			originTag = metrics.ResourceExhaustedOriginLocalTag
+		}
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
 			1,
 			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),
 			metrics.ResourceExhaustedScopeTag(resourceExhaustedErr.Scope),
 			metrics.ConcurrencyLimitGroupTag(limitGroup),
+			originTag,
 		)
 	}
 

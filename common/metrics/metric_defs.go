@@ -27,6 +27,7 @@ const (
 	versionedTagName               = "versioned"
 	resourceExhaustedTag           = "resource_exhausted_cause"
 	resourceExhaustedScopeTag      = "resource_exhausted_scope"
+	resourceExhaustedOriginTag     = "resource_exhausted_origin"
 	PartitionTagName               = "partition"
 	PriorityTagName                = "priority"
 	PersistenceDBKindTagName       = "db_kind"

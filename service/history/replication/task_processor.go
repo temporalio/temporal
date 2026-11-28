@@ -558,7 +558,7 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	case *serviceerror.ResourceExhausted:
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
 			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope),
-			metrics.ConcurrencyLimitGroupTag(""))
+			metrics.ConcurrencyLimitGroupTag(""), metrics.ResourceExhaustedOriginDownstreamTag)
 	case *serviceerrors.RetryReplication:
 		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:
