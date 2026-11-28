@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -72,7 +71,7 @@ func (s *PriMatcherSuite) newTestMatcher(ctx context.Context, opts testMatcherOp
 	var fwdr *priForwarder
 	if partition.IsChild() {
 		var err error
-		fwdr, err = newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(partition), opts.client, testhooks.TestHooks{})
+		fwdr, err = newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(partition), opts.client, nil)
 		if err != nil {
 			panic(err) // only fails for non-normal partitions
 		}
@@ -773,7 +772,7 @@ func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
 		mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
 		queue := UnversionedQueueKey(childPartition)
-		fwdr, err := newPriForwarder(&cfg.forwarderConfig, queue, mockClient, testhooks.TestHooks{})
+		fwdr, err := newPriForwarder(&cfg.forwarderConfig, queue, mockClient, nil)
 		require.NoError(t, err)
 
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -844,7 +843,7 @@ func (s *PriMatcherSuite) TestForwardTasksIndependentBackoff() {
 				}
 			},
 		).Times(workers * 2)
-		fwdr, err := newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(child), client, testhooks.TestHooks{})
+		fwdr, err := newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(child), client, nil)
 		require.NoError(t, err)
 		manager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		manager.Start()

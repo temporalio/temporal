@@ -3,6 +3,7 @@ package failpoint_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/testx/failpoint"
@@ -107,6 +108,12 @@ func (s *executeSuite) TestExecuteError() {
 		{name: "not configured", configure: func(*failpoint.Failpoint[error]) {}, want: nil},
 		{name: "return error", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(injected) }, want: injected},
 		{name: "return nil", configure: func(fp *failpoint.Failpoint[error]) { fp.Return(nil) }, want: nil},
+		{name: "call returning nil", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.Call(func() error { return nil })
+		}, want: nil},
+		{name: "call returning error", configure: func(fp *failpoint.Failpoint[error]) {
+			fp.Call(func() error { return injected })
+		}, want: injected},
 	}
 	for _, tc := range tests {
 		s.Run(tc.name, func(s *executeSuite) {
@@ -135,6 +142,7 @@ func (s *executeSuite) TestExecuteSwitch() {
 	}{
 		{name: "on", configure: func(fp *failpoint.Failpoint[int]) { fp.On() }, want: true},
 		{name: "return", configure: func(fp *failpoint.Failpoint[int]) { fp.Return(7) }, want: true},
+		{name: "pause", configure: func(fp *failpoint.Failpoint[int]) { fp.Pause(time.Nanosecond) }, want: false},
 		{name: "off", configure: func(fp *failpoint.Failpoint[int]) {}, want: false},
 	}
 	for _, tc := range tests {

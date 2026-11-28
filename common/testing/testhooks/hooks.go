@@ -35,12 +35,9 @@ type HistoryPassiveReplicationTestHook interface {
 var (
 	MatchingLBForceReadPartition                = testxhooks.NewKey[int, namespace.ID]()
 	MatchingLBForceWritePartition               = testxhooks.NewKey[int, namespace.ID]()
-	UpdateWithStartInBetweenLockAndStart        = testxhooks.NewKey[func(), namespace.ID]()
-	UpdateWithStartOnClosingWorkflowRetry       = testxhooks.NewKey[func(), namespace.ID]()
 	TaskQueuesInDeploymentSyncBatchSize         = testxhooks.NewGlobalKey[int]()
 	MatchingIgnoreRoutingConfigRevisionCheck    = testxhooks.NewKey[bool, namespace.ID]()
 	MatchingDeploymentRegisterErrorBackoff      = testxhooks.NewKey[time.Duration, namespace.ID]()
-	MatchingForwardTaskDelay                    = testxhooks.NewKey[time.Duration, namespace.ID]()
 	HistoryReplicationTaskInterceptor           = testxhooks.NewGlobalKey[func(*replicationspb.ReplicationTask, func() error) error]()
 	HistoryReplicationTaskConversionInterceptor = testxhooks.NewKey[func(historytasks.Task, func() (*replicationspb.ReplicationTask, error)) (*replicationspb.ReplicationTask, error), namespace.ID]()
 	HistoryReplicationDLQWriteInterceptor       = testxhooks.NewGlobalKey[func(*persistencespb.ReplicationTaskInfo, func() error) error]()
