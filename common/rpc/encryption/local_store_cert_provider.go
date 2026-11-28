@@ -456,34 +456,31 @@ func buildCAPool(cas []string, getBytes loadOrDecodeDataFunc) (*x509.CertPool, [
 			return nil, nil, errors.New("unknown failure constructing cert pool for ca")
 		}
 
-		cert, err := parseCert(caBytes)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse x509 certificate: %w", err)
-		}
-		certs = append(certs, cert)
+		// Track every certificate so that refreshCerts and expiry checks see the whole bundle.
+		certs = append(certs, parseCACerts(caBytes)...)
 	}
 	return caPool, certs, nil
 }
 
-// logic borrowed from tls.X509KeyPair()
-func parseCert(bytes []byte) (*x509.Certificate, error) {
-
-	var certBytes [][]byte
+// parseCACerts returns the certificates in pemBytes that x509.CertPool.AppendCertsFromPEM
+// adds to a pool, skipping the same blocks that it skips.
+func parseCACerts(pemBytes []byte) []*x509.Certificate {
+	var certs []*x509.Certificate
 	for {
-		var certDERBlock *pem.Block
-		certDERBlock, bytes = pem.Decode(bytes)
-		if certDERBlock == nil {
-			break
+		var block *pem.Block
+		block, pemBytes = pem.Decode(pemBytes)
+		if block == nil {
+			return certs
 		}
-		if certDERBlock.Type == "CERTIFICATE" {
-			certBytes = append(certBytes, certDERBlock.Bytes)
+		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			continue
 		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			continue
+		}
+		certs = append(certs, cert)
 	}
-
-	if len(certBytes) == 0 || len(certBytes[0]) == 0 {
-		return nil, fmt.Errorf("failed to decode PEM certificate data")
-	}
-	return x509.ParseCertificate(certBytes[0])
 }
 
 func appendError(aggregatedErr error, err error) error {
