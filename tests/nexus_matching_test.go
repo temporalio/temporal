@@ -45,7 +45,6 @@ func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwar
 	env.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
-	env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
 
 	dispatchAndCompleteNexusTask(s.T(), env, false, false)
 }

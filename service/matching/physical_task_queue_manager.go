@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
+	"go.temporal.io/testx/failpoint"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -115,6 +116,10 @@ var (
 	backlogTagFairness      = tag.String("backlog", "fairness")
 	backlogTagPriorityDrain = tag.String("backlog", "priority-drain")
 	backlogTagFairnessDrain = tag.String("backlog", "fairness-drain")
+
+	// SkipSyncMatchKey is a failpoint that skips sync matching of a task that history added to a waiting poller,
+	// persisting it to the backlog instead as if no poller was waiting.
+	SkipSyncMatchKey = failpoint.NewKey[bool]("matching.skipSyncMatch")
 )
 
 func newPhysicalTaskQueueManager(
@@ -634,7 +639,10 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		// request sent by history service
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
-		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
+
+		// If failpoint is enabled, the task is persisted and dispatched from the backlog, as if no poller was waiting.
+		if registry := c.partitionMgr.engine.failpointRegistry; registry != nil &&
+			SkipSyncMatchKey.ForScope(c.partitionMgr.ns.ID().String()).Trip(registry) {
 			return syncMatchNoPoller, nil
 		}
 	}
