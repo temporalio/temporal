@@ -170,7 +170,7 @@ func TestNamespaceRepairPolicyChecksStoredNamespace(t *testing.T) {
 			policy := &refusingRepairPolicy{key: "membership"}
 			handler := &AdminHandler{logger: log.NewNoopLogger(), clusterMetadata: enabledNamespaceReplicationMetadata(t),
 				metricsHandler: metrics.NoopMetricsHandler, repairPolicy: policy.policy(),
-				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellB", metadata, nsreplication.NewNoopDataMerger(),
+				namespaceMutationExecutor: nsreplication.NewMutationTaskExecutor("cellB", metadata, nsreplication.NewDefaultMutationDataMerger(nsreplication.NewNoopDataMerger()),
 					nsreplication.NewDefaultAdmitter(), log.NewNoopLogger(), testhooks.TestHooks{}, nsreplication.WithOperatorRepairPolicy(policy.policy())),
 			}
 			task := shadowObservationTask()

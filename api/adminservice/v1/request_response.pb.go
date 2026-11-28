@@ -1827,7 +1827,10 @@ type ApplyNamespaceMutationRequest struct {
 	// is absent, so its config version fences delayed older additions.
 	RemovedPeer bool `protobuf:"varint,10,opt,name=removed_peer,json=removedPeer,proto3" json:"removed_peer,omitempty"`
 	// Selects direct operator-repair handling and records the repair's audit context.
-	Attribution   *NamespaceMutationAttribution `protobuf:"bytes,11,opt,name=attribution,proto3" json:"attribution,omitempty"`
+	Attribution *NamespaceMutationAttribution `protobuf:"bytes,11,opt,name=attribution,proto3" json:"attribution,omitempty"`
+	// Cluster the source addressed this delivery to. A receiver rejects a delivery
+	// whose target_cluster names another cluster. Unset by older sources.
+	TargetCluster string `protobuf:"bytes,12,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1930,6 +1933,13 @@ func (x *ApplyNamespaceMutationRequest) GetAttribution() *NamespaceMutationAttri
 		return x.Attribution
 	}
 	return nil
+}
+
+func (x *ApplyNamespaceMutationRequest) GetTargetCluster() string {
+	if x != nil {
+		return x.TargetCluster
+	}
+	return ""
 }
 
 type ApplyNamespaceMutationResponse struct {
@@ -7110,7 +7120,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xd3\x04\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xfa\x04\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
 	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
 	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x12%\n" +
@@ -7122,7 +7132,8 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x1ashadow_legacy_task_payload\x18\t \x01(\fR\x17shadowLegacyTaskPayload\x12!\n" +
 	"\fremoved_peer\x18\n" +
 	" \x01(\bR\vremovedPeer\x12c\n" +
-	"\vattribution\x18\v \x01(\v2A.temporal.server.api.adminservice.v1.NamespaceMutationAttributionR\vattributionJ\x04\b\x03\x10\x04R\vfingerprint\"\xd7\x02\n" +
+	"\vattribution\x18\v \x01(\v2A.temporal.server.api.adminservice.v1.NamespaceMutationAttributionR\vattribution\x12%\n" +
+	"\x0etarget_cluster\x18\f \x01(\tR\rtargetClusterJ\x04\b\x03\x10\x04R\vfingerprint\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\xcd\x01\n" +
 	"\aOutcome\x12\x17\n" +

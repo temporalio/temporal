@@ -22,6 +22,10 @@ func (*noopChasmTree) CloseTransaction(context.Context, bool) (chasm.NodesMutati
 	return chasm.NodesMutation{}, nil
 }
 
+func (*noopChasmTree) CloseTransactionIfClean(bool) (bool, error) {
+	return true, nil
+}
+
 func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot {
 	return chasm.NodesSnapshot{}
 }

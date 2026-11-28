@@ -80,6 +80,8 @@ type Config struct {
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSkipCleanUpdates                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VerifyCHASMSkipCleanUpdates                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -126,6 +128,7 @@ type Config struct {
 	QueuePendingTaskMaxCount           dynamicconfig.IntPropertyFn
 	QueueMaxPredicateSize              dynamicconfig.IntPropertyFn
 	QueueShrinkPredicateMaxPendingKeys dynamicconfig.IntPropertyFn
+	EnableQueueStateCompaction         dynamicconfig.BoolPropertyFn
 	QueueMoveGroupTaskCountBase        dynamicconfig.IntPropertyFn
 	QueueMoveGroupTaskCountMultiplier  dynamicconfig.FloatPropertyFn
 
@@ -564,6 +567,8 @@ func NewConfig(
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
+		EnableCHASMSkipCleanUpdates:                dynamicconfig.EnableCHASMSkipCleanUpdates.Get(dc),
+		VerifyCHASMSkipCleanUpdates:                dynamicconfig.VerifyCHASMSkipCleanUpdates.Get(dc),
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: nexusoperation.ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		ChasmMaxInMemoryPureTasks:                  dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
@@ -608,6 +613,7 @@ func NewConfig(
 		QueuePendingTaskMaxCount:           dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
 		QueueMaxPredicateSize:              dynamicconfig.QueueMaxPredicateSize.Get(dc),
 		QueueShrinkPredicateMaxPendingKeys: dynamicconfig.QueueShrinkPredicateMaxPendingKeys.Get(dc),
+		EnableQueueStateCompaction:         dynamicconfig.EnableQueueStateCompaction.Get(dc),
 		QueueMoveGroupTaskCountBase:        dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
 		QueueMoveGroupTaskCountMultiplier:  dynamicconfig.QueueMoveGroupTaskCountMultiplier.Get(dc),
 

@@ -2235,6 +2235,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		want := &adminservice.ApplyNamespaceMutationRequest{
 			NamespaceTask:        task,
 			NamespaceTaskPayload: payload,
+			TargetCluster:        "cellB",
 		}
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Cond(func(request *adminservice.ApplyNamespaceMutationRequest) bool {
 			return proto.Equal(want, request)
@@ -2254,6 +2255,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *adminservice.ApplyNamespaceMutationRequest, _ ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
 				require.True(t, request.GetShadow())
+				require.Equal(t, "cellB", request.GetTargetCluster())
 				require.Equal(t, []byte("legacy-reference"), request.GetShadowLegacyTaskPayload())
 				payload := request.GetNamespaceTaskPayload()
 				require.NotEmpty(t, payload)

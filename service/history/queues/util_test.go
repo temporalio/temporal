@@ -18,7 +18,7 @@ func TestIsTaskAcked(t *testing.T) {
 			DefaultReaderId: scopes,
 		},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
-	})
+	}, false)
 
 	workflowKey := definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)
 
