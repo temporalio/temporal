@@ -635,9 +635,9 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		// request sent by history service
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
-		// The registry is nil unless failpoints are enabled; without it the namespace isn't read.
+
+		// If failpoint is enabled, the task is persisted and dispatched from the backlog, as if no poller was waiting.
 		if registry := c.partitionMgr.engine.failpointRegistry; registry != nil && skipSyncMatch(registry, c.partitionMgr.ns.ID()) {
-			// The task is persisted and dispatched from the backlog, as if no poller was waiting.
 			return syncMatchNoPoller, nil
 		}
 	}
