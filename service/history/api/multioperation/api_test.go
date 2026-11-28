@@ -12,6 +12,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -360,6 +361,10 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestI
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace:  tests.Namespace.String(),
 				WorkflowId: tests.WorkflowID,
+				RequestId:  requestID,
+				OnConflictOptions: &workflowpb.OnConflictOptions{
+					AttachRequestId: true,
+				},
 			},
 		},
 		updater: updateworkflow.NewUpdater(nil, nil, nil, updateReq),
@@ -367,7 +372,7 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestI
 
 	resp, err := uws.Invoke(ctx)
 	s.NoError(err)
-	protorequire.ProtoEqual(s.T(), &commonpb.Link{
+	expectedLink := &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  tests.Namespace.String(),
@@ -381,7 +386,9 @@ func (s *updateWithStartSuite) TestInvokeCompletedUpdateIncludesExistingRequestI
 				},
 			},
 		},
-	}, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
+	}
+	protorequire.ProtoEqual(s.T(), expectedLink, resp.GetResponses()[0].GetStartWorkflow().GetLink())
+	protorequire.ProtoEqual(s.T(), expectedLink, resp.GetResponses()[1].GetUpdateWorkflow().GetResponse().GetLink())
 }
 
 func (s *updateWithStartSuite) TestInvokeCompletedUpdateWithoutAcceptedEventIDOmitsUpdateLink() {

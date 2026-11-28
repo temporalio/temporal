@@ -11,6 +11,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -199,10 +200,10 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		// If Update is complete, return it.
 		if completedUpdate, err := workflowLease.GetMutableState().GetCompletedUpdate(ctx, updateID); err == nil {
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
-			// Capture status before releasing the lock to avoid a data race with concurrent goroutines that may
-			// modify ExecutionState after acquiring the lock.
+			// Capture response state before releasing the lock to avoid data races with concurrent goroutines.
 			ms := workflowLease.GetMutableState()
-			status := ms.GetExecutionState().Status
+			executionState := ms.GetExecutionState()
+			status := executionState.Status
 			updateNexusCtx := ms.GetUpdateNexusSerializationContext(updateID)
 			nexusSerializationContext := common.CloneProto(updateNexusCtx)
 			updateResponse := uws.updater.CreateCompletedResponse(
@@ -218,6 +219,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 					RunId:   workflowKey.RunID,
 					Started: false, // set explicitly for emphasis
 					Status:  status,
+					Link:    generateAttachedRequestIDLink(uws.startReq, workflowKey, executionState),
 				},
 				updateResponse,
 			), nil
@@ -359,6 +361,15 @@ func (uws *updateWithStart) updateWorkflow(
 			if applyConflictOptions && uws.startReq.StartRequest.GetOnConflictOptions() != nil {
 				action.Noop = false
 			}
+			if responseLink == nil {
+				wfKey := lease.GetContext().GetWorkflowKey()
+				responseLink = api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), wfKey.WorkflowID, wfKey.RunID)
+				if uws.startReq.StartRequest.GetOnConflictOptions().GetAttachRequestId() {
+					if link := generateAttachedRequestIDLink(uws.startReq, wfKey, ms.GetExecutionState()); link != nil {
+						responseLink = link
+					}
+				}
+			}
 			return action, nil
 		},
 		nil,
@@ -384,21 +395,6 @@ func (uws *updateWithStart) updateWorkflow(
 	}
 
 	wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
-	if responseLink == nil {
-		responseLink = api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), wfKey.WorkflowID, wfKey.RunID)
-		requestID := uws.startReq.StartRequest.GetRequestId()
-		if uws.startReq.StartRequest.GetOnConflictOptions().GetAttachRequestId() &&
-			currentWorkflowLease.GetMutableState().GetExecutionState().GetRequestIds()[requestID].GetEventType() ==
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-			responseLink = api.GenerateRequestIDRefLink(
-				uws.startReq.StartRequest.GetNamespace(),
-				wfKey.WorkflowID,
-				wfKey.RunID,
-				requestID,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-			)
-		}
-	}
 	startResp := &historyservice.StartWorkflowExecutionResponse{
 		RunId:   wfKey.RunID,
 		Started: false, // set explicitly for emphasis
@@ -483,6 +479,25 @@ func newMultiOpError(startErr, updateErr error) error {
 	return serviceerror.NewMultiOperationExecution(
 		fmt.Sprintf("MultiOperation could not be executed: %v", message),
 		[]error{startErr, updateErr})
+}
+
+func generateAttachedRequestIDLink(
+	startReq *historyservice.StartWorkflowExecutionRequest,
+	wfKey definition.WorkflowKey,
+	executionState *persistencespb.WorkflowExecutionState,
+) *commonpb.Link {
+	requestID := startReq.StartRequest.GetRequestId()
+	if !startReq.StartRequest.GetOnConflictOptions().GetAttachRequestId() ||
+		executionState.GetRequestIds()[requestID].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+		return nil
+	}
+	return api.GenerateRequestIDRefLink(
+		startReq.StartRequest.GetNamespace(),
+		wfKey.WorkflowID,
+		wfKey.RunID,
+		requestID,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+	)
 }
 
 func canDedup(startReq *historyservice.StartWorkflowExecutionRequest, currentWorkflowLease api.WorkflowLease) bool {

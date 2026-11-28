@@ -5729,6 +5729,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning_OnConflictOptions() {
 		}, optionsEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes())
 		protorequire.ProtoSliceEqual(s.T(), links, optionsEvent.GetLinks())
 
+		uwsCompletedRetry := <-s.sendUpdateWithStart(env, startReq, updateReq)
+		s.NoError(uwsCompletedRetry.err)
+		completedRetryStartResp := uwsCompletedRetry.response.Responses[0].GetStartWorkflow()
+		s.Equal(initialStartResp.RunId, completedRetryStartResp.RunId)
+		protorequire.ProtoEqual(s.T(), startResp.GetLink(), completedRetryStartResp.GetLink())
+		protorequire.ProtoEqual(s.T(), uwsRes.response.Responses[1].GetUpdateWorkflow(), uwsCompletedRetry.response.Responses[1].GetUpdateWorkflow())
+
 		tv2 := tv.WithUpdateIDNumber(2)
 		updateReq2 := updateWorkflowRequest(env, tv2,
 			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
